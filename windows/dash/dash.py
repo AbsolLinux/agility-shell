@@ -422,28 +422,24 @@ class Dash(Window):
         if key is None:
             return
         self.dismiss_layer.hide_drop_zones()
-        self._main_box.add_style_class("canvas-mode-hidden")
-        self.hide()
+        self.dismiss_layer.layer = "overlay"
+        self.revealer.close()
         self.dismiss_layer.show_canvas(key)
         self._in_canvas_mode = True
         # Drop bar to top so it doesn't float above the canvas
-        if self._active_monitor is not None:
-            self._bar_manager.set_bars_top(self._active_monitor)
+        # if self._active_monitor is not None:
+        #     self._bar_manager.set_bars_top(self._active_monitor)
 
     def _exit_canvas_mode(self):
-        self._main_box.remove_style_class("canvas-mode-hidden")
         self.dismiss_layer.hide_canvas()
+        self.dismiss_layer.layer = "top"
         self._in_canvas_mode = False
-        self.show()
-        if self._active_monitor is not None:
-            self._bar_manager.set_bars_overlay
+        self.revealer.open()
+        # if self._active_monitor is not None:
+        #     self._bar_manager.set_bars_overlay
     
     
     def _on_canvas_drop_complete(self):
-        """
-        Called by DashCanvas after a successful drop.
-        Exits canvas mode and closes the dash.
-        """
         self._exit_canvas_mode()
         # Small delay so the user sees the grid clear before the dash closes
         # GLib.timeout_add(180, lambda: (self.toggle(self._active_monitor), False)[1])

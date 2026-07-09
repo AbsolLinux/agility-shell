@@ -45,9 +45,9 @@ class DesktopAppletWindow(WaylandWindow):
             visible=True,
             name=f"desktop-applets-{monitor_id}",
         )
-        self.show_all()
+        # self.show_all()
         GtkLayerShell.set_exclusive_zone(self, -1)
-
+        self._force_refresh()
         self.connect("size-allocate", self._on_size_allocate)
 
 
@@ -103,6 +103,7 @@ class DesktopAppletWindow(WaylandWindow):
                 logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
         self._reposition_all()
+        self._force_refresh()
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
@@ -124,6 +125,7 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
+            self._force_refresh()
         except Exception as e:
             logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
@@ -146,7 +148,11 @@ class DesktopAppletWindow(WaylandWindow):
         menu.show_all()
         menu.popup_at_pointer(event)
         return True
-
+    def _force_refresh(self):
+        #For some reason niri needs this
+        self.hide()
+        self.show_all()
+        return False
 class DesktopAppletService(Service):
     _instance: "DesktopAppletService | None" = None
 
@@ -208,12 +214,11 @@ class DesktopAppletService(Service):
         if not placed:
             return False
         user_options.save()
-
         win = self._windows.get(monitor_id)
         if win:
             win.add_applet(key, grid_x, grid_y)
-
         self.applets_changed(monitor_id)
+
         return True
 
     def remove(self, monitor_id: int, key: str) -> bool:
@@ -225,7 +230,6 @@ class DesktopAppletService(Service):
         win = self._windows.get(monitor_id)
         if win:
             win.remove_applet(key)
-
         self.applets_changed(monitor_id)
         return True
 
