@@ -158,7 +158,6 @@ class DashDismissLayer(Window):
         self._dash._switch_to_launcher_for_drop()
     def _on_right_zone_commit(self):
         """Called after the user hovers the right zone long enough."""
-        print("CANVAS")
         self._dash._enter_canvas_mode()
 
     # ── zone visibility ────────────────────────────────────────────────────

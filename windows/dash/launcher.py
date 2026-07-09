@@ -12,6 +12,7 @@ from .components import DashPage
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS
 from gi.repository import Gdk, Gtk, GLib
 from user_options import user_options
+import threading
 
 COLUMNS = 6
 _TARGET = Gtk.TargetEntry.new("text/plain", Gtk.TargetFlags.SAME_APP, 0)
@@ -152,6 +153,7 @@ class HybridGrid(Gtk.Grid):
         self._drop_pending: bool = False  # True during the drag-leave→drag-data-received window
         self._on_placeholder_changed = on_placeholder_changed
         self._on_applet_dropped = on_applet_dropped
+        self._tracked_app_items: list[DashLauncherAppItem] = []
 
         self.drag_dest_set(
             Gtk.DestDefaults.ALL,
@@ -170,6 +172,9 @@ class HybridGrid(Gtk.Grid):
         dragging_key: str | None = None,
         placeholder_slot: int | None = None,
     ) -> None:
+        for item in self._tracked_app_items:
+            item.destroy()
+        self._tracked_app_items = []
         for child in self.get_children():
             self.remove(child)
 
@@ -321,6 +326,8 @@ class HybridGrid(Gtk.Grid):
                 if widget is not None:
                     self.attach(widget, c, r, span, 1)
                     widget.show_all()
+                    if isinstance(widget, DashLauncherAppItem):
+                        self._tracked_app_items.append(widget)
                 c += span
 
 
@@ -394,6 +401,8 @@ class DashLauncherPage(DashPage):
         self._applet_page_ref = None  # set by Dash after construction
 
         self._placed_items: list[LauncherDesktopAppletItem] = []
+        self._applet_widget_cache: dict[str, Gtk.Widget] = {}
+        self._rebuild_generation: int = 0
 
         self._drag_receive_mode: bool = False
         self._drag_key: str | None = None
@@ -416,26 +425,35 @@ class DashLauncherPage(DashPage):
 
 
     def _load_placed_applets(self) -> None:
-        """Build LauncherDesktopAppletItem list from saved config."""
+        """Build LauncherDesktopAppletItem list from saved config, reusing cached widgets."""
         entries = user_options.desktop_applets.get_applets()
         items = []
+        seen_keys: set[str] = set()
         for entry in entries:
             key = entry["key"]
             slot = entry["slot"]
-            cls = DESKTOP_APPLET_WIDGETS.get(key)
-            if cls is None:
-                continue
-            try:
-                widget = cls()
-                item = LauncherDesktopAppletItem(
-                    key=key,
-                    applet_widget=widget,
-                    on_remove=self._remove_applet,
-                )
-                item._slot = slot
-                items.append(item)
-            except Exception as e:
-                print(f"[launcher] failed to build desktop applet {key!r}: {e}")
+            seen_keys.add(key)
+            # Reuse cached widget if available, otherwise build and cache
+            if key not in self._applet_widget_cache:
+                cls = DESKTOP_APPLET_WIDGETS.get(key)
+                if cls is None:
+                    continue
+                try:
+                    self._applet_widget_cache[key] = cls()
+                except Exception as e:
+                    print(f"[launcher] failed to build desktop applet {key!r}: {e}")
+                    continue
+            item = LauncherDesktopAppletItem(
+                key=key,
+                applet_widget=self._applet_widget_cache[key],
+                on_remove=self._remove_applet,
+            )
+            item._slot = slot
+            items.append(item)
+        # Evict widgets for applets no longer in config
+        for stale_key in list(self._applet_widget_cache):
+            if stale_key not in seen_keys:
+                self._applet_widget_cache.pop(stale_key).destroy()
         self._placed_items = items
 
 
@@ -448,14 +466,30 @@ class DashLauncherPage(DashPage):
     ) -> None:
         if apps is None:
             apps = self._sorted_by_usage(self._all_apps)
-        app_widgets = [DashLauncherAppItem(a, self.window) for a in apps]
+
+        self._rebuild_generation += 1
+        generation = self._rebuild_generation
         applet_items = applet_items_override if applet_items_override is not None else self._placed_items
-        self._hybrid_grid.layout(
-            applet_items=applet_items,
-            app_items=app_widgets,
-            dragging_key=dragging_key,
-            placeholder_slot=placeholder_slot,
-        )
+
+        def _build_and_commit():
+            # Build app items off the main thread
+            app_widgets = [DashLauncherAppItem(a, self.window) for a in apps]
+
+            def _commit():
+                # Stale generation means a newer rebuild is already queued — discard
+                if generation != self._rebuild_generation:
+                    for w in app_widgets:
+                        w.destroy()
+                    return
+                self._hybrid_grid.layout(
+                    applet_items=applet_items,
+                    app_items=app_widgets,
+                    dragging_key=dragging_key,
+                    placeholder_slot=placeholder_slot,
+                )
+            GLib.idle_add(_commit)
+
+        threading.Thread(target=_build_and_commit, daemon=True).start()
 
 
     def enter_drag_receive_mode(self, key: str) -> None:
@@ -518,8 +552,10 @@ class DashLauncherPage(DashPage):
         play_sound("widget-placed")
 
     def _remove_applet(self, key: str) -> None:
-        """Remove a placed applet by key."""
+        """Remove a placed applet by key and destroy its cached widget."""
         self._placed_items = [i for i in self._placed_items if i.key != key]
+        if key in self._applet_widget_cache:
+            self._applet_widget_cache.pop(key).destroy()
         user_options.desktop_applets.remove(key)
         user_options.save()
         self._rebuild()
