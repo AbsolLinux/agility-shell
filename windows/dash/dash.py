@@ -92,7 +92,16 @@ class DashDismissLayer(Window):
             child=self._stack,
         )
         GtkLayerShell.set_exclusive_zone(self, -1)
-
+    def switch(self):
+        if self._blur_ctx:
+            disable_blur(self._blur_ctx)
+            free_blur(self._blur_ctx)
+            self._blur_ctx = None
+        self.hide()
+        self.show()
+        self.show()
+        if not self._blur_ctx:
+            self._blur_ctx = enable_blur(self)
     def show_canvas(self, key: str) -> None:
         self._canvas.enter(key)
         self._stack.set_visible_child_name("canvas")
@@ -433,6 +442,9 @@ class Dash(Window):
     def _exit_canvas_mode(self):
         self.dismiss_layer.hide_canvas()
         self.dismiss_layer.layer = "top"
+        self.dismiss_layer.switch()
+        self.hide()
+        self.show()
         self._in_canvas_mode = False
         self.revealer.open()
         # if self._active_monitor is not None:
