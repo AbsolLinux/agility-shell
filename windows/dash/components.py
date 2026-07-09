@@ -6,14 +6,6 @@ from fabric.widgets.grid import Grid
 from snippets import Icon, HackedStack, ClippingScrolledWindow, StyleAwareEntry
 
 class DashHeader(CenterBox):
-    """
-    Single shared header for the whole Dash.
-
-    Left:   [current-page icon btn]  [peer icon + label btn]
-    Center: search entry (hidden unless the active page needs it)
-    Right:  [vertical-switch btn]
-    """
-
     def __init__(self):
         self._entry = StyleAwareEntry(h_expand=True, h_align="fill", placeholder="Type to search...")
         self._entry_box = Box(

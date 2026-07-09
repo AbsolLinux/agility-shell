@@ -1,8 +1,9 @@
 from fabric.widgets.wayland import WaylandWindow as Window
 from fabric.widgets.box import Box
 from fabric.widgets.eventbox import EventBox
+from fabric.widgets.stack import Stack
 from .launcher import DashLauncherPage
-from .applets import DashAppletPage
+from .applets import DashAppletPage, AppletDropZone
 from .components import DashGroup, DashHeader
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 from services.singletons import edit_mode
@@ -10,18 +11,21 @@ from .wallpapers import DashWallpaperPage
 from .themes import DashThemePage
 from snippets import DashReveal, enable_blur, disable_blur, free_blur
 import bar
+from .canvas import DashCanvas
+from services.desktop_applets import DesktopAppletService
+DesktopAppletService.get_instance()
 display = Gdk.Display.get_default()
 
 REVEAL_DURATION = 300
 
 _PAGE_META = {
-    "apps":   ("diamonds-four-duotone",           "applets",    "themes-wallpapers", "paint-brush-broad-duotone",       True),
-    "applets":    ("stack-duotone",       "apps",   "themes-wallpapers", "paint-brush-broad-duotone",       False),
-    "wallpapers": ("images-duotone", "themes",     "apps-applets",      "dash-duotone",   True),
-    "themes":     ("swatches-duotone",             "wallpapers", "apps-applets",      "dash-duotone",   False),
+    "apps":       ("diamonds-four-duotone",      "applets",    "themes-wallpapers", "paint-brush-broad-duotone", True),
+    "applets":    ("stack-duotone",              "apps",       "themes-wallpapers", "paint-brush-broad-duotone", False),
+    "wallpapers": ("images-duotone",             "themes",     "apps-applets",      "dash-duotone",              True),
+    "themes":     ("swatches-duotone",           "wallpapers", "apps-applets",      "dash-duotone",              False),
 }
 _PAGE_LABELS = {
-    "apps":   "Apps",
+    "apps":       "Apps",
     "applets":    "Applets",
     "wallpapers": "Wallpapers",
     "themes":     "Themes",
@@ -29,13 +33,55 @@ _PAGE_LABELS = {
 
 _PAGES_WITH_SEARCH = {"apps", "applets"}
 
+
 class DashDismissLayer(Window):
+
     def __init__(self, dash, on_dismiss, bar_manager, **kwargs):
-        self.event_box = EventBox()
         self._blur_ctx = None
         self._dash = dash
         self._on_dismiss = on_dismiss
         self._bar_manager = bar_manager
+
+        self._left_zone = AppletDropZone(
+            side="left",
+            on_hover_commit=self._on_left_zone_commit,
+        )
+
+        self._right_zone = AppletDropZone(
+            side="right",
+            on_hover_commit=self._on_right_zone_commit,
+        )
+
+        self._canvas = DashCanvas(
+            dash=dash,
+            monitor_id_getter=lambda: dash._active_monitor_id,
+        )
+
+        self._dismiss_eb = EventBox()
+        self._dismiss_eb.connect("button-release-event", self._on_button_press)
+
+        self._zone_box = Box(
+            orientation="h",
+            h_expand=True,
+            v_expand=True,
+            children=[
+                self._left_zone,
+                self._dismiss_eb,   # still expands to fill
+                self._right_zone,
+            ],
+        )
+        self._dismiss_eb.set_hexpand(True)
+
+        self._stack = Stack(
+            transition_type="crossfade",
+            transition_duration=200,
+            h_expand=True,
+            v_expand=True,
+        )
+        self._stack.add_named(self._zone_box, "zones")
+        self._stack.add_named(self._canvas,   "canvas")
+        self._stack.set_visible_child_name("zones")
+
         super().__init__(
             anchor="left right top bottom",
             layer="top",
@@ -43,10 +89,17 @@ class DashDismissLayer(Window):
             keyboard_mode="none",
             style_classes=["dash"],
             visible=False,
-            child=self.event_box,
+            child=self._stack,
         )
-        self.event_box.connect("button-release-event", self._on_button_press)
         GtkLayerShell.set_exclusive_zone(self, -1)
+
+    def show_canvas(self, key: str) -> None:
+        self._canvas.enter(key)
+        self._stack.set_visible_child_name("canvas")
+
+    def hide_canvas(self) -> None:
+        self._stack.set_visible_child_name("zones")
+        self._canvas.exit()
 
     def _on_button_press(self, widget, event: Gdk.EventButton):
         if event.button == 1:
@@ -60,18 +113,16 @@ class DashDismissLayer(Window):
 
             monitor_id = next(
                 (i for i in range(display.get_n_monitors())
-                if display.get_monitor(i) == active_monitor),
+                 if display.get_monitor(i) == active_monitor),
                 None,
             )
 
             bar_count = sum(
-                1
-                for b in self._bar_manager._bars.values()
+                1 for b in self._bar_manager._bars.values()
                 if b.monitor_id == monitor_id
             )
 
             menu = Gtk.Menu()
-
             if bar_count < 2:
                 add_item = Gtk.MenuItem(label="Add Bar")
                 add_item.connect(
@@ -79,7 +130,7 @@ class DashDismissLayer(Window):
                     lambda _: (
                         self._bar_manager.add_bar_for_monitor(active_monitor),
                         self._bar_manager.set_bars_overlay(active_monitor),
-                    )
+                    ),
                 )
                 menu.append(add_item)
             else:
@@ -92,21 +143,59 @@ class DashDismissLayer(Window):
             return True
 
         return False
+
+    def _on_left_zone_commit(self):
+        """Called after the user hovers the left zone for long enough."""
+        self._dash._switch_to_launcher_for_drop()
+    def _on_right_zone_commit(self):
+        """Called after the user hovers the right zone long enough."""
+        print("CANVAS")
+        self._dash._enter_canvas_mode()
+
+    # ── zone visibility ────────────────────────────────────────────────────
+
+    def show_drop_zones(self, key: str, show_left: bool = True, show_right: bool = True) -> None:
+        if show_left:
+            self._left_zone.show_zone()
+        if show_right:
+            self._right_zone.show_zone()
+
+    def hide_drop_zones(self) -> None:
+        self._left_zone.hide_zone()
+        self._right_zone.hide_zone()
+
+
 class Dash(Window):
     def __init__(self, bar_manager):
         self._opening = False
         self._bar_manager = bar_manager
         self._active_monitor = None
+        self._active_monitor_id: int | None = None
+        self._in_canvas_mode: bool = False
+        self._applet_drag_key: str | None = None
+
         self.header = DashHeader()
         self.h_group_1 = DashGroup(transition_type="slide-left-right")
         self.h_group_2 = DashGroup(transition_type="slide-left-right")
         self.v_stack   = DashGroup(transition_type="slide-up-down")
 
         self.launcher   = DashLauncherPage(self)
-        self.applets = DashAppletPage(self, bar_manager=bar_manager)
+        self.applets    = DashAppletPage(
+            self,
+            bar_manager=bar_manager,
+            on_applet_drag_begin=self._on_applet_drag_begin,
+            on_applet_drag_end=self._on_applet_drag_end,
+        )
         self.themes     = DashThemePage(bar_manager=bar_manager)
         self.wallpapers = DashWallpaperPage()
-        self.dismiss_layer = DashDismissLayer(dash=self, on_dismiss=lambda: self.toggle(self._active_monitor), bar_manager=bar_manager)
+        self.dismiss_layer = DashDismissLayer(
+            dash=self,
+            on_dismiss=lambda: self.toggle(self._active_monitor),
+            bar_manager=bar_manager,
+        )
+
+        # Wire applet page ↔ launcher page so indicators stay in sync
+        self.launcher._applet_page_ref = self.applets
 
         self.h_group_1.add_named(self.launcher,   "apps")
         self.h_group_1.add_named(self.applets,    "applets")
@@ -115,8 +204,9 @@ class Dash(Window):
         self.v_stack.add_named(self.h_group_2,    "themes-wallpapers")
         self.v_stack.add_named(self.h_group_1,    "apps-applets")
         self.v_stack.set_visible_child(self.h_group_1)
+
         self._name_to_page = {
-            "apps":   self.launcher,
+            "apps":       self.launcher,
             "applets":    self.applets,
             "wallpapers": self.wallpapers,
             "themes":     self.themes,
@@ -139,22 +229,56 @@ class Dash(Window):
         )
 
         super().__init__(
-            # monitor=monitor,
-            # style_classes=["dash"],
             layer="top",
             keyboard_mode="on-demand",
-            # anchor="top right bottom left",
             child=self.revealer,
             visible=False,
         )
+
         self.add_keybinding("escape", lambda: self.toggle())
         self.connect("key-press-event", self._on_key_press)
         self.h_group_1.connect("notify::visible-child", self._on_stack_changed)
         self.h_group_2.connect("notify::visible-child", self._on_stack_changed)
         self.v_stack.connect("notify::visible-child",   self._on_v_stack_changed)
-        # niri.connect("notify::active-window", self._on_window_changed)
-        # niri.connect("notify::workspaces", self._on_workspace_changed)
+        DesktopAppletService.get_instance().connect(
+            "applets-changed",
+            lambda _, mid: self.applets.refresh_bar_state(),
+        )
         self._sync_header()
+
+
+    def _on_applet_drag_begin(self, key: str, show_left: bool = True, show_right: bool = True) -> None:
+        if not self.is_visible():
+            return
+        self._applet_drag_key = key
+        self.dismiss_layer.show_drop_zones(key, show_left=show_left, show_right=show_right)
+
+    def _on_applet_drag_end(self) -> None:
+        self._applet_drag_key = None
+        self.dismiss_layer.hide_drop_zones()
+        self.launcher.exit_drag_receive_mode()
+        if self._in_canvas_mode:
+            self._exit_canvas_mode()
+
+
+
+    def _switch_to_launcher_for_drop(self):
+        """
+        Switch the visible stack child to the launcher page and put it into
+        drag-receive mode so the incoming applet can be dropped into place.
+        """
+        key = self._applet_drag_key
+        if key is None:
+            return
+
+        self.dismiss_layer.hide_drop_zones()
+
+        self.v_stack.set_visible_child(self.h_group_1)
+        self.h_group_1.set_visible_child(self.launcher)
+        self._sync_header()
+
+        self.launcher.enter_drag_receive_mode(key)
+
 
     def _on_key_press(self, _, event):
         if self._current_page_name() not in _PAGES_WITH_SEARCH:
@@ -176,7 +300,8 @@ class Dash(Window):
             entry.set_position(-1)
 
         return False
-    
+
+
     def _current_page_name(self) -> str:
         v_child = self.v_stack.get_visible_child()
         if v_child is self.h_group_1:
@@ -207,14 +332,21 @@ class Dash(Window):
 
     def _on_stack_changed(self, *_):
         self._sync_header()
-        on_applets = self.h_group_1.get_visible_child() is self.applets and self.v_stack.get_visible_child() is not self.h_group_2
+        on_applets = (
+            self.h_group_1.get_visible_child() is self.applets
+            and self.v_stack.get_visible_child() is not self.h_group_2
+        )
         edit_mode.enable() if on_applets else edit_mode.disable()
+
+        if self.h_group_1.get_visible_child() is not self.launcher:
+            self.launcher.exit_drag_receive_mode()
 
     def _on_v_stack_changed(self, *_):
         self._on_stack_changed()
         self.h_group_1.set_visible_child(self.launcher)
         self.h_group_2.set_visible_child(self.wallpapers)
-        
+
+
     def toggle(self, active_monitor=None):
         if self.is_visible():
             self.revealer.close(on_done=self._hide)
@@ -225,12 +357,23 @@ class Dash(Window):
             if self._active_monitor is not None:
                 self._bar_manager.set_bars_top(self._active_monitor)
             self.dismiss_layer.hide()
+            self.dismiss_layer.hide_drop_zones()
         else:
             self._opening = True
             if bar.is_applet_open:
                 bar.set_open_applet(None)
             self._active_monitor = active_monitor
+
+            # Resolve integer monitor id
+            self._active_monitor_id = None
+            if active_monitor is not None:
+                for i in range(display.get_n_monitors()):
+                    if display.get_monitor(i) == active_monitor:
+                        self._active_monitor_id = i
+                        break
+
             self.applets.set_monitor(active_monitor)
+
             self.dismiss_layer.show()
             if not self.dismiss_layer._blur_ctx:
                 self.dismiss_layer._blur_ctx = enable_blur(self.dismiss_layer)
@@ -267,6 +410,41 @@ class Dash(Window):
 
     def _hide(self):
         self.hide()
+        self.launcher.exit_drag_receive_mode()
+        if self._in_canvas_mode:
+            self._exit_canvas_mode()
         self.v_stack.set_visible_child(self.h_group_1)
         self.h_group_1.set_visible_child(self.launcher)
         edit_mode.disable()
+
+    def _enter_canvas_mode(self):
+        key = self._applet_drag_key
+        if key is None:
+            return
+        self.dismiss_layer.hide_drop_zones()
+        self._main_box.add_style_class("canvas-mode-hidden")
+        self.hide()
+        self.dismiss_layer.show_canvas(key)
+        self._in_canvas_mode = True
+        # Drop bar to top so it doesn't float above the canvas
+        if self._active_monitor is not None:
+            self._bar_manager.set_bars_top(self._active_monitor)
+
+    def _exit_canvas_mode(self):
+        self._main_box.remove_style_class("canvas-mode-hidden")
+        self.dismiss_layer.hide_canvas()
+        self._in_canvas_mode = False
+        self.show()
+        if self._active_monitor is not None:
+            self._bar_manager.set_bars_overlay
+    
+    
+    def _on_canvas_drop_complete(self):
+        """
+        Called by DashCanvas after a successful drop.
+        Exits canvas mode and closes the dash.
+        """
+        self._exit_canvas_mode()
+        # Small delay so the user sees the grid clear before the dash closes
+        # GLib.timeout_add(180, lambda: (self.toggle(self._active_monitor), False)[1])
+    

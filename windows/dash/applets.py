@@ -2,11 +2,14 @@ from fabric.widgets.label import Label
 from fabric.widgets.box import Box
 from fabric.widgets.button import Button
 from fabric.widgets.entry import Entry
-from gi.repository import Gtk, Gdk
+from fabric.widgets.eventbox import EventBox
+from gi.repository import Gtk, Gdk, GLib
 from utils.sounds import play_sound
 import bar
 from .components import DashPage
 from snippets import Icon
+from user_options import user_options
+from desktop_applets import DESKTOP_APPLET_SIZES
 import cairo
 
 ALL_BEAN_DATA: list[tuple[str, str]] = [
@@ -32,6 +35,7 @@ ALL_BEAN_DATA: list[tuple[str, str]] = [
     ("speaker-simple-high-duotone",     "Volume"),
     ("seal-duotone",                    "Brightness"),
 ]
+
 
 def create_dash_drag_surface(icon_name: str, key: str) -> cairo.ImageSurface:
     icon = Icon(icon_name=icon_name, icon_size=24)
@@ -59,43 +63,81 @@ def create_dash_drag_surface(icon_name: str, key: str) -> cairo.ImageSurface:
 
 _TARGET = Gtk.TargetEntry.new("text/plain", Gtk.TargetFlags.SAME_APP, 0)
 
+
 class DashAppletItem(Button):
-    def __init__(self, icon_name: str, key: str, in_bar: bool = False):
+    def __init__(self, icon_name: str, key: str, on_drag_end: callable = None):
         self.key = key
         self.key_icon = icon_name
+        self._on_drag_end_cb = on_drag_end
+
+        # Placement indicator row — icons appear/disappear via refresh_state()
+        self._bar_indicator = Icon(
+            icon_name="rows-duotone",
+            icon_size=12,
+            visible=False,
+            tooltip_text="In bar",
+        )
+        self._launcher_indicator = Icon(
+            icon_name="squares-four-duotone",
+            icon_size=12,
+            visible=False,
+            tooltip_text="In launcher",
+        )
+        self._desktop_indicator = Icon(
+            icon_name="monitor-duotone",
+            icon_size=12,
+            visible=False,
+            tooltip_text="On desktop",
+        )
+        self._indicator_row = Box(
+            orientation="h",
+            spacing=4,
+            h_align="center",
+            style_classes=["applet-indicators"],
+            children=[self._bar_indicator, self._launcher_indicator, self._desktop_indicator],
+        )
+
         self.box = Box(
-                style_classes=["dash-applet-item"],
-                orientation="v",
-                spacing=18,
-                h_expand=False,
-                h_align="center",
-                v_expand=True,
-                v_align="center",
-                children=[
-                    Icon(v_expand=True, v_align="end", icon_name=icon_name, icon_size=52),
-                    Label(
-                        label=key,
-                        v_expand=True,
-                        v_align="start",
-                        h_align="center",
-                        ellipsization="end",
-                        max_chars_width=10,
-                        style="font-size: 14px;",
-                    ),
-                ],
-            )
-        super().__init__(
-            child=self.box
+            style_classes=["dash-applet-item"],
+            orientation="v",
+            spacing=10,
+            h_expand=False,
+            h_align="center",
+            v_expand=True,
+            v_align="center",
+            children=[
+                Icon(v_expand=True, v_align="end", icon_name=icon_name, icon_size=52),
+                Label(
+                    label=key,
+                    v_expand=False,
+                    v_align="center",
+                    h_align="center",
+                    ellipsization="end",
+                    max_chars_width=10,
+                    style="font-size: 14px;",
+                ),
+                self._indicator_row,
+            ],
+        )
+        super().__init__(child=self.box)
+
+        self.drag_source_set(
+            Gdk.ModifierType.BUTTON1_MASK,
+            [_TARGET],
+            Gdk.DragAction.MOVE,
         )
         self.connect("drag-begin", self._on_drag_begin)
         self.connect("drag-data-get", self._on_drag_data_get)
+        self.connect("drag-end", self._on_drag_end)
+        self.connect("drag-failed", self._on_drag_failed)
         self.connect("enter-notify-event", self._on_enter)
         self.connect("leave-notify-event", self._on_leave)
         self.connect("button-press-event", self._on_press)
         self.connect("button-release-event", self._on_release)
         self.connect("focus-in-event", self._on_focus_in)
         self.connect("focus-out-event", self._on_focus_out)
-        self.set_in_bar(in_bar)
+
+
     def _on_enter(self, *_):
         self.box.add_style_class("hover")
 
@@ -114,6 +156,8 @@ class DashAppletItem(Button):
 
     def _on_focus_out(self, *_):
         self.box.remove_style_class("focus")
+
+
     def _on_drag_begin(self, widget, ctx):
         bar._dragging_key = self.key
         try:
@@ -121,35 +165,128 @@ class DashAppletItem(Button):
             Gtk.drag_set_icon_surface(ctx, surface)
         except Exception:
             pass
+        if hasattr(self, '_page_drag_begin_cb') and self._page_drag_begin_cb:
+            self._page_drag_begin_cb(self.key)
+
     def _on_drag_data_get(self, widget, ctx, data_obj, info, time):
         data_obj.set_text(f"applet:{self.key}", -1)
 
-    def set_in_bar(self, in_bar: bool) -> None:
-        ctx = self.get_child().get_style_context()
-        if in_bar:
-            ctx.add_class("in-bar")
-            self.drag_source_unset()
-        else:
-            ctx.remove_class("in-bar")
-            self.drag_source_set(
-                Gdk.ModifierType.BUTTON1_MASK,
-                [_TARGET],
-                Gdk.DragAction.MOVE,
-            )
+    def _on_drag_end(self, widget, ctx):
+        bar._dragging_key = None
+        if self._on_drag_end_cb:
+            self._on_drag_end_cb()
+
+    def _on_drag_failed(self, widget, ctx, result):
+        bar._dragging_key = None
+        if self._on_drag_end_cb:
+            self._on_drag_end_cb()
+        return False
+
+
+    def refresh_state(self, in_bar: bool, in_launcher: bool, in_desktop: bool, has_desktop: bool) -> None:
+        self._bar_indicator.set_visible(True)
+        self._launcher_indicator.set_visible(has_desktop)
+        self._desktop_indicator.set_visible(has_desktop)
+
+        self._bar_indicator.set_opacity(0.35 if in_bar else 1.0)
+        self._launcher_indicator.set_opacity(0.35 if in_launcher else 1.0)
+        self._desktop_indicator.set_opacity(0.35 if in_desktop else 1.0)
+
+        all_filled = in_bar and (in_launcher if has_desktop else True) and (in_desktop if has_desktop else True)
+        self.box.get_style_context().add_class("in-bar") if all_filled else self.box.get_style_context().remove_class("in-bar")
+        self.set_sensitive(not all_filled)
+
+
+
+class AppletDropZone(EventBox):
+    HOVER_DELAY = 500
+
+    def __init__(self, side: str, on_hover_commit: callable):
+        assert side in ("left", "right")
+        self._side = side
+        self._on_hover_commit = on_hover_commit
+        self._hover_timer: int | None = None
+
+        icon_name = "squares-four-duotone" if side == "left" else "monitor-duotone"
+        label_text = "Add to Launcher" if side == "left" else "Add to Desktop"
+
+        inner = Box(
+            orientation="v",
+            spacing=12,
+            h_align="center",
+            v_align="center",
+            v_expand=True,
+            children=[
+                Icon(icon_name=icon_name, icon_size=32),
+                Label(label=label_text, style="font-size: 13px;"),
+            ],
+        )
+
+        super().__init__(
+            style_classes=["applet-drop-zone", f"applet-drop-zone-{side}"],
+            visible=False,
+            child=inner,
+        )
+
+        self.drag_dest_set(
+            0,
+            [_TARGET],
+            Gdk.DragAction.MOVE,
+        )
+        self.connect("drag-motion", self._on_drag_motion)
+        self.connect("drag-leave", self._on_drag_leave)
+        self.connect("drag-data-received", self._on_drag_received)
+
+    def _on_drag_motion(self, widget, ctx, x, y, time):
+        Gdk.drag_status(ctx, Gdk.DragAction.MOVE, time)
+        self.add_style_class("hovered")
+        if self._hover_timer is None:
+            self._hover_timer = GLib.timeout_add(self.HOVER_DELAY, self._commit_hover)
+        return True
+
+    def _on_drag_leave(self, widget, ctx, time):
+        self.remove_style_class("hovered")
+        self._cancel_hover_timer()
+
+    def _commit_hover(self) -> bool:
+        self._hover_timer = None
+        self._on_hover_commit()
+        return False  # don't repeat
+
+    def _cancel_hover_timer(self):
+        if self._hover_timer is not None:
+            GLib.source_remove(self._hover_timer)
+            self._hover_timer = None
+
+    def _on_drag_received(self, widget, ctx, x, y, data_obj, info, time):
+        Gtk.drag_finish(ctx, self._side == "right", False, time)
+
+    def show_zone(self):
+        self.set_visible(True)
+
+    def hide_zone(self):
+        self._cancel_hover_timer()
+        self.remove_style_class("hovered")
+        self.set_visible(False)
+
 
 class DashAppletPage(DashPage):
-    def __init__(self, window, bar_manager):
+    def __init__(self, window, bar_manager, on_applet_drag_begin: callable = None, on_applet_drag_end: callable = None):
         self.window = window
         self._bar_manager = bar_manager
         self._monitor_obj = None
+        self._monitor_id: int | None = None
+        self._on_applet_drag_begin = on_applet_drag_begin
+        self._on_applet_drag_end = on_applet_drag_end
 
         self._all_items = ALL_BEAN_DATA
         self._search_entry: Entry | None = None
 
-        self._item_map: dict[str, DashAppletItem] = {
-            key: DashAppletItem(icon, key, in_bar=False)
-            for icon, key in self._all_items
-        }
+        self._item_map: dict[str, DashAppletItem] = {}
+        for icon, key in self._all_items:
+            item = DashAppletItem(icon, key, on_drag_end=self._handle_drag_end)
+            item._page_drag_begin_cb = self._handle_drag_begin
+            self._item_map[key] = item
 
         super().__init__(grid_children=[list(self._item_map.values())])
 
@@ -166,11 +303,33 @@ class DashAppletPage(DashPage):
         self.grid.connect("drag-data-received", self._on_grid_drag_received)
         self.grid.connect("drag-motion", self._on_grid_drag_motion)
 
-    def _get_all_active_keys(self) -> set[str]:
-        bars = self._get_monitor_bars()
-        if not bars:
-            return set()
-        return set().union(*(b.get_active_keys() for b in bars))
+    def _handle_drag_begin(self, key: str) -> None:
+        in_launcher  = key in self._get_launcher_keys()
+        has_desktop  = key in DESKTOP_APPLET_SIZES
+        in_desktop   = key in self._get_desktop_keys()
+
+        show_left  = not in_launcher
+        show_right = has_desktop and not in_desktop
+
+        if self._on_applet_drag_begin:
+            self._on_applet_drag_begin(key, show_left=show_left, show_right=show_right)
+
+    def _handle_drag_end(self) -> None:
+        if self._on_applet_drag_end:
+            self._on_applet_drag_end()
+
+    # ── monitor ────────────────────────────────────────────────────────────
+
+    def set_monitor(self, monitor_obj) -> None:
+        if monitor_obj is None or monitor_obj is self._monitor_obj:
+            return
+        self._monitor_obj = monitor_obj
+        display = Gdk.Display.get_default()
+        for i in range(display.get_n_monitors()):
+            if display.get_monitor(i) == monitor_obj:
+                self._monitor_id = i
+                break
+        self.refresh_bar_state()
 
     def _get_monitor_bars(self):
         if self._monitor_obj is None:
@@ -179,6 +338,36 @@ class DashAppletPage(DashPage):
             b for (mon, _), b in self._bar_manager._bars.items()
             if mon == self._monitor_obj
         ]
+
+    def _get_all_active_keys(self) -> set[str]:
+        bars = self._get_monitor_bars()
+        if not bars:
+            return set()
+        return set().union(*(b.get_active_keys() for b in bars))
+
+    def _get_launcher_keys(self) -> set[str]:
+        return {e["key"] for e in user_options.desktop_applets.get_applets()}
+
+
+    def refresh_bar_state(self) -> None:
+        bar_keys      = self._get_all_active_keys()
+        launcher_keys = self._get_launcher_keys()
+        desktop_keys  = self._get_desktop_keys()
+
+        for key, item in self._item_map.items():
+            has_desktop = key in DESKTOP_APPLET_SIZES
+            item.refresh_state(
+                in_bar=key in bar_keys,
+                in_launcher=key in launcher_keys,
+                in_desktop=key in desktop_keys,
+                has_desktop=has_desktop,
+            )
+    def _get_desktop_keys(self) -> set[str]:
+        mid = self._monitor_id
+        if mid is None:
+            return set()
+        return {e["key"] for e in user_options.desktop_canvas.get_applets(mid)}
+
     def _attach_search_entry(self, entry: Entry):
         if self._search_entry is entry:
             return
@@ -187,7 +376,7 @@ class DashAppletPage(DashPage):
                 self._search_entry.disconnect_by_func(self._search)
                 self._search_entry.disconnect_by_func(self._on_entry_key_press)
             except Exception as e:
-                print(f"[launcher] disconnect failed: {e}")
+                print(f"[applets] disconnect failed: {e}")
         self._search_entry = entry
         entry.connect("changed", self._search)
         entry.connect("key-press-event", self._on_entry_key_press)
@@ -200,10 +389,11 @@ class DashAppletPage(DashPage):
             return True
         return False
 
+
     def _on_grid_drag_motion(self, widget, ctx, x, y, time):
         Gdk.drag_status(ctx, Gdk.DragAction.MOVE, time)
         return True
-    
+
     def _on_grid_drag_received(self, widget, ctx, x, y, data_obj, info, time):
         payload = data_obj.get_text() or ""
         parts = payload.split(":")
@@ -320,21 +510,12 @@ class DashAppletPage(DashPage):
 
         Gtk.drag_finish(ctx, False, False, time)
 
-    def set_monitor(self, monitor_obj):
-            if monitor_obj is None or monitor_obj is self._monitor_obj:
-                return
-            self._monitor_obj = monitor_obj
-            self.refresh_bar_state()
-
-    def refresh_bar_state(self) -> None:
-        active = self._get_all_active_keys()
-        for key, item in self._item_map.items():
-            item.set_in_bar(key in active)
 
     def _on_visibility_changed(self, *_):
         if not self.window.get_visible():
             if self._search_entry:
                 self._search_entry.set_text("")
+
 
     def _render_items(self, items: list[tuple[str, str]]):
         for child in self.grid.get_children():
@@ -342,11 +523,7 @@ class DashAppletPage(DashPage):
         visible_items = [self._item_map[key] for _, key in items if key in self._item_map]
         self.grid.attach_flow(visible_items, columns=6)
         self.grid.show_all()
-    def _get_monitor_bars(self):
-        return [
-            b for (mon, _), b in self._bar_manager._bars.items()
-            if mon == self._monitor_obj
-        ]
+
     def _search(self, entry):
         query = entry.get_text().strip().lower()
         if not query:
@@ -358,3 +535,7 @@ class DashAppletPage(DashPage):
         ])
         adj = self.scroll.get_vadjustment()
         adj.set_value(adj.get_lower())
+
+
+    def on_launcher_applet_changed(self) -> None:
+        self.refresh_bar_state()

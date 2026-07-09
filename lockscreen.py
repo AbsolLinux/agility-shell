@@ -418,7 +418,7 @@ def lock():
             stderr=subprocess.DEVNULL
         )
         return None
-        
+
     app = Application("lock")
     app.set_stylesheet_from_file(os.path.expanduser("~/.config/caffyne-shell/style/style.css"))
     manager = LockManager()

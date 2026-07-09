@@ -87,7 +87,7 @@ class WallpaperDropWindow(WaylandWindow):
 
         super().__init__(
             monitor=monitor_id,
-            # anchor="left right top bottom",
+            anchor="left right top bottom",
             exclusivity="ignore",
             layer="background",
             child=self._box,

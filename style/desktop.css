@@ -1,0 +1,40 @@
+.desktop-applet {
+    padding: 18px;
+    background-color: var(--background);
+    min-width: 138px;
+    min-height: 138px;
+    border-radius: apply(radius-xl);
+}
+.desktop-applet.large {
+    min-width: 324px;
+}
+.desktop-date-label {
+    font-size: 20px;
+    font-weight: 600;
+    min-height: 28px;
+}
+.desktop-date-label.day {
+    opacity: 0.6;
+}
+.desktop-date-label.date {
+    font-weight: 500;
+    font-size: 32px;
+    min-height: 42px;
+}
+.desktop-system-module {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-m);
+    padding: 6px;
+}
+.desktop-system-module-label {
+    font-weight: 400;
+}
+.desktop-system-module-label.top {
+    font-size: 14px;
+    min-height: 20px;
+}
+.desktop-system-module-label.bottom {
+    font-size: 11px;
+    min-height: 16px;
+    opacity: 0.6;
+}

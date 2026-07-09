@@ -424,6 +424,7 @@ class ThemePreview(Box):
             max_value=1.0,
             step=0.05,
             value=user_options.theme.opacity,
+            value_formatter=lambda val: f"{round(val * 100)}%",
             h_expand=True,
         )
 

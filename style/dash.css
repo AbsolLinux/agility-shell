@@ -1,3 +1,11 @@
+@define-color canvas-empty                      alpha(var(--primary), 0.06);
+@define-color canvas-occupied                   alpha(var(--primary_container), 0.35);
+@define-color canvas-border                     alpha(var(--outline), 0.30);
+@define-color canvas-placeholder-valid          alpha(var(--secondary), 0.35);
+@define-color canvas-placeholder-invalid        alpha(var(--error), 0.35);
+@define-color canvas-placeholder-valid-border   alpha(var(--secondary), 0.75);
+@define-color canvas-placeholder-invalid-border alpha(var(--error), 0.75);
+
 .dash {
     background-color: rgba(0, 0, 0, 0.2);
 }
@@ -248,4 +256,15 @@ tooltip label {
     to {
         opacity: 1;
     }
+}
+
+.canvas-mode-hidden {
+    opacity: 0;
+    transition: opacity 250ms ease;
+}
+ 
+/* Also add a transition on the normal state so the fade-in is smooth */
+.dash-stack,
+.dash-header-button-container {
+    transition: opacity 250ms ease;
 }
