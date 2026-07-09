@@ -37,15 +37,16 @@ class DesktopWeather(Box):
             ),
         ]
 
+        if weather.hourly_forecast:
+            self._rebuild_hourly()
+        if weather.daily_forecast:
+            self._update_current()
+            self._update_minmax()
+
         weather.connect("notify::hourly-forecast", lambda *_: self._rebuild_hourly())
         weather.connect("notify::temperature", lambda *_: self._update_current())
         weather.connect("notify::weather-icon", lambda *_: self._update_current())
         weather.connect("notify::daily-forecast", lambda *_: self._update_minmax())
-
-        if weather.hourly_forecast:
-            self._rebuild_hourly()
-        if weather.daily_forecast:
-            self._update_minmax()
 
     def _create_current_weather(self):
         return Box(
