@@ -92,7 +92,16 @@ class DashDismissLayer(Window):
             child=self._stack,
         )
         GtkLayerShell.set_exclusive_zone(self, -1)
-
+    def switch(self):
+        if self._blur_ctx:
+            disable_blur(self._blur_ctx)
+            free_blur(self._blur_ctx)
+            self._blur_ctx = None
+        self.hide()
+        self.show()
+        self.show()
+        if not self._blur_ctx:
+            self._blur_ctx = enable_blur(self)
     def show_canvas(self, key: str) -> None:
         self._canvas.enter(key)
         self._stack.set_visible_child_name("canvas")
@@ -422,28 +431,27 @@ class Dash(Window):
         if key is None:
             return
         self.dismiss_layer.hide_drop_zones()
-        self._main_box.add_style_class("canvas-mode-hidden")
-        self.hide()
+        self.dismiss_layer.layer = "overlay"
+        self.revealer.close()
         self.dismiss_layer.show_canvas(key)
         self._in_canvas_mode = True
         # Drop bar to top so it doesn't float above the canvas
-        if self._active_monitor is not None:
-            self._bar_manager.set_bars_top(self._active_monitor)
+        # if self._active_monitor is not None:
+        #     self._bar_manager.set_bars_top(self._active_monitor)
 
     def _exit_canvas_mode(self):
-        self._main_box.remove_style_class("canvas-mode-hidden")
         self.dismiss_layer.hide_canvas()
-        self._in_canvas_mode = False
+        self.dismiss_layer.layer = "top"
+        self.dismiss_layer.switch()
+        self.hide()
         self.show()
-        if self._active_monitor is not None:
-            self._bar_manager.set_bars_overlay
+        self._in_canvas_mode = False
+        self.revealer.open()
+        # if self._active_monitor is not None:
+        #     self._bar_manager.set_bars_overlay
     
     
     def _on_canvas_drop_complete(self):
-        """
-        Called by DashCanvas after a successful drop.
-        Exits canvas mode and closes the dash.
-        """
         self._exit_canvas_mode()
         # Small delay so the user sees the grid clear before the dash closes
         # GLib.timeout_add(180, lambda: (self.toggle(self._active_monitor), False)[1])
