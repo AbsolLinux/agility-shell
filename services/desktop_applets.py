@@ -33,6 +33,10 @@ class DesktopAppletWindow(WaylandWindow):
         self._children: dict[str, Gtk.Widget] = {}  # key → widget
         self._pad_x = 0
         self._pad_y = 0
+        self._cols = 0
+        self._rows = 0
+        self._old_w = 0
+        self._old_h = 0
         self._root = Box(h_expand=True, v_expand=True)
         self._root.add(self._fixed)
 
@@ -45,7 +49,6 @@ class DesktopAppletWindow(WaylandWindow):
             visible=True,
             name=f"desktop-applets-{monitor_id}",
         )
-        # self.show_all()
         GtkLayerShell.set_exclusive_zone(self, -1)
         self._force_refresh()
         self.connect("size-allocate", self._on_size_allocate)
@@ -55,12 +58,32 @@ class DesktopAppletWindow(WaylandWindow):
         w, h = alloc.width, alloc.height
         if w < 1 or h < 1:
             return
-        cols = max(1, w // CELL_STEP)
-        rows = max(1, h // CELL_STEP)
-        self._pad_x = (w - cols * CELL_STEP + GAP) // 2
-        self._pad_y = (h - rows * CELL_STEP + GAP) // 2
-        self._reposition_all()
+        if h < self._old_h or w < self._old_w:
+            self._fixed.hide()
+            GLib.timeout_add(100, self.recalculate_grid)
+        else:
+            self.recalculate_grid()
+        self._old_w = w
+        self._old_h = h
 
+    def recalculate_grid(self) -> None:
+        alloc = self.get_allocation()
+        w, h = alloc.width, alloc.height
+        if w < 1 or h < 1:
+            return
+        new_cols = max(1, w // CELL_STEP)
+        new_rows = max(1, h // CELL_STEP)
+        self._pad_x = (w - new_cols * CELL_STEP + GAP) // 2
+        self._pad_y = (h - new_rows * CELL_STEP + GAP) // 2
+
+        if new_cols != self._cols or new_rows != self._rows:
+            self._cols = new_cols
+            self._rows = new_rows
+            user_options.desktop_canvas.resolve(self._monitor_id, self._cols, self._rows)
+            user_options.save()
+            self._reposition_all()
+            self._force_refresh()
+            
     def _reposition_all(self) -> None:
         entries = user_options.desktop_canvas.get_applets(self._monitor_id)
         for entry in entries:
@@ -72,6 +95,13 @@ class DesktopAppletWindow(WaylandWindow):
                 continue
             px, py = _grid_to_pixel(grid_x, grid_y)
             self._fixed.move(widget, self._pad_x + px, self._pad_y + py)
+    @property
+    def cols(self) -> int:
+        return self._cols
+
+    @property
+    def rows(self) -> int:
+        return self._rows
 
     def rebuild(self) -> None:
         for widget in self._children.values():
@@ -148,11 +178,14 @@ class DesktopAppletWindow(WaylandWindow):
         menu.show_all()
         menu.popup_at_pointer(event)
         return True
+
     def _force_refresh(self):
         #For some reason niri needs this
         self.hide()
         self.show_all()
         return False
+
+
 class DesktopAppletService(Service):
     _instance: "DesktopAppletService | None" = None
 
@@ -210,15 +243,19 @@ class DesktopAppletService(Service):
         self._sync_monitors()
 
     def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> bool:
-        placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y)
+        win = self._windows.get(monitor_id)
+        cols = win.cols if win and win.cols > 0 else 1
+        rows = win.rows if win and win.rows > 0 else 1
+        rx = grid_x / cols
+        ry = grid_y / rows
+
+        placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, rx, ry)
         if not placed:
             return False
         user_options.save()
-        win = self._windows.get(monitor_id)
         if win:
             win.add_applet(key, grid_x, grid_y)
         self.applets_changed(monitor_id)
-
         return True
 
     def remove(self, monitor_id: int, key: str) -> bool:

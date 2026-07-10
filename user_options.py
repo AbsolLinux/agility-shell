@@ -128,7 +128,6 @@ class UserOptions:
             self.applets: list[dict] = []
 
         def get_applets(self) -> list[dict]:
-            """Return the full placed applet list."""
             return self.applets
 
         def place(self, key: str, slot: int) -> bool:
@@ -156,23 +155,22 @@ class UserOptions:
     class DesktopCanvas:
         def __init__(self):
             self.placements: dict[str, list[dict]] = {}
-        
+
         def get_applets(self, monitor_id: int) -> list[dict]:
-            """Return placed applets for *monitor_id* (empty list if none)."""
             return self.placements.get(str(monitor_id), [])
-    
+
         def is_placed(self, monitor_id: int, key: str) -> bool:
             return any(e["key"] == key for e in self.get_applets(monitor_id))
-        
-        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> bool:
+
+        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, rx: float, ry: float) -> bool:
             mid = str(monitor_id)
             if any(e["key"] == key for e in self.placements.get(mid, [])):
                 return False
             self.placements.setdefault(mid, []).append(
-                {"key": key, "grid_x": grid_x, "grid_y": grid_y}
+                {"key": key, "grid_x": grid_x, "grid_y": grid_y, "rx": rx, "ry": ry}
             )
             return True
-    
+
         def remove(self, monitor_id: int, key: str) -> bool:
             mid = str(monitor_id)
             before = self.placements.get(mid, [])
@@ -181,16 +179,49 @@ class UserOptions:
                 return False
             self.placements[mid] = after
             return True
-    
+
         def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> None:
             for e in self.placements.get(str(monitor_id), []):
                 if e["key"] == key:
                     e["grid_x"] = grid_x
                     e["grid_y"] = grid_y
                     break
-    
+
         def clear_monitor(self, monitor_id: int) -> None:
             self.placements.pop(str(monitor_id), None)
+
+        def resolve(self, monitor_id: int, cols: int, rows: int) -> None:
+            from desktop_applets import DESKTOP_CANVAS_SIZES
+
+            def _applet_cell_size(key: str) -> tuple[int, int]:
+                base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+                return base_cols * 2, base_rows * 2
+
+            def _cells(gx: int, gy: int, cc: int, cr: int) -> set[tuple[int, int]]:
+                return {(gx + dx, gy + dy) for dx in range(cc) for dy in range(cr)}
+
+            entries = self.placements.get(str(monitor_id), [])
+            occupied: set[tuple[int, int]] = set()
+
+            for entry in entries:
+                key = entry["key"]
+                rx  = entry.get("rx", 0.0)
+                ry  = entry.get("ry", 0.0)
+                cc, cr = _applet_cell_size(key)
+
+                gx = max(0, min(round(rx * cols), cols - cc))
+                gy = max(0, min(round(ry * rows), rows - cr))
+
+                candidate_gy = gy
+                while _cells(gx, candidate_gy, cc, cr) & occupied:
+                    candidate_gy += 1
+                    if candidate_gy + cr > rows:
+                        candidate_gy = gy
+                        break
+
+                entry["grid_x"] = gx
+                entry["grid_y"] = candidate_gy
+                occupied |= _cells(gx, candidate_gy, cc, cr)
 
     def __init__(self):
         self.user = self.User()
