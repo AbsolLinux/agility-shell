@@ -1,6 +1,7 @@
 import gi
 gi.require_version("Gtk", "3.0")
 
+from urllib.parse import unquote
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 from fabric.core.service import Service, Signal
 from fabric.widgets.wayland import WaylandWindow
@@ -8,7 +9,10 @@ from fabric.widgets.box import Box
 from loguru import logger
 
 from user_options import user_options
+from utils.helpers import popup_with_blur
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
+from .themes import wallpaper
+
 CELL      = 81
 GAP       = 12
 CELL_STEP = CELL + GAP
@@ -25,12 +29,13 @@ def _grid_to_pixel(grid_x: int, grid_y: int) -> tuple[int, int]:
     """Convert grid cell indices to top-left pixel offset (before padding)."""
     return grid_x * CELL_STEP, grid_y * CELL_STEP
 
+
 class DesktopAppletWindow(WaylandWindow):
 
     def __init__(self, monitor_id: int) -> None:
         self._monitor_id  = monitor_id
         self._fixed       = Gtk.Fixed()
-        self._children: dict[str, Gtk.Widget] = {}  # key → widget
+        self._children: dict[str, Gtk.Widget] = {}
         self._pad_x = 0
         self._pad_y = 0
         self._cols = 0
@@ -39,6 +44,7 @@ class DesktopAppletWindow(WaylandWindow):
         self._old_h = 0
         self._resizing = False
         self._pending_shrink = False
+        self.bar_manager = None
         self._root = Box(h_expand=True, v_expand=True)
         self._root.add(self._fixed)
 
@@ -54,6 +60,90 @@ class DesktopAppletWindow(WaylandWindow):
         GtkLayerShell.set_exclusive_zone(self, -1)
         self._force_refresh()
         self.connect("size-allocate", self._on_size_allocate)
+        self.connect("button-press-event", self._on_button_press)
+        self._setup_drag_and_drop()
+
+    def _on_button_press(self, widget, event: Gdk.EventButton) -> bool:
+        if event.button != 3:
+            return False
+
+        from services.singletons import bar_manager
+
+        menu = Gtk.Menu()
+
+        bar_count = sum(
+            1
+            for bar in bar_manager._bars.values()
+            if bar.monitor_id == self._monitor_id
+        )
+
+        if bar_count < 2:
+            add_item = Gtk.MenuItem(label="Add Bar")
+            add_item.connect(
+                "activate",
+                lambda _: bar_manager.add_bar_for_monitor(Gdk.Display.get_default().get_monitor(self._monitor_id)),
+            )
+            menu.append(add_item)
+        else:
+            item = Gtk.MenuItem(label="Maximum bars (2) reached on this monitor")
+            item.set_sensitive(False)
+            menu.append(item)
+
+        if user_options.theme.blur:
+            popup_with_blur(menu, event)
+        else:
+            menu.show_all()
+            menu.popup_at_pointer(event)
+
+        return True
+
+    def _setup_drag_and_drop(self) -> None:
+        self.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
+        self.drag_dest_set_target_list(Gtk.TargetList.new([]))
+        target_list = self.drag_dest_get_target_list()
+        if target_list:
+            target_list.add_text_targets(0)
+            target_list.add_uri_targets(0)
+
+        self.connect("drag-data-received", self._on_drag_data_received)
+        self.connect("drag-motion",        self._on_drag_motion)
+        self.connect("drag-drop",          self._on_drag_drop)
+
+    def _on_drag_motion(self, widget, context, x, y, timestamp) -> bool:
+        Gdk.drag_status(context, Gdk.DragAction.COPY, timestamp)
+        return True
+
+    def _on_drag_drop(self, widget, context, x, y, timestamp) -> bool:
+        for target in context.list_targets():
+            name = target.name()
+            if name in ("text/uri-list", "text/plain", "STRING"):
+                self.drag_get_data(context, Gdk.Atom.intern(name, False), timestamp)
+                return True
+        return False
+
+    def _on_drag_data_received(self, widget, context, x, y, data, info, timestamp) -> None:
+        if data and data.get_data():
+            text = data.get_data().decode("utf-8", errors="ignore")
+            for line in text.strip().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    text = line
+                    break
+
+            path = unquote(text.replace("file://", "").strip())
+
+            if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif")):
+                alloc = self.get_allocation()
+                nx = x / alloc.width  if alloc.width  > 0 else 0.5
+                ny = 1.0 - (y / alloc.height if alloc.height > 0 else 0.5)
+                nx = max(0.0, min(1.0, nx))
+                ny = max(0.0, min(1.0, ny))
+
+                logger.info(f"Drop on monitor {self._monitor_id}: {path!r} at ({nx:.3f}, {ny:.3f})")
+
+                wallpaper.set_wallpaper(path, pos=(nx, ny))
+
+        context.finish(True, False, timestamp)
 
 
     def _on_size_allocate(self, widget, alloc: Gdk.Rectangle) -> None:
@@ -86,15 +176,6 @@ class DesktopAppletWindow(WaylandWindow):
         self._old_w = w
         self._old_h = h
 
-    def _deferred_recalculate(self) -> bool:
-        self._resizing = True
-        try:
-            self.recalculate_grid()
-            self._fixed.show()
-        finally:
-            self._resizing = False
-        return False  # don't repeat
-
     def recalculate_grid(self) -> None:
         alloc = self.get_allocation()
         w, h = alloc.width, alloc.height
@@ -124,6 +205,7 @@ class DesktopAppletWindow(WaylandWindow):
                 continue
             px, py = _grid_to_pixel(grid_x, grid_y)
             self._fixed.move(widget, self._pad_x + px, self._pad_y + py)
+
     @property
     def cols(self) -> int:
         return self._cols
@@ -140,8 +222,8 @@ class DesktopAppletWindow(WaylandWindow):
 
         entries = user_options.desktop_canvas.get_applets(self._monitor_id)
         for entry in entries:
-            key    = entry["key"]
-            cls    = DESKTOP_APPLET_WIDGETS.get(key)
+            key = entry["key"]
+            cls = DESKTOP_APPLET_WIDGETS.get(key)
             if cls is None:
                 logger.warning(f"[DesktopAppletService] unknown applet key {key!r}")
                 continue
@@ -193,27 +275,32 @@ class DesktopAppletWindow(WaylandWindow):
         if widget:
             self._fixed.remove(widget)
             widget.destroy()
-            
+
     def _on_applet_right_click(self, eb, event: Gdk.EventButton, key: str) -> bool:
         if event.button != 3:
             return False
 
         menu = Gtk.Menu()
-
         remove_item = Gtk.MenuItem(label=f"Remove {key}")
-        remove_item.connect("activate", lambda _: DesktopAppletService.get_instance().remove(self._monitor_id, key))
+        remove_item.connect(
+            "activate",
+            lambda _: DesktopAppletService.get_instance().remove(self._monitor_id, key),
+        )
         menu.append(remove_item)
-
         menu.show_all()
         menu.popup_at_pointer(event)
         return True
 
     def _force_refresh(self):
-        #For some reason niri needs this
+        # Niri needs this
         self.hide()
         self.show_all()
         return False
 
+
+# --------------------------------------------------------------------------- #
+#  Service                                                                     #
+# --------------------------------------------------------------------------- #
 
 class DesktopAppletService(Service):
     _instance: "DesktopAppletService | None" = None

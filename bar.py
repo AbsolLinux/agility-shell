@@ -1891,7 +1891,6 @@ class BarManager:
 
         if monitor_id is None:
             return
-
         monitor_cfg = next(
             (c for c in user_options.bars.configs if c.get("monitor") == monitor_id),
             None,
