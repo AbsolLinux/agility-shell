@@ -9,9 +9,9 @@ from loguru import logger
 
 from user_options import user_options
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
-CELL      = 81   # px per grid square
-GAP       = 12   # px between squares
-CELL_STEP = CELL + GAP   # 93 px
+CELL      = 81
+GAP       = 12
+CELL_STEP = CELL + GAP
 
 
 def _applet_pixel_size(key: str) -> tuple[int, int]:
@@ -37,6 +37,8 @@ class DesktopAppletWindow(WaylandWindow):
         self._rows = 0
         self._old_w = 0
         self._old_h = 0
+        self._resizing = False
+        self._pending_shrink = False
         self._root = Box(h_expand=True, v_expand=True)
         self._root.add(self._fixed)
 
@@ -55,16 +57,43 @@ class DesktopAppletWindow(WaylandWindow):
 
 
     def _on_size_allocate(self, widget, alloc: Gdk.Rectangle) -> None:
+        if self._resizing:
+            return
+
         w, h = alloc.width, alloc.height
         if w < 1 or h < 1:
             return
-        if h < self._old_h or w < self._old_w:
+
+        if self._pending_shrink:
+            self._pending_shrink = False
+            self._resizing = True
+            try:
+                self.recalculate_grid()
+                self._fixed.show()
+            finally:
+                self._resizing = False
+
+        elif h < self._old_h or w < self._old_w:
             self._fixed.hide()
-            GLib.timeout_add(100, self.recalculate_grid)
+            self._pending_shrink = True
+            self._resizing = True
+            self.hide()
+            self.show()
+            self._resizing = False
         else:
             self.recalculate_grid()
+
         self._old_w = w
         self._old_h = h
+
+    def _deferred_recalculate(self) -> bool:
+        self._resizing = True
+        try:
+            self.recalculate_grid()
+            self._fixed.show()
+        finally:
+            self._resizing = False
+        return False  # don't repeat
 
     def recalculate_grid(self) -> None:
         alloc = self.get_allocation()
@@ -83,7 +112,7 @@ class DesktopAppletWindow(WaylandWindow):
             user_options.save()
             self._reposition_all()
             self._force_refresh()
-            
+
     def _reposition_all(self) -> None:
         entries = user_options.desktop_canvas.get_applets(self._monitor_id)
         for entry in entries:
@@ -246,10 +275,9 @@ class DesktopAppletService(Service):
         win = self._windows.get(monitor_id)
         cols = win.cols if win and win.cols > 0 else 1
         rows = win.rows if win and win.rows > 0 else 1
-        rx = grid_x / cols
         ry = grid_y / rows
 
-        placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, rx, ry)
+        placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, cols, ry)
         if not placed:
             return False
         user_options.save()

@@ -162,12 +162,29 @@ class UserOptions:
         def is_placed(self, monitor_id: int, key: str) -> bool:
             return any(e["key"] == key for e in self.get_applets(monitor_id))
 
-        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, rx: float, ry: float) -> bool:
+        @staticmethod
+        def _compute_anchor(grid_x: int, cc: int, cols: int) -> tuple[str, int]:
+            left_boundary  = int(cols * 0.4)
+            right_boundary = int(cols * 0.6)
+            center_col     = cols // 2
+
+            if grid_x < left_boundary:
+                return "left", grid_x
+            elif grid_x >= right_boundary:
+                return "right", cols - grid_x - cc
+            else:
+                return "center", grid_x - center_col
+
+        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int, ry: float) -> bool:
             mid = str(monitor_id)
             if any(e["key"] == key for e in self.placements.get(mid, [])):
                 return False
+            from desktop_applets import DESKTOP_CANVAS_SIZES
+            base_cols, _ = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+            cc = base_cols * 2
+            ax, dx = self._compute_anchor(grid_x, cc, cols)
             self.placements.setdefault(mid, []).append(
-                {"key": key, "grid_x": grid_x, "grid_y": grid_y, "rx": rx, "ry": ry}
+                {"key": key, "grid_x": grid_x, "grid_y": grid_y, "ax": ax, "dx": dx, "ry": ry}
             )
             return True
 
@@ -180,11 +197,17 @@ class UserOptions:
             self.placements[mid] = after
             return True
 
-        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> None:
+        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int) -> None:
+            from desktop_applets import DESKTOP_CANVAS_SIZES
             for e in self.placements.get(str(monitor_id), []):
                 if e["key"] == key:
+                    base_cols, _ = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+                    cc = base_cols * 2
+                    ax, dx = self._compute_anchor(grid_x, cc, cols)
                     e["grid_x"] = grid_x
                     e["grid_y"] = grid_y
+                    e["ax"]     = ax
+                    e["dx"]     = dx
                     break
 
         def clear_monitor(self, monitor_id: int) -> None:
@@ -200,16 +223,30 @@ class UserOptions:
             def _cells(gx: int, gy: int, cc: int, cr: int) -> set[tuple[int, int]]:
                 return {(gx + dx, gy + dy) for dx in range(cc) for dy in range(cr)}
 
-            entries = self.placements.get(str(monitor_id), [])
+            center_col = cols // 2
+            entries    = self.placements.get(str(monitor_id), [])
             occupied: set[tuple[int, int]] = set()
 
             for entry in entries:
                 key = entry["key"]
-                rx  = entry.get("rx", 0.0)
                 ry  = entry.get("ry", 0.0)
                 cc, cr = _applet_cell_size(key)
 
-                gx = max(0, min(round(rx * cols), cols - cc))
+                ax = entry.get("ax")
+                if ax == "left":
+                    gx = max(0, min(entry["dx"], cols - cc))
+                elif ax == "right":
+                    gx = max(0, min(cols - entry["dx"] - cc, cols - cc))
+                elif ax == "center":
+                    gx = max(0, min(center_col + entry["dx"], cols - cc))
+                else:
+                    rx = entry.get("rx", 0.0)
+                    gx = max(0, min(round(rx * cols), cols - cc))
+                    ax, dx = self._compute_anchor(gx, cc, cols)
+                    entry["ax"] = ax
+                    entry["dx"] = dx
+                    entry.pop("rx", None)
+
                 gy = max(0, min(round(ry * rows), rows - cr))
 
                 candidate_gy = gy
