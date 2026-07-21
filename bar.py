@@ -1337,17 +1337,18 @@ class Bar(Window):
             bezier_curve=(0.17, 0.67, 0, 1),
             transition_type=transition,
             child=self._centerbox,
-            child_revealed=not self.auto_hide,
+            child_revealed=False,
             h_expand=True,
             duration=0.3,
 
         )
+        self._revealer.set_reveal_child(False)
 
         super().__init__(
             title=f"caffyne-shell-bar",
             layer="top",
             anchor=f"{self.alignment}" if self.min_width else f"{self.alignment} left right",
-            exclusivity="none" if self.auto_hide else "auto",
+            exclusivity="none",
             monitor=monitor_id,
             child=Box(
                 h_expand=True,
@@ -1371,6 +1372,11 @@ class Bar(Window):
         if user_options.theme.blur:
             self._blur_ctx = enable_blur(self)
             GLib.timeout_add(1500, self._update_blur_region)
+
+        if not self.auto_hide:
+            GLib.idle_add(self._revealer.set_reveal_child, True)
+            GLib.timeout_add(750, lambda: setattr(self, "exclusivity", "auto"))
+
 
     def _build_section(self, section_name: str) -> DraggableSection:
         entries: list = self.bar_config.get(section_name, [])

@@ -12,7 +12,7 @@ from user_options import user_options
 from utils.helpers import popup_with_blur
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
 from .themes import wallpaper
-
+from snippets import Animator
 CELL      = 81
 GAP       = 12
 CELL_STEP = CELL + GAP
@@ -42,11 +42,34 @@ class DesktopAppletWindow(WaylandWindow):
         self._rows = 0
         self._old_w = 0
         self._old_h = 0
-        self._resizing = False
-        self._pending_shrink = False
+        self._recalc_timer: int | None = None
+        self._ready = False
         self.bar_manager = None
         self._root = Box(h_expand=True, v_expand=True)
         self._root.add(self._fixed)
+        self._in_size_allocate = False
+
+        self._fade_animator = Animator(
+            bezier_curve=(0.4, 0.0, 0.2, 1.0),
+            duration=0.4,
+            min_value=0.0,
+            max_value=1.0,
+            tick_widget=self._root,
+        )
+        self._fade_animator.connect("notify::value", self._on_fade_value)
+        self._fade_animator.connect("finished", self._on_fade_finished)
+
+
+        self._fade_out_animator = Animator(
+            bezier_curve=(0.4, 0.0, 0.2, 1.0),
+            duration=0.2,
+            min_value=0.0,
+            max_value=1.0,
+            tick_widget=self._root,
+        )
+        self._fade_out_animator.connect("notify::value", self._on_fade_out_value)
+        self._fade_out_animator.connect("finished", self._on_fade_out_finished)
+        self._fixed.set_opacity(0.0)
 
         super().__init__(
             monitor=monitor_id,
@@ -57,12 +80,46 @@ class DesktopAppletWindow(WaylandWindow):
             visible=True,
             name=f"desktop-applets-{monitor_id}",
         )
-        GtkLayerShell.set_exclusive_zone(self, -1)
-        self._force_refresh()
+
         self.connect("size-allocate", self._on_size_allocate)
         self.connect("button-press-event", self._on_button_press)
         self._setup_drag_and_drop()
 
+        GLib.timeout_add(2000, self._initial_build)
+
+    def _initial_build(self) -> bool:
+        self._ready = True
+        self.recalculate_grid()
+        self._fade_in()
+        return False
+    
+    def _on_fade_value(self, animator, _) -> None:
+        self._fixed.set_opacity(animator.value)
+
+    def _on_fade_finished(self, animator) -> None:
+        self._fixed.set_opacity(1.0)
+
+    def _fade_in(self) -> None:
+        if self._fade_animator.playing:
+            return
+        self._fade_out_animator.pause()
+        self._fade_animator.value = self._fixed.get_opacity()
+        self._fade_animator.min_value = self._fixed.get_opacity()
+        self._fade_animator.max_value = 1.0
+        self._fade_animator.play()
+
+    def _fade_out(self) -> None:
+        self._fade_animator.pause()
+        self._fade_out_animator.min_value = 0.0
+        self._fade_out_animator.max_value = self._fixed.get_opacity()
+        self._fade_out_animator.value = self._fixed.get_opacity()
+        self._fade_out_animator.play()
+
+    def _on_fade_out_value(self, animator, _) -> None:
+        self._fixed.set_opacity(animator.value)
+
+    def _on_fade_out_finished(self, animator) -> None:
+        self._fixed.set_opacity(0.0)
     def _on_button_press(self, widget, event: Gdk.EventButton) -> bool:
         if event.button != 3:
             return False
@@ -147,52 +204,58 @@ class DesktopAppletWindow(WaylandWindow):
 
 
     def _on_size_allocate(self, widget, alloc: Gdk.Rectangle) -> None:
-        if self._resizing:
+        if not self._ready or self._in_size_allocate:
             return
 
         w, h = alloc.width, alloc.height
         if w < 1 or h < 1:
             return
 
-        if self._pending_shrink:
-            self._pending_shrink = False
-            self._resizing = True
-            try:
-                self.recalculate_grid()
-                self._fixed.show()
-            finally:
-                self._resizing = False
+        if self._recalc_timer is not None:
+            GLib.source_remove(self._recalc_timer)
 
-        elif h < self._old_h or w < self._old_w:
-            self._fixed.hide()
-            self._pending_shrink = True
-            self._resizing = True
+        # Always fade out on any size change
+        if w != self._old_w or h != self._old_h:
+            self._fade_out()
+
+        if w < self._old_w or h < self._old_h:
+            self._in_size_allocate = True
             self.hide()
             self.show()
-            self._resizing = False
-        else:
-            self.recalculate_grid()
+            self._in_size_allocate = False
 
         self._old_w = w
         self._old_h = h
+        self._recalc_timer = GLib.timeout_add(150, self._deferred_recalc)
+
+    def _deferred_recalc(self) -> bool:
+        self._recalc_timer = None
+        self.recalculate_grid()
+        self._fade_in()
+        return False
 
     def recalculate_grid(self) -> None:
         alloc = self.get_allocation()
         w, h = alloc.width, alloc.height
         if w < 1 or h < 1:
             return
-        new_cols = max(1, w // CELL_STEP)
-        new_rows = max(1, h // CELL_STEP)
-        self._pad_x = (w - new_cols * CELL_STEP + GAP) // 2
-        self._pad_y = (h - new_rows * CELL_STEP + GAP) // 2
+        new_cols  = max(2, (w // CELL_STEP) & ~1)
+        new_pad_x = (w - (new_cols * CELL_STEP - GAP)) // 2
+        new_rows  = max(1, (h - new_pad_x * 2 - GAP) // CELL_STEP)
+        new_pad_y = new_pad_x
 
         if new_cols != self._cols or new_rows != self._rows:
-            self._cols = new_cols
-            self._rows = new_rows
+            self._cols  = new_cols
+            self._rows  = new_rows
+            self._pad_x = new_pad_x
+            self._pad_y = new_pad_y
             user_options.desktop_canvas.resolve(self._monitor_id, self._cols, self._rows)
             user_options.save()
             self._reposition_all()
             self._force_refresh()
+        else:
+            self._pad_x = new_pad_x
+            self._pad_y = new_pad_y
 
     def _reposition_all(self) -> None:
         entries = user_options.desktop_canvas.get_applets(self._monitor_id)
@@ -296,7 +359,6 @@ class DesktopAppletWindow(WaylandWindow):
         self.hide()
         self.show_all()
         return False
-
 
 # --------------------------------------------------------------------------- #
 #  Service                                                                     #

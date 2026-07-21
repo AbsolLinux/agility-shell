@@ -108,12 +108,12 @@ class DashCanvas(EventBox):
         self._win_h = h
         self._recompute_grid(w, h)
         self._drawing.queue_draw()
-
+        
     def _recompute_grid(self, w: int, h: int) -> None:
-        self._cols  = max(1, w // CELL_STEP)
+        self._cols  = max(2, (w // CELL_STEP) & ~1)
         self._rows  = max(1, h // CELL_STEP)
-        self._pad_x = (w - self._cols * CELL_STEP + GAP) // 2
-        self._pad_y = (h - self._rows * CELL_STEP + GAP) // 2
+        self._pad_x = (w - (self._cols * CELL_STEP - GAP)) // 2
+        self._pad_y = self._pad_x
 
     def _xy_to_grid(self, x: float, y: float) -> tuple[int, int]:
         gx = max(0, min(self._cols - 1, int((x - self._pad_x) / CELL_STEP)))
