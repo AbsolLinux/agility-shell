@@ -1348,7 +1348,7 @@ class Bar(Window):
             title=f"caffyne-shell-bar",
             layer="top",
             anchor=f"{self.alignment}" if self.min_width else f"{self.alignment} left right",
-            exclusivity="none",
+            exclusivity="none" if self.auto_hide else "auto",
             monitor=monitor_id,
             child=Box(
                 h_expand=True,
@@ -1375,7 +1375,7 @@ class Bar(Window):
 
         if not self.auto_hide:
             GLib.idle_add(self._revealer.set_reveal_child, True)
-            GLib.timeout_add(750, lambda: setattr(self, "exclusivity", "auto"))
+            # GLib.timeout_add(750, lambda: setattr(self, "exclusivity", "auto"))
 
 
     def _build_section(self, section_name: str) -> DraggableSection:
