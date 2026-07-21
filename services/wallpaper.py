@@ -92,7 +92,7 @@ class WallpaperDropWindow(WaylandWindow):
             layer="background",
             child=self._box,
             visible=True,
-            name=f"wallpaper-drop-{monitor_id}",
+            title=f"wallpaper-drop-{monitor_id}",
         )
 
         self.show_all()
@@ -221,7 +221,7 @@ class WallpaperService(Service):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._blurred_pixbuf: GdkPixbuf.Pixbuf | None = None
-        self._windows: dict[int, WallpaperDropWindow] = {}
+        # self._windows: dict[int, WallpaperDropWindow] = {}
         self._bar_manager = None
 
         self._wallpaper_path: str = (
@@ -232,13 +232,13 @@ class WallpaperService(Service):
 
         os.makedirs(os.path.dirname(CACHE_WALLPAPER_PATH), exist_ok=True)
 
-        display = Gdk.Display.get_default()
-        if display:
-            display.connect("monitor-added",  self._on_monitor_added)
-            display.connect("monitor-removed", self._on_monitor_removed)
+        # display = Gdk.Display.get_default()
+        # if display:
+            # display.connect("monitor-added",  self._on_monitor_added)
+            # display.connect("monitor-removed", self._on_monitor_removed)
 
         self._ensure_awww_daemon()
-        self._sync_monitors()
+        # self._sync_monitors()
 
         if self._wallpaper_path and os.path.isfile(self._wallpaper_path):
             _awww_set(self._wallpaper_path)

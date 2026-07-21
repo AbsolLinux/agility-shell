@@ -78,16 +78,16 @@ class DesktopAppletWindow(WaylandWindow):
             monitor=monitor_id,
             anchor="left right top bottom",
             exclusivity="ignore",
-            layer="background",
+            layer="bottom",
             child=self._root,
             visible=True,
-            name=f"desktop-applets-{monitor_id}",
+            title=f"caffyne-shell-desktop-applets",
         )
-
+        # GtkLayerShell.set_exclusive_zone(self, -1)
         self.connect("size-allocate", self._on_size_allocate)
         self.connect("button-press-event", self._on_button_press)
         self._setup_drag_and_drop()
-
+        
         GLib.timeout_add(2000, self._initial_build)
 
     def _initial_build(self) -> bool:
@@ -291,7 +291,7 @@ class DesktopAppletWindow(WaylandWindow):
             user_options.desktop_canvas.resolve(self._monitor_id, self._cols, self._rows)
             user_options.save()
             self._reposition_all()
-            self._force_refresh()
+            # self._force_refresh()
         else:
             self._pad_x = new_pad_x
             self._pad_y = new_pad_y
@@ -346,7 +346,7 @@ class DesktopAppletWindow(WaylandWindow):
                 logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
         self._reposition_all()
-        self._force_refresh()
+        # self._force_refresh()
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
@@ -368,7 +368,7 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
-            self._force_refresh()
+            # self._force_refresh()
         except Exception as e:
             logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
@@ -393,11 +393,11 @@ class DesktopAppletWindow(WaylandWindow):
         menu.popup_at_pointer(event)
         return True
 
-    def _force_refresh(self):
-        # Niri needs this
-        self.hide()
-        self.show_all()
-        return False
+    # def _force_refresh(self):
+    #     # Niri needs this
+    #     self.hide()
+    #     self.show_all()
+    #     return False
 
 # --------------------------------------------------------------------------- #
 #  Service                                                                     #
