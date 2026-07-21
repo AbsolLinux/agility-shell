@@ -42,6 +42,7 @@ class DesktopAppletWindow(WaylandWindow):
         self._rows = 0
         self._old_w = 0
         self._old_h = 0
+        self._recalc_in_progress = False
         self._recalc_timer: int | None = None
         self._ready = False
         self.bar_manager = None
@@ -211,29 +212,44 @@ class DesktopAppletWindow(WaylandWindow):
         if w < 1 or h < 1:
             return
 
-        if self._recalc_timer is not None:
+        if self._recalc_timer is not None and not self._recalc_in_progress:
             GLib.source_remove(self._recalc_timer)
+            self._recalc_timer = None
 
-        # Always fade out on any size change
         if w != self._old_w or h != self._old_h:
+            self._old_w = w
+            self._old_h = h
             self._fade_out()
-
-        if w < self._old_w or h < self._old_h:
-            self._in_size_allocate = True
-            self.hide()
-            self.show()
-            self._in_size_allocate = False
-
-        self._old_w = w
-        self._old_h = h
-        self._recalc_timer = GLib.timeout_add(150, self._deferred_recalc)
+            self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
 
     def _deferred_recalc(self) -> bool:
         self._recalc_timer = None
-        self.recalculate_grid()
-        self._fade_in()
+        
+        if self._recalc_in_progress:
+            self._recalc_timer = GLib.timeout_add(200, self._deferred_recalc)
+            return False
+        
+        self._recalc_in_progress = True
+        self._fixed.hide()
+        GLib.timeout_add(50, self._do_window_resize)
         return False
 
+    def _do_window_resize(self) -> bool:
+        self._in_size_allocate = True
+        self.hide()
+        self.show()
+        GLib.timeout_add(50, self._do_recalc)
+        return False
+
+    def _do_recalc(self) -> bool:
+        self._in_size_allocate = False
+        self.recalculate_grid()
+        self._fixed.set_opacity(0.0)
+        self._fixed.show()
+        self._fade_in()
+        self._recalc_in_progress = False
+        return False
+    
     def recalculate_grid(self) -> None:
         alloc = self.get_allocation()
         w, h = alloc.width, alloc.height
