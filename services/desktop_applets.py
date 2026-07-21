@@ -43,7 +43,9 @@ class DesktopAppletWindow(WaylandWindow):
         self._old_w = 0
         self._old_h = 0
         self._recalc_in_progress = False
+        self._pending_recalc = False
         self._recalc_timer: int | None = None
+        self._fade_in_timer: int | None = None
         self._ready = False
         self.bar_manager = None
         self._root = Box(h_expand=True, v_expand=True)
@@ -91,9 +93,17 @@ class DesktopAppletWindow(WaylandWindow):
     def _initial_build(self) -> bool:
         self._ready = True
         self.recalculate_grid()
+        # self._fade_in()
+        return False
+    def _schedule_fade_in(self) -> None:
+        if self._fade_in_timer is not None:
+            GLib.source_remove(self._fade_in_timer)
+        self._fade_in_timer = GLib.timeout_add(300, self._do_fade_in)
+
+    def _do_fade_in(self) -> bool:
+        self._fade_in_timer = None
         self._fade_in()
         return False
-    
     def _on_fade_value(self, animator, _) -> None:
         self._fixed.set_opacity(animator.value)
 
@@ -212,28 +222,32 @@ class DesktopAppletWindow(WaylandWindow):
         if w < 1 or h < 1:
             return
 
-        if self._recalc_timer is not None and not self._recalc_in_progress:
-            GLib.source_remove(self._recalc_timer)
-            self._recalc_timer = None
-
         if w != self._old_w or h != self._old_h:
             self._old_w = w
             self._old_h = h
-            self._fade_out()
-            self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
+            if self._recalc_in_progress:
+                self._pending_recalc = True
+                return
+            if self._fade_in_timer is not None:
+                GLib.source_remove(self._fade_in_timer)
+                self._fade_in_timer = None
+            if self._recalc_timer is not None:
+                GLib.source_remove(self._recalc_timer)
+                self._recalc_timer = None
 
+            # Only start a fade-out if we're not already doing one
+            # self._fade_animator.pause()
+            if self._fade_out_animator.value != 0:
+                self._fade_out()
+
+            self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
     def _deferred_recalc(self) -> bool:
         self._recalc_timer = None
-        
-        if self._recalc_in_progress:
-            self._recalc_timer = GLib.timeout_add(200, self._deferred_recalc)
-            return False
-        
         self._recalc_in_progress = True
         self._fixed.hide()
         GLib.timeout_add(50, self._do_window_resize)
         return False
-
+    
     def _do_window_resize(self) -> bool:
         self._in_size_allocate = True
         self.hide()
@@ -246,8 +260,17 @@ class DesktopAppletWindow(WaylandWindow):
         self.recalculate_grid()
         self._fixed.set_opacity(0.0)
         self._fixed.show()
-        self._fade_in()
         self._recalc_in_progress = False
+
+        if self._pending_recalc:
+            self._pending_recalc = False
+            self._old_w = 0
+            self._old_h = 0
+            self._fade_out()
+            self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
+        else:
+            self._schedule_fade_in()
+
         return False
     
     def recalculate_grid(self) -> None:

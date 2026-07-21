@@ -1449,7 +1449,8 @@ class Bar(Window):
             self._centerbox.add_style_class("floating")
         else:
             self._centerbox.remove_style_class("floating")
-        GLib.timeout_add(1000, self._update_blur_region)
+        if self._blur_ctx:
+            GLib.timeout_add(1000, self._update_blur_region)
         for i, cfg in enumerate(user_options.bars.configs):
             if cfg.get("monitor") == self.monitor_id:
                 user_options.bars.configs[i]["floating_bar"] = floating
@@ -1547,16 +1548,18 @@ class Bar(Window):
         self.auto_hide = not self.auto_hide
         self.bar_config["auto_hide"] = self.auto_hide
         if self.auto_hide:
-            self._update_blur_region()
+            if self._blur_ctx:
+                self._update_blur_region()
             self._centerbox.add_style_class("auto-hide")
             self.exclusivity = "none"
             self._revealer.set_reveal_child(False)
             self._centerbox.remove_style_class("revealed")
         else:
             self._centerbox.remove_style_class("auto-hide")
-            self.exclusivity = "auto"
             self._revealer.set_reveal_child(True)
-            GLib.timeout_add(320, self._update_blur_region)
+            GLib.timeout_add(320, lambda: setattr(self, "exclusivity", "auto"))
+            if self._blur_ctx:
+                GLib.timeout_add(320, self._update_blur_region)
         user_options.save()
 
     def _swap_bars(self):
