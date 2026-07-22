@@ -14,7 +14,6 @@ def get_sound_path(svg_name):
 _PLAYER = _detect_player()
 
 def play_sound(name: str) -> None:
-    print("play")
     if _PLAYER is None:
         print("[play_sound] No audio player found (tried pw-play, paplay)")
         return
