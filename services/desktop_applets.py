@@ -524,7 +524,6 @@ class DesktopAppletWindow(WaylandWindow):
         new_pad_x = (w - (new_cols * CELL_STEP - GAP)) // 2
         new_rows  = max(1, (h - new_pad_x - GAP) // CELL_STEP)
         new_pad_y = new_pad_x
-
         if new_cols != self._cols or new_rows != self._rows:
             self._cols  = new_cols
             self._rows  = new_rows
@@ -536,6 +535,7 @@ class DesktopAppletWindow(WaylandWindow):
         else:
             self._pad_x = new_pad_x
             self._pad_y = new_pad_y
+            self._reposition_all()
 
     def _reposition_all(self) -> None:
         entries = user_options.desktop_canvas.get_applets(self._monitor_id)
