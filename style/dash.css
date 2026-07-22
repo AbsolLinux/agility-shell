@@ -1,10 +1,10 @@
 @define-color canvas-empty                      alpha(var(--primary), 0.06);
 @define-color canvas-occupied                   alpha(var(--primary_container), 0.35);
 @define-color canvas-border                     alpha(var(--outline), 0.30);
-@define-color canvas-placeholder-valid          alpha(var(--secondary), 0.35);
+/* @define-color canvas-placeholder-valid          alpha(var(--secondary), 0.35);
 @define-color canvas-placeholder-invalid        alpha(var(--error), 0.35);
 @define-color canvas-placeholder-valid-border   alpha(var(--secondary), 0.75);
-@define-color canvas-placeholder-invalid-border alpha(var(--error), 0.75);
+@define-color canvas-placeholder-invalid-border alpha(var(--error), 0.75); */
 
 .dash {
     background-color: rgba(0, 0, 0, 0.2);
@@ -269,19 +269,22 @@ tooltip label {
     transition: opacity 250ms ease;
 }
 
+.launcher-drop-placeholder {
+    border-radius: apply(radius-xl);
+}
 
 .desktop-applet-preview {
     /* background-color: rgba(255, 255, 255, 0.1); */
-    border-color: rgba(255, 255, 255, 0.3);
+    /* border-color: rgba(255, 255, 255, 0.3); */
     border-radius: apply(radius-m);
 }
-
+.launcher-drop-placeholder,
 .desktop-applet-preview.valid {
-    background-color: rgba(100, 200, 100, 0.15);
-    border-color: rgba(100, 200, 100, 0.6);
+    background-color: alpha(var(--tertiary), 0.35);
+    border-color: alpha(var(--tertiary), 0.75);
 }
 
 .desktop-applet-preview.invalid {
-    background-color: rgba(200, 80, 80, 0.15);
-    border-color: rgba(200, 80, 80, 0.6);
+    background-color: alpha(var(--error), 0.35);
+    border-color: alpha(var(--error), 0.75);
 }

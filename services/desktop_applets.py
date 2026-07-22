@@ -230,7 +230,7 @@ class DesktopAppletWindow(WaylandWindow):
         self._overlay = Overlay(h_expand=True, v_expand=True)
         self._overlay.add(self._canvas_da)
         self._overlay.add_overlay(self._fixed)
-        self._overlay.set_overlay_pass_through(self._fixed, True)
+        # self._overlay.set_overlay_pass_through(self._fixed, True)
 
         self._root = Box(h_expand=True, v_expand=True)
         self._root.add(self._overlay)
@@ -394,7 +394,7 @@ class DesktopAppletWindow(WaylandWindow):
         gx = max(0, min(self._cols - 1, int((x - self._pad_x) / CELL_STEP)))
         gy = max(0, min(self._rows - 1, int((y - self._pad_y) / CELL_STEP)))
         return gx, gy
-
+    
     def _on_canvas_drag_motion(self, widget, ctx, x, y, time):
         key = self._dragging_key
         if key is None:
@@ -442,19 +442,21 @@ class DesktopAppletWindow(WaylandWindow):
 
         if not _fits(gx, gy, key, self._cols, self._rows):
             Gtk.drag_finish(ctx, False, False, time)
-            self.exit_canvas_mode(restore=True)
+            self.exit_canvas_mode(restore=False)
             return
 
         if _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key):
             Gtk.drag_finish(ctx, False, False, time)
-            self.exit_canvas_mode(restore=True)
+            self.exit_canvas_mode(restore=False)
             return
 
+        DesktopAppletService.get_instance().remove(self._monitor_id, key)
         DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy)
 
         from utils.sounds import play_sound
         play_sound("widget-placed")
 
+        self._drop_success = True
         Gtk.drag_finish(ctx, True, False, time)
         self.exit_canvas_mode()
 
@@ -622,7 +624,6 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.remove(widget)
             widget.destroy()
 
-
     def _setup_applet_drag(self, eb: Gtk.EventBox, key: str) -> None:
         eb.drag_source_set(
             Gdk.ModifierType.BUTTON1_MASK,
@@ -640,26 +641,26 @@ class DesktopAppletWindow(WaylandWindow):
             ((e["grid_x"], e["grid_y"]) for e in placed if e["key"] == key),
             None,
         )
-        DesktopAppletService.get_instance().remove(self._monitor_id, key)
-
+        eb.hide()
+        self._drop_success = False
         self.enter_canvas_mode(key, origin=origin)
-
-        try:
-            Gtk.drag_set_icon_widget(ctx, eb, 0, 0)
-        except Exception:
-            pass
 
     def _on_applet_drag_data_get(self, eb, ctx, data_obj, info, time, key: str) -> None:
         data_obj.set_text(f"applet:{key}", -1)
 
     def _on_applet_drag_end(self, eb, ctx, key: str) -> None:
-        if self._canvas_active and self._dragging_key == key:
-            self.exit_canvas_mode(restore=True)
+        if self._drop_success:
+            eb.hide()
+        else:
+            eb.show()
+            if self._canvas_active and self._dragging_key == key:
+                self.exit_canvas_mode(restore=False)
 
     def _on_applet_drag_failed(self, eb, ctx, result, key: str) -> bool:
+        eb.show()
         if self._canvas_active and self._dragging_key == key:
-            self.exit_canvas_mode(restore=True)
-        return False
+            self.exit_canvas_mode(restore=False)
+        return True
 
     def _on_applet_right_click(self, eb, event: Gdk.EventButton, key: str) -> bool:
         if event.button != 3:
@@ -738,7 +739,6 @@ class DesktopAppletWindow(WaylandWindow):
 
     def _on_drag_data_received(self, widget, ctx, x, y, data, info, time) -> None:
         payload = (data.get_text() or "") if data else ""
-
         if payload.startswith("applet:"):
             parts = payload.split(":")
             if len(parts) == 2:

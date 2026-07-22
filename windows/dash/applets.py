@@ -72,20 +72,20 @@ class DashAppletItem(Button):
 
         # Placement indicator row — icons appear/disappear via refresh_state()
         self._bar_indicator = Icon(
-            icon_name="rows-duotone",
-            icon_size=12,
+            icon_name="bar-duotone",
+            icon_size=14,
             visible=False,
             tooltip_text="In bar",
         )
         self._launcher_indicator = Icon(
-            icon_name="squares-four-duotone",
-            icon_size=12,
+            icon_name="dash-duotone",
+            icon_size=14,
             visible=False,
             tooltip_text="In launcher",
         )
         self._desktop_indicator = Icon(
             icon_name="monitor-duotone",
-            icon_size=12,
+            icon_size=14,
             visible=False,
             tooltip_text="On desktop",
         )
@@ -207,7 +207,7 @@ class AppletDropZone(EventBox):
         self._on_hover_commit = on_hover_commit
         self._hover_timer: int | None = None
 
-        icon_name = "squares-four-duotone" if side == "left" else "monitor-duotone"
+        icon_name = "dash-duotone" if side == "left" else "monitor-duotone"
         label_text = "Add to Launcher" if side == "left" else "Add to Desktop"
 
         inner = Box(
