@@ -97,6 +97,6 @@ class DesktopWeather(Box):
             self._hourly_box.remove(child)
         for hour in (weather.hourly_forecast or [])[:5]:
             self._hourly_box.add(HourlyForecastItem(hour))
-        window = self.get_toplevel()
-        window.hide()
-        window.show_all()
+        # window = self.get_toplevel()
+        # window.hide()
+        # window.show_all()

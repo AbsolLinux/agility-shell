@@ -1,11 +1,14 @@
+import cairo
+from urllib.parse import unquote
+
 import gi
 gi.require_version("Gtk", "3.0")
-
-from urllib.parse import unquote
+import math
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 from fabric.core.service import Service, Signal
 from fabric.widgets.wayland import WaylandWindow
 from fabric.widgets.box import Box
+from fabric.widgets.overlay import Overlay
 from loguru import logger
 
 from user_options import user_options
@@ -13,9 +16,12 @@ from utils.helpers import popup_with_blur
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
 from .themes import wallpaper
 from snippets import Animator
+
 CELL      = 81
 GAP       = 12
-CELL_STEP = CELL + GAP
+CELL_STEP = CELL + GAP  # 93
+
+_APPLET_TARGET = Gtk.TargetEntry.new("text/plain", Gtk.TargetFlags.SAME_APP, 0)
 
 
 def _applet_pixel_size(key: str) -> tuple[int, int]:
@@ -25,32 +31,209 @@ def _applet_pixel_size(key: str) -> tuple[int, int]:
     return w, h
 
 
+def _applet_cell_size(key: str) -> tuple[int, int]:
+    """Return the (cols, rows) cell footprint for a canvas applet key."""
+    cols, rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+    return cols * 2, rows * 2
+
+
 def _grid_to_pixel(grid_x: int, grid_y: int) -> tuple[int, int]:
-    """Convert grid cell indices to top-left pixel offset (before padding)."""
     return grid_x * CELL_STEP, grid_y * CELL_STEP
+
+
+def _fits(grid_x: int, grid_y: int, key: str, cols: int, rows: int) -> bool:
+    cc, cr = _applet_cell_size(key)
+    return grid_x + cc <= cols and grid_y + cr <= rows
+
+
+def _conflicts(
+    grid_x: int, grid_y: int, key: str,
+    placed: list[dict], cols: int, rows: int,
+    ignore_key: str | None = None,
+) -> bool:
+    cc, cr = _applet_cell_size(key)
+    new_cells = {
+        (grid_x + dx, grid_y + dy)
+        for dx in range(cc)
+        for dy in range(cr)
+    }
+    for entry in placed:
+        if ignore_key and entry["key"] == ignore_key:
+            continue
+        ec, er = _applet_cell_size(entry["key"])
+        existing = {
+            (entry["grid_x"] + dx, entry["grid_y"] + dy)
+            for dx in range(ec)
+            for dy in range(er)
+        }
+        if new_cells & existing:
+            return True
+    return False
+
+
+def _render_shape(cr: cairo.Context, x: float, y: float, w: float, h: float, radius: float) -> None:
+    cr.new_sub_path()
+    cr.arc(x + w - radius, y + radius,         radius, -math.pi / 2, 0)
+    cr.arc(x + w - radius, y + h - radius,     radius, 0,             math.pi / 2)
+    cr.arc(x + radius,     y + h - radius,     radius, math.pi / 2,  math.pi)
+    cr.arc(x + radius,     y + radius,         radius, math.pi,      3 * math.pi / 2)
+    cr.close_path()
+
+
+class _CanvasDrawingArea(Gtk.DrawingArea):
+    _PREVIEW_CLASS         = "desktop-applet-preview"
+    _PREVIEW_VALID_CLASS   = "valid"
+    _PREVIEW_INVALID_CLASS = "invalid"
+
+    def __init__(self, window: "DesktopAppletWindow"):
+        super().__init__()
+        self._win = window
+        self.set_hexpand(True)
+        self.set_vexpand(True)
+
+        self.add_events(Gdk.EventMask.LEAVE_NOTIFY_MASK)
+        self.connect("draw",               self._on_draw)
+        self.connect("leave-notify-event", self._on_leave)
+
+    def _get_color(self, name: str) -> tuple[float, float, float, float]:
+        ctx = self._win.get_style_context()
+        found, color = ctx.lookup_color(name)
+        if found:
+            return color.red, color.green, color.blue, color.alpha
+        return (1.0, 1.0, 1.0, 0.08)
+
+    def _get_preview_styles(self, valid: bool) -> tuple[tuple, tuple, float]:
+        ctx = self.get_style_context()
+        ctx.add_class(self._PREVIEW_CLASS)
+        if valid:
+            ctx.add_class(self._PREVIEW_VALID_CLASS)
+            ctx.remove_class(self._PREVIEW_INVALID_CLASS)
+        else:
+            ctx.add_class(self._PREVIEW_INVALID_CLASS)
+            ctx.remove_class(self._PREVIEW_VALID_CLASS)
+
+        bg     = ctx.get_background_color(self.get_state_flags())
+        border = ctx.get_border_color(self.get_state_flags())
+        radius = ctx.get_property("border-radius", self.get_state_flags())
+
+        ctx.remove_class(self._PREVIEW_CLASS)
+        ctx.remove_class(self._PREVIEW_VALID_CLASS)
+        ctx.remove_class(self._PREVIEW_INVALID_CLASS)
+
+        return (
+            (bg.red,     bg.green,     bg.blue,     bg.alpha),
+            (border.red, border.green, border.blue, border.alpha),
+            float(radius if isinstance(radius, (int, float)) else 12.0),
+        )
+
+    def _on_leave(self, widget, event: Gdk.EventCrossing) -> bool:
+        win = self._win
+        if win._ph_grid_x is not None:
+            win._ph_grid_x = None
+            win._ph_grid_y = None
+            win._ph_valid  = False
+            self.queue_draw()
+        return False
+
+    def _on_draw(self, widget, cr: cairo.Context) -> bool:
+        win = self._win
+        if win._cols == 0 or win._rows == 0:
+            return False
+
+        empty_r,    empty_g,    empty_b,    empty_a    = self._get_color("canvas-empty")
+        occupied_r, occupied_g, occupied_b, occupied_a = self._get_color("canvas-occupied")
+        border_r,   border_g,   border_b,   border_a   = self._get_color("canvas-border")
+
+        placed = user_options.desktop_canvas.get_applets(win._monitor_id)
+
+        occupied: set[tuple[int, int]] = set()
+        for entry in placed:
+            if entry["key"] == win._dragging_key:
+                continue
+            ec, er = _applet_cell_size(entry["key"])
+            for dx in range(ec):
+                for dy in range(er):
+                    occupied.add((entry["grid_x"] + dx, entry["grid_y"] + dy))
+
+        cell_radius = 6.0
+
+        for gy in range(win._rows):
+            for gx in range(win._cols):
+                px = win._pad_x + gx * CELL_STEP
+                py = win._pad_y + gy * CELL_STEP
+
+                if (gx, gy) in occupied:
+                    cr.set_source_rgba(occupied_r, occupied_g, occupied_b, occupied_a)
+                else:
+                    cr.set_source_rgba(empty_r, empty_g, empty_b, empty_a)
+                _render_shape(cr, px, py, CELL, CELL, cell_radius)
+                cr.fill()
+
+                cr.set_source_rgba(border_r, border_g, border_b, border_a)
+                _render_shape(cr, px, py, CELL, CELL, cell_radius)
+                cr.set_line_width(1.0)
+                cr.stroke()
+
+        if win._ph_grid_x is not None and win._dragging_key is not None:
+            px = win._pad_x + win._ph_grid_x * CELL_STEP
+            py = win._pad_y + win._ph_grid_y * CELL_STEP
+            pw, ph = _applet_pixel_size(win._dragging_key)
+
+            bg_rgba, border_rgba, preview_radius = self._get_preview_styles(win._ph_valid)
+
+            # Fill
+            cr.set_source_rgba(*bg_rgba)
+            _render_shape(cr, px, py, pw, ph, preview_radius)
+            cr.fill()
+
+            # Border
+            cr.set_source_rgba(*border_rgba)
+            _render_shape(cr, px, py, pw, ph, preview_radius)
+            cr.set_line_width(2.0)
+            cr.stroke()
+
+        return False
+
 
 
 class DesktopAppletWindow(WaylandWindow):
 
     def __init__(self, monitor_id: int) -> None:
-        self._monitor_id  = monitor_id
-        self._fixed       = Gtk.Fixed()
+        self._monitor_id   = monitor_id
+        self._fixed        = Gtk.Fixed()
         self._children: dict[str, Gtk.Widget] = {}
+
         self._pad_x = 0
         self._pad_y = 0
-        self._cols = 0
-        self._rows = 0
+        self._cols  = 0
+        self._rows  = 0
         self._old_w = 0
         self._old_h = 0
+
         self._recalc_in_progress = False
-        self._pending_recalc = False
+        self._pending_recalc     = False
         self._recalc_timer: int | None = None
         self._fade_in_timer: int | None = None
-        self._ready = False
-        self.bar_manager = None
+        self._ready              = False
+        self._in_size_allocate   = False
+
+        self._canvas_active  = False
+        self._dragging_key: str | None = None
+        self._drag_origin: tuple[int, int] | None = None
+        self._ph_grid_x: int | None = None
+        self._ph_grid_y: int | None = None
+        self._ph_valid:  bool       = False
+
+        self._canvas_da = _CanvasDrawingArea(self)
+        self._canvas_da.set_no_show_all(True)
+
+        self._overlay = Overlay(h_expand=True, v_expand=True)
+        self._overlay.add(self._canvas_da)
+        self._overlay.add_overlay(self._fixed)
+        self._overlay.set_overlay_pass_through(self._fixed, True)
+
         self._root = Box(h_expand=True, v_expand=True)
-        self._root.add(self._fixed)
-        self._in_size_allocate = False
+        self._root.add(self._overlay)
 
         self._fade_animator = Animator(
             bezier_curve=(0.4, 0.0, 0.2, 1.0),
@@ -60,8 +243,7 @@ class DesktopAppletWindow(WaylandWindow):
             tick_widget=self._root,
         )
         self._fade_animator.connect("notify::value", self._on_fade_value)
-        self._fade_animator.connect("finished", self._on_fade_finished)
-
+        self._fade_animator.connect("finished",      self._on_fade_finished)
 
         self._fade_out_animator = Animator(
             bezier_curve=(0.4, 0.0, 0.2, 1.0),
@@ -71,8 +253,32 @@ class DesktopAppletWindow(WaylandWindow):
             tick_widget=self._root,
         )
         self._fade_out_animator.connect("notify::value", self._on_fade_out_value)
-        self._fade_out_animator.connect("finished", self._on_fade_out_finished)
-        self._fixed.set_opacity(0.0)
+        self._fade_out_animator.connect("finished",      self._on_fade_out_finished)
+
+        self._canvas_fade_in = Animator(
+            bezier_curve=(0.4, 0.0, 0.2, 1.0),
+            duration=0.25,
+            min_value=0.0,
+            max_value=1.0,
+            tick_widget=self._root,
+        )
+        self._canvas_fade_in.connect("notify::value",
+            lambda a, _: self._canvas_da.set_opacity(a.value))
+        self._canvas_fade_in.connect("finished",
+            lambda _: self._canvas_da.set_opacity(1.0))
+
+        self._canvas_fade_out = Animator(
+            bezier_curve=(0.4, 0.0, 0.2, 1.0),
+            duration=0.2,
+            min_value=0.0,
+            max_value=1.0,
+            tick_widget=self._root,
+        )
+        self._canvas_fade_out.connect("notify::value",
+            lambda a, _: self._canvas_da.set_opacity(a.value))
+        self._canvas_fade_out.connect("finished", self._on_canvas_fade_out_done)
+
+        self._overlay.set_opacity(0.0)
 
         super().__init__(
             monitor=monitor_id,
@@ -81,20 +287,49 @@ class DesktopAppletWindow(WaylandWindow):
             layer="bottom",
             child=self._root,
             visible=True,
-            title=f"caffyne-shell-desktop-applets",
+            title="caffyne-shell-desktop-applets",
         )
-        # GtkLayerShell.set_exclusive_zone(self, -1)
-        self.connect("size-allocate", self._on_size_allocate)
+
+        self.connect("size-allocate",      self._on_size_allocate)
         self.connect("button-press-event", self._on_button_press)
         self._setup_drag_and_drop()
-        
-        GLib.timeout_add(2000, self._initial_build)
+        self.show_all()
+        GLib.timeout_add(1000, self._initial_build)
+
 
     def _initial_build(self) -> bool:
         self._ready = True
         self.recalculate_grid()
-        # self._fade_in()
         return False
+
+    def _on_fade_value(self, animator, _) -> None:
+        self._overlay.set_opacity(animator.value)
+
+    def _on_fade_finished(self, _) -> None:
+        self._overlay.set_opacity(1.0)
+
+    def _fade_in(self) -> None:
+        if self._fade_animator.playing:
+            return
+        self._fade_out_animator.pause()
+        self._fade_animator.min_value = self._overlay.get_opacity()
+        self._fade_animator.value     = self._overlay.get_opacity()
+        self._fade_animator.max_value = 1.0
+        self._fade_animator.play()
+
+    def _fade_out(self) -> None:
+        self._fade_animator.pause()
+        self._fade_out_animator.min_value = 0.0
+        self._fade_out_animator.max_value = self._overlay.get_opacity()
+        self._fade_out_animator.value     = self._overlay.get_opacity()
+        self._fade_out_animator.play()
+
+    def _on_fade_out_value(self, animator, _) -> None:
+        self._overlay.set_opacity(animator.value)
+
+    def _on_fade_out_finished(self, _) -> None:
+        self._overlay.set_opacity(0.0)
+
     def _schedule_fade_in(self) -> None:
         if self._fade_in_timer is not None:
             GLib.source_remove(self._fade_in_timer)
@@ -104,124 +339,134 @@ class DesktopAppletWindow(WaylandWindow):
         self._fade_in_timer = None
         self._fade_in()
         return False
-    def _on_fade_value(self, animator, _) -> None:
-        self._fixed.set_opacity(animator.value)
 
-    def _on_fade_finished(self, animator) -> None:
-        self._fixed.set_opacity(1.0)
 
-    def _fade_in(self) -> None:
-        if self._fade_animator.playing:
-            return
-        self._fade_out_animator.pause()
-        self._fade_animator.value = self._fixed.get_opacity()
-        self._fade_animator.min_value = self._fixed.get_opacity()
-        self._fade_animator.max_value = 1.0
-        self._fade_animator.play()
+    def _show_canvas(self) -> None:
+        self._canvas_da.set_opacity(0.0)
+        self._canvas_da.show()
+        self._canvas_fade_out.pause()
+        self._canvas_fade_in.min_value = 0.0
+        self._canvas_fade_in.value     = 0.0
+        self._canvas_fade_in.max_value = 1.0
+        self._canvas_fade_in.play()
 
-    def _fade_out(self) -> None:
-        self._fade_animator.pause()
-        self._fade_out_animator.min_value = 0.0
-        self._fade_out_animator.max_value = self._fixed.get_opacity()
-        self._fade_out_animator.value = self._fixed.get_opacity()
-        self._fade_out_animator.play()
+    def _hide_canvas(self) -> None:
+        self._canvas_fade_in.pause()
+        self._canvas_fade_out.max_value = self._canvas_da.get_opacity()
+        self._canvas_fade_out.value     = self._canvas_da.get_opacity()
+        self._canvas_fade_out.min_value = 0.0
+        self._canvas_fade_out.play()
 
-    def _on_fade_out_value(self, animator, _) -> None:
-        self._fixed.set_opacity(animator.value)
+    def _on_canvas_fade_out_done(self, _) -> None:
+        self._canvas_da.set_opacity(0.0)
+        self._canvas_da.hide()
 
-    def _on_fade_out_finished(self, animator) -> None:
-        self._fixed.set_opacity(0.0)
-    def _on_button_press(self, widget, event: Gdk.EventButton) -> bool:
-        if event.button != 3:
-            return False
+    def enter_canvas_mode(self, key: str, origin: tuple[int, int] | None = None) -> None:
+        self._canvas_active = True
+        self._dragging_key  = key
+        self._drag_origin   = origin
+        self._ph_grid_x     = None
+        self._ph_grid_y     = None
+        self._ph_valid      = False
 
-        from services.singletons import bar_manager
+        self.layer = "overlay"
 
-        menu = Gtk.Menu()
+        self._show_canvas()
+        self._canvas_da.queue_draw()
 
-        bar_count = sum(
-            1
-            for bar in bar_manager._bars.values()
-            if bar.monitor_id == self._monitor_id
+    def exit_canvas_mode(self, restore: bool = False) -> None:
+        if restore and self._drag_origin is not None and self._dragging_key is not None:
+            key = self._dragging_key
+            gx, gy = self._drag_origin
+            DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy)
+
+        self._canvas_active = False
+        self._dragging_key  = None
+        self._drag_origin   = None
+        self._ph_grid_x     = None
+        self._ph_grid_y     = None
+        self._ph_valid      = False
+
+        self.layer = "bottom"
+        self._hide_canvas()
+
+    def _xy_to_grid(self, x: float, y: float) -> tuple[int, int]:
+        gx = max(0, min(self._cols - 1, int((x - self._pad_x) / CELL_STEP)))
+        gy = max(0, min(self._rows - 1, int((y - self._pad_y) / CELL_STEP)))
+        return gx, gy
+
+    def _on_canvas_drag_motion(self, widget, ctx, x, y, time):
+        key = self._dragging_key
+        if key is None:
+            Gdk.drag_status(ctx, 0, time)
+            return True
+
+        gx, gy = self._xy_to_grid(x, y)
+        placed  = user_options.desktop_canvas.get_applets(self._monitor_id)
+
+        valid = (
+            _fits(gx, gy, key, self._cols, self._rows)
+            and not _conflicts(gx, gy, key, placed, self._cols, self._rows,
+                               ignore_key=key)
         )
 
-        if bar_count < 2:
-            add_item = Gtk.MenuItem(label="Add Bar")
-            add_item.connect(
-                "activate",
-                lambda _: bar_manager.add_bar_for_monitor(Gdk.Display.get_default().get_monitor(self._monitor_id)),
-            )
-            menu.append(add_item)
-        else:
-            item = Gtk.MenuItem(label="Maximum bars (2) reached on this monitor")
-            item.set_sensitive(False)
-            menu.append(item)
+        if gx != self._ph_grid_x or gy != self._ph_grid_y or valid != self._ph_valid:
+            self._ph_grid_x = gx
+            self._ph_grid_y = gy
+            self._ph_valid  = valid
+            self._canvas_da.queue_draw()
 
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
-
+        Gdk.drag_status(ctx, Gdk.DragAction.MOVE if valid else 0, time)
         return True
 
-    def _setup_drag_and_drop(self) -> None:
-        self.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
-        self.drag_dest_set_target_list(Gtk.TargetList.new([]))
-        target_list = self.drag_dest_get_target_list()
-        if target_list:
-            target_list.add_text_targets(0)
-            target_list.add_uri_targets(0)
+    def _on_canvas_drag_leave(self, widget, ctx, time):
+        self._ph_grid_x = None
+        self._ph_grid_y = None
+        self._ph_valid  = False
+        self._canvas_da.queue_draw()
 
-        self.connect("drag-data-received", self._on_drag_data_received)
-        self.connect("drag-motion",        self._on_drag_motion)
-        self.connect("drag-drop",          self._on_drag_drop)
+    def _on_canvas_drag_received(self, widget, ctx, x, y, data_obj, info, time):
+        payload = data_obj.get_text() or ""
+        parts   = payload.split(":")
+        if len(parts) != 2 or parts[0] != "applet":
+            Gtk.drag_finish(ctx, False, False, time)
+            return
 
-    def _on_drag_motion(self, widget, context, x, y, timestamp) -> bool:
-        Gdk.drag_status(context, Gdk.DragAction.COPY, timestamp)
-        return True
+        key = parts[1]
+        if key not in DESKTOP_APPLET_SIZES:
+            Gtk.drag_finish(ctx, False, False, time)
+            return
 
-    def _on_drag_drop(self, widget, context, x, y, timestamp) -> bool:
-        for target in context.list_targets():
-            name = target.name()
-            if name in ("text/uri-list", "text/plain", "STRING"):
-                self.drag_get_data(context, Gdk.Atom.intern(name, False), timestamp)
-                return True
-        return False
+        gx, gy = self._xy_to_grid(x, y)
+        placed  = user_options.desktop_canvas.get_applets(self._monitor_id)
 
-    def _on_drag_data_received(self, widget, context, x, y, data, info, timestamp) -> None:
-        if data and data.get_data():
-            text = data.get_data().decode("utf-8", errors="ignore")
-            for line in text.strip().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    text = line
-                    break
+        if not _fits(gx, gy, key, self._cols, self._rows):
+            Gtk.drag_finish(ctx, False, False, time)
+            self.exit_canvas_mode(restore=True)
+            return
 
-            path = unquote(text.replace("file://", "").strip())
+        if _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key):
+            Gtk.drag_finish(ctx, False, False, time)
+            self.exit_canvas_mode(restore=True)
+            return
 
-            if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif")):
-                alloc = self.get_allocation()
-                nx = x / alloc.width  if alloc.width  > 0 else 0.5
-                ny = 1.0 - (y / alloc.height if alloc.height > 0 else 0.5)
-                nx = max(0.0, min(1.0, nx))
-                ny = max(0.0, min(1.0, ny))
+        DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy)
 
-                logger.info(f"Drop on monitor {self._monitor_id}: {path!r} at ({nx:.3f}, {ny:.3f})")
+        from utils.sounds import play_sound
+        play_sound("widget-placed")
 
-                wallpaper.set_wallpaper(path, pos=(nx, ny))
+        Gtk.drag_finish(ctx, True, False, time)
+        self.exit_canvas_mode()
 
-        context.finish(True, False, timestamp)
+        DesktopAppletService.get_instance().canvas_drop_complete(self._monitor_id)
 
 
     def _on_size_allocate(self, widget, alloc: Gdk.Rectangle) -> None:
         if not self._ready or self._in_size_allocate:
             return
-
         w, h = alloc.width, alloc.height
         if w < 1 or h < 1:
             return
-
         if w != self._old_w or h != self._old_h:
             self._old_w = w
             self._old_h = h
@@ -234,20 +479,17 @@ class DesktopAppletWindow(WaylandWindow):
             if self._recalc_timer is not None:
                 GLib.source_remove(self._recalc_timer)
                 self._recalc_timer = None
-
-            # Only start a fade-out if we're not already doing one
-            # self._fade_animator.pause()
             if self._fade_out_animator.value != 0:
                 self._fade_out()
-
             self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
+
     def _deferred_recalc(self) -> bool:
         self._recalc_timer = None
         self._recalc_in_progress = True
-        self._fixed.hide()
+        self._overlay.hide()
         GLib.timeout_add(50, self._do_window_resize)
         return False
-    
+
     def _do_window_resize(self) -> bool:
         self._in_size_allocate = True
         self.hide()
@@ -258,8 +500,8 @@ class DesktopAppletWindow(WaylandWindow):
     def _do_recalc(self) -> bool:
         self._in_size_allocate = False
         self.recalculate_grid()
-        self._fixed.set_opacity(0.0)
-        self._fixed.show()
+        self._overlay.set_opacity(0.0)
+        self._overlay.show()
         self._recalc_in_progress = False
 
         if self._pending_recalc:
@@ -272,7 +514,7 @@ class DesktopAppletWindow(WaylandWindow):
             self._schedule_fade_in()
 
         return False
-    
+
     def recalculate_grid(self) -> None:
         alloc = self.get_allocation()
         w, h = alloc.width, alloc.height
@@ -280,7 +522,7 @@ class DesktopAppletWindow(WaylandWindow):
             return
         new_cols  = max(2, (w // CELL_STEP) & ~1)
         new_pad_x = (w - (new_cols * CELL_STEP - GAP)) // 2
-        new_rows  = max(1, (h - new_pad_x * 2 - GAP) // CELL_STEP)
+        new_rows  = max(1, (h - new_pad_x - GAP) // CELL_STEP)
         new_pad_y = new_pad_x
 
         if new_cols != self._cols or new_rows != self._rows:
@@ -291,7 +533,6 @@ class DesktopAppletWindow(WaylandWindow):
             user_options.desktop_canvas.resolve(self._monitor_id, self._cols, self._rows)
             user_options.save()
             self._reposition_all()
-            # self._force_refresh()
         else:
             self._pad_x = new_pad_x
             self._pad_y = new_pad_y
@@ -315,6 +556,7 @@ class DesktopAppletWindow(WaylandWindow):
     @property
     def rows(self) -> int:
         return self._rows
+
 
     def rebuild(self) -> None:
         for widget in self._children.values():
@@ -340,13 +582,14 @@ class DesktopAppletWindow(WaylandWindow):
                 eb.connect("button-press-event", self._on_applet_right_click, key)
                 eb.show_all()
 
+                self._setup_applet_drag(eb, key)
+
                 self._fixed.put(eb, 0, 0)
                 self._children[key] = eb
             except Exception as e:
                 logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
         self._reposition_all()
-        # self._force_refresh()
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
@@ -365,10 +608,11 @@ class DesktopAppletWindow(WaylandWindow):
             eb.connect("button-press-event", self._on_applet_right_click, key)
             eb.show_all()
 
+            self._setup_applet_drag(eb, key)
+
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
-            # self._force_refresh()
         except Exception as e:
             logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
@@ -378,10 +622,48 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.remove(widget)
             widget.destroy()
 
+
+    def _setup_applet_drag(self, eb: Gtk.EventBox, key: str) -> None:
+        eb.drag_source_set(
+            Gdk.ModifierType.BUTTON1_MASK,
+            [_APPLET_TARGET],
+            Gdk.DragAction.MOVE,
+        )
+        eb.connect("drag-begin",    self._on_applet_drag_begin,    key)
+        eb.connect("drag-data-get", self._on_applet_drag_data_get, key)
+        eb.connect("drag-end",      self._on_applet_drag_end,      key)
+        eb.connect("drag-failed",   self._on_applet_drag_failed,   key)
+
+    def _on_applet_drag_begin(self, eb, ctx, key: str) -> None:
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        origin = next(
+            ((e["grid_x"], e["grid_y"]) for e in placed if e["key"] == key),
+            None,
+        )
+        DesktopAppletService.get_instance().remove(self._monitor_id, key)
+
+        self.enter_canvas_mode(key, origin=origin)
+
+        try:
+            Gtk.drag_set_icon_widget(ctx, eb, 0, 0)
+        except Exception:
+            pass
+
+    def _on_applet_drag_data_get(self, eb, ctx, data_obj, info, time, key: str) -> None:
+        data_obj.set_text(f"applet:{key}", -1)
+
+    def _on_applet_drag_end(self, eb, ctx, key: str) -> None:
+        if self._canvas_active and self._dragging_key == key:
+            self.exit_canvas_mode(restore=True)
+
+    def _on_applet_drag_failed(self, eb, ctx, result, key: str) -> bool:
+        if self._canvas_active and self._dragging_key == key:
+            self.exit_canvas_mode(restore=True)
+        return False
+
     def _on_applet_right_click(self, eb, event: Gdk.EventButton, key: str) -> bool:
         if event.button != 3:
             return False
-
         menu = Gtk.Menu()
         remove_item = Gtk.MenuItem(label=f"Remove {key}")
         remove_item.connect(
@@ -393,15 +675,96 @@ class DesktopAppletWindow(WaylandWindow):
         menu.popup_at_pointer(event)
         return True
 
-    # def _force_refresh(self):
-    #     # Niri needs this
-    #     self.hide()
-    #     self.show_all()
-    #     return False
 
-# --------------------------------------------------------------------------- #
-#  Service                                                                     #
-# --------------------------------------------------------------------------- #
+    def _on_button_press(self, widget, event: Gdk.EventButton) -> bool:
+        if event.button != 3:
+            return False
+
+        from services.singletons import bar_manager
+
+        menu = Gtk.Menu()
+        bar_count = sum(
+            1 for bar in bar_manager._bars.values()
+            if bar.monitor_id == self._monitor_id
+        )
+
+        if bar_count < 2:
+            add_item = Gtk.MenuItem(label="Add Bar")
+            add_item.connect(
+                "activate",
+                lambda _: bar_manager.add_bar_for_monitor(
+                    Gdk.Display.get_default().get_monitor(self._monitor_id)
+                ),
+            )
+            menu.append(add_item)
+        else:
+            item = Gtk.MenuItem(label="Maximum bars (2) reached on this monitor")
+            item.set_sensitive(False)
+            menu.append(item)
+
+        if user_options.theme.blur:
+            popup_with_blur(menu, event)
+        else:
+            menu.show_all()
+            menu.popup_at_pointer(event)
+
+        return True
+
+
+    def _setup_drag_and_drop(self) -> None:
+        self.drag_dest_set(
+            Gtk.DestDefaults.ALL,
+            [_APPLET_TARGET],
+            Gdk.DragAction.MOVE | Gdk.DragAction.COPY,
+        )
+        target_list = self.drag_dest_get_target_list()
+        if target_list:
+            target_list.add_text_targets(0)
+            target_list.add_uri_targets(0)
+        self.connect("drag-motion",        self._on_drag_motion)
+        self.connect("drag-leave",         self._on_drag_leave)
+        self.connect("drag-data-received", self._on_drag_data_received)
+
+    def _on_drag_motion(self, widget, ctx, x, y, time) -> bool:
+        targets = [t.name() for t in ctx.list_targets()]
+        if "text/plain" in targets and self._canvas_active:
+            return self._on_canvas_drag_motion(widget, ctx, x, y, time)
+        Gdk.drag_status(ctx, Gdk.DragAction.COPY, time)
+        return True
+
+    def _on_drag_leave(self, widget, ctx, time) -> None:
+        if self._canvas_active:
+            self._on_canvas_drag_leave(widget, ctx, time)
+
+    def _on_drag_data_received(self, widget, ctx, x, y, data, info, time) -> None:
+        payload = (data.get_text() or "") if data else ""
+
+        if payload.startswith("applet:"):
+            parts = payload.split(":")
+            if len(parts) == 2:
+                self._on_canvas_drag_received(widget, ctx, x, y, data, info, time)
+            else:
+                Gtk.drag_finish(ctx, False, False, time)
+            return
+
+        if data and data.get_data():
+            text = data.get_data().decode("utf-8", errors="ignore")
+            for line in text.strip().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    text = line
+                    break
+            path = unquote(text.replace("file://", "").strip())
+            if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif")):
+                alloc = self.get_allocation()
+                nx = x / alloc.width  if alloc.width  > 0 else 0.5
+                ny = 1.0 - (y / alloc.height if alloc.height > 0 else 0.5)
+                nx = max(0.0, min(1.0, nx))
+                ny = max(0.0, min(1.0, ny))
+                logger.info(f"Drop on monitor {self._monitor_id}: {path!r} at ({nx:.3f}, {ny:.3f})")
+                wallpaper.set_wallpaper(path, pos=(nx, ny))
+        ctx.finish(True, False, time)
+
 
 class DesktopAppletService(Service):
     _instance: "DesktopAppletService | None" = None
@@ -415,6 +778,9 @@ class DesktopAppletService(Service):
     @Signal
     def applets_changed(self, monitor_id: int) -> None: ...
 
+    @Signal
+    def canvas_drop_complete(self, monitor_id: int) -> None: ...
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._windows: dict[int, DesktopAppletWindow] = {}
@@ -425,8 +791,7 @@ class DesktopAppletService(Service):
             display.connect("monitor-removed", self._on_monitor_removed)
 
         self._sync_monitors()
-
-        for mid, win in self._windows.items():
+        for win in self._windows.values():
             win.rebuild()
 
     def _sync_monitors(self) -> None:
@@ -460,10 +825,10 @@ class DesktopAppletService(Service):
         self._sync_monitors()
 
     def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> bool:
-        win = self._windows.get(monitor_id)
+        win  = self._windows.get(monitor_id)
         cols = win.cols if win and win.cols > 0 else 1
         rows = win.rows if win and win.rows > 0 else 1
-        ry = grid_y / rows
+        ry   = grid_y / rows
 
         placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, cols, ry)
         if not placed:
@@ -479,7 +844,6 @@ class DesktopAppletService(Service):
         if not removed:
             return False
         user_options.save()
-
         win = self._windows.get(monitor_id)
         if win:
             win.remove_applet(key)
@@ -489,13 +853,23 @@ class DesktopAppletService(Service):
     def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> None:
         user_options.desktop_canvas.move(monitor_id, key, grid_x, grid_y)
         user_options.save()
-
         win = self._windows.get(monitor_id)
         if win:
             win.remove_applet(key)
             win.add_applet(key, grid_x, grid_y)
-
         self.applets_changed(monitor_id)
+
+    def enter_canvas_mode(self, monitor_id: int, key: str) -> None:
+        """Called from the dash to begin a new placement drag."""
+        win = self._windows.get(monitor_id)
+        if win:
+            win.enter_canvas_mode(key, origin=None)
+
+    def exit_canvas_mode(self, monitor_id: int, restore: bool = False) -> None:
+        """Called from the dash to cancel canvas mode."""
+        win = self._windows.get(monitor_id)
+        if win:
+            win.exit_canvas_mode(restore=restore)
 
     def get_window(self, monitor_id: int) -> "DesktopAppletWindow | None":
         return self._windows.get(monitor_id)

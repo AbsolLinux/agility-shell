@@ -268,3 +268,20 @@ tooltip label {
 .dash-header-button-container {
     transition: opacity 250ms ease;
 }
+
+
+.desktop-applet-preview {
+    /* background-color: rgba(255, 255, 255, 0.1); */
+    border-color: rgba(255, 255, 255, 0.3);
+    border-radius: apply(radius-m);
+}
+
+.desktop-applet-preview.valid {
+    background-color: rgba(100, 200, 100, 0.15);
+    border-color: rgba(100, 200, 100, 0.6);
+}
+
+.desktop-applet-preview.invalid {
+    background-color: rgba(200, 80, 80, 0.15);
+    border-color: rgba(200, 80, 80, 0.6);
+}
