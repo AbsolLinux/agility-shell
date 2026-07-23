@@ -39,7 +39,7 @@ ALL_BEAN_DATA: list[tuple[str, str]] = [
 
 def create_dash_drag_surface(icon_name: str, key: str) -> cairo.ImageSurface:
     icon = Icon(icon_name=icon_name, icon_size=24)
-    label = Label(label=key, style="font-size: 12px;")
+    label = Label(label=key, style="font-size: 11px;")
     box = Box(
         orientation="h",
         spacing=8,
@@ -73,25 +73,25 @@ class DashAppletItem(Button):
         # Placement indicator row — icons appear/disappear via refresh_state()
         self._bar_indicator = Icon(
             icon_name="bar-duotone",
-            icon_size=14,
+            icon_size=16,
             visible=False,
             tooltip_text="In bar",
         )
         self._launcher_indicator = Icon(
             icon_name="dash-duotone",
-            icon_size=14,
+            icon_size=16,
             visible=False,
             tooltip_text="In launcher",
         )
         self._desktop_indicator = Icon(
             icon_name="monitor-duotone",
-            icon_size=14,
+            icon_size=16,
             visible=False,
             tooltip_text="On desktop",
         )
         self._indicator_row = Box(
             orientation="h",
-            spacing=4,
+            spacing=6,
             h_align="center",
             style_classes=["applet-indicators"],
             children=[self._bar_indicator, self._launcher_indicator, self._desktop_indicator],
@@ -114,7 +114,7 @@ class DashAppletItem(Button):
                     h_align="center",
                     ellipsization="end",
                     max_chars_width=10,
-                    style="font-size: 14px;",
+                    style="font-size: 14px; margin-bottom: 6px;",
                 ),
                 self._indicator_row,
             ],
@@ -199,7 +199,7 @@ class DashAppletItem(Button):
 
 
 class AppletDropZone(EventBox):
-    HOVER_DELAY = 500
+    HOVER_DELAY = 450
 
     def __init__(self, side: str, on_hover_commit: callable):
         assert side in ("left", "right")
@@ -218,7 +218,7 @@ class AppletDropZone(EventBox):
             v_expand=True,
             children=[
                 Icon(icon_name=icon_name, icon_size=32),
-                Label(label=label_text, style="font-size: 13px;"),
+                Label(label=label_text, style="font-size: 14px; padding: 0px 12px;"),
             ],
         )
 

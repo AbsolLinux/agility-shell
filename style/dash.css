@@ -1,6 +1,6 @@
-@define-color canvas-empty                      alpha(var(--primary), 0.06);
-@define-color canvas-occupied                   alpha(var(--primary_container), 0.35);
-@define-color canvas-border                     alpha(var(--outline), 0.30);
+@define-color canvas-empty                      alpha(var(--primary), 0.00);
+@define-color canvas-occupied                   alpha(var(--primary), 0.00);
+@define-color canvas-border                     alpha(var(--outline), 0.00);
 /* @define-color canvas-placeholder-valid          alpha(var(--secondary), 0.35);
 @define-color canvas-placeholder-invalid        alpha(var(--error), 0.35);
 @define-color canvas-placeholder-valid-border   alpha(var(--secondary), 0.75);
@@ -258,11 +258,16 @@ tooltip label {
     }
 }
 
+.applet-drop-zone {
+    background-color: var(--background);
+    padding: 12px;
+}
+
 .canvas-mode-hidden {
     opacity: 0;
     transition: opacity 250ms ease;
 }
- 
+
 /* Also add a transition on the normal state so the fade-in is smooth */
 .dash-stack,
 .dash-header-button-container {
@@ -276,15 +281,16 @@ tooltip label {
 .desktop-applet-preview {
     /* background-color: rgba(255, 255, 255, 0.1); */
     /* border-color: rgba(255, 255, 255, 0.3); */
-    border-radius: apply(radius-m);
+    border-radius: apply(radius-xl);
 }
+
 .launcher-drop-placeholder,
 .desktop-applet-preview.valid {
-    background-color: alpha(var(--tertiary), 0.35);
-    border-color: alpha(var(--tertiary), 0.75);
+    background-color: alpha(var(--primary), 0.2);
+    border-color: alpha(var(--primary), 0.6);
 }
 
 .desktop-applet-preview.invalid {
-    background-color: alpha(var(--error), 0.35);
-    border-color: alpha(var(--error), 0.75);
+    background-color: alpha(var(--error), 0.2);
+    border-color: alpha(var(--error), 0.6);
 }

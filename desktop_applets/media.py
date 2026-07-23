@@ -46,7 +46,6 @@ class DesktopNoMediaPlaceholder(Box):
                         Label(
                             label="No Media Playing",
                             h_align="start",
-                            style="font-weight: bold;",
                             ellipsization="end",
                             max_chars_width=28,
                         ),
