@@ -11,8 +11,8 @@ class DesktopBattery(Box):
     def __init__(self):
         self.clock_progress = CircularProgressBar(
             style_classes=["progress-bar"],
-            start_angle=270,
-            end_angle=630,
+            start_angle=90,
+            end_angle=450,
             size=(138, 138),
             line_width=6,
             min_value=0,
