@@ -124,7 +124,7 @@ class WorkspaceNumberButton(EventBox):
         if event.button == 1:
             self.workspace.switch_to()
         return False
-    
+
     def sync_index(self, workspace):
         self.workspace = workspace
         self.get_child().get_children()[0].set_label(str(workspace.idx))
@@ -300,7 +300,7 @@ class Workspaces(EventBox):
                 else ["workspace-numbers-container"] if self._variant == "numbers"
                 else ["workspace-button-container"]
             ),
-            v_expand=False, v_align="center", spacing=1 if self._variant == "numbers" else 4 if self._variant == "dots" else 6
+            v_expand=False, v_align="center", spacing=0 if self._variant == "numbers" else 4 if self._variant == "dots" else 6
         )
 
         if self._variant == "icons+pill":
@@ -335,7 +335,7 @@ class Workspaces(EventBox):
         self.connect("destroy", self._on_destroy)
         self.connect("scroll-event", self._on_scroll)
         self.connect("button-release-event", self._on_click)
-        self._rebuild() 
+        self._rebuild()
 
     def _on_destroy(self, *_):
         for sig_id in self._signal_ids:
@@ -354,14 +354,14 @@ class Workspaces(EventBox):
             elif dy > 0.5:
                 self._scroll("down")
         return True
-    
+
     def _on_click(self, _, event):
         if self._variant != "dots":
             return False
         if event.button == 1:
             self._scroll("down")
         return False
-    
+
     def _sync_dots(self):
         current_ids = set(self._dot_buttons.keys())
         new_ids = {ws.id for ws in wm.workspaces if ws.output == self.monitor_name}
@@ -478,7 +478,7 @@ class Workspaces(EventBox):
 
         if self._pill:
             GLib.idle_add(self._on_active_window_changed)
-    
+
     def _on_workspaces_changed(self, *_):
         if self._variant == "dots":
             self._sync_dots()
@@ -486,7 +486,7 @@ class Workspaces(EventBox):
             self._sync_workspaces()
         else:
             self._sync_numbers()
-            
+
     def _rebuild(self):
         for child in self._buttons_box.get_children():
             self._buttons_box.remove(child)

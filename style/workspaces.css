@@ -8,10 +8,6 @@
     transition: all 0.3s ease;
 }
 
-.workspace.variant-icons {
-    padding: 8px 9px;
-}
-
 .workspace.active {
     border-color: var(--primary);
 }
@@ -40,17 +36,17 @@
 }
 
 .workspace-numbers-container {
+    background-color: var(--surface_container);
     border-radius: apply(radius-m);
+    padding-left: 6px;
 }
 
 .workspace-numbers-container .workspace {
-    padding: 0px 0px;
-    min-height: 36px;
-    border-radius: 0px;
     border: unset;
-    transition:
-        background-color 300ms ease,
-        color 300ms ease;
+    border-radius: apply(radius-s);
+    transition: all 300ms ease;
+    margin: 6px 6px 6px 0px;
+    padding: 0px
 }
 
 .workspace-numbers-container .workspace.active {
@@ -60,7 +56,8 @@
 .workspace-numbers-container .workspace label {
     color: var(--on_surface_variant);
     transition: color 300ms ease;
-    min-width: 28px;
+    min-width: 24px;
+    min-height: 24px;
 }
 
 .workspace-numbers-container .workspace.active label {
