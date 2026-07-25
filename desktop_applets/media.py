@@ -102,7 +102,7 @@ class DesktopMediaPlayer(Box):
             style="min-width: 36px; min-height: 36px;",
             children=[Icon(icon_name="vinyl-record-duotone", icon_size=36)],
         )
-        self.album_art = Image(style="border-radius: 12px;")
+        self.album_art = Image(size=(36, 36), style="border-radius: 12px;")
 
         if art_path:
             self.album_art.set_from_pixbuf(load_cover_pixbuf(art_path, 36, 36))

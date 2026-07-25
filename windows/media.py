@@ -115,6 +115,7 @@ class MediaPlayer(Box):
         )
         self.album_art = Image(
             style="border-radius: 40px;",
+            size=(76, 76)
         )
 
         if art_path:
