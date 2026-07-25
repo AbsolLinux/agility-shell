@@ -11,7 +11,7 @@ from services.player import PlayerService
 from icons import MediaIcon
 from snippets import ClippingBox, HackedStack
 from services.singletons import player_manager
-from utils.helpers import load_blurred_pixbuf, load_scaled_pixbuf, load_cover_pixbuf
+from utils.helpers import load_blurred_pixbuf, load_scaled_pixbuf, load_cover_pixbuf, get_app_icon_name
 
 def format_time(seconds: float) -> str:
     """Helper to convert seconds into MM:SS format"""
@@ -165,7 +165,7 @@ class MediaPlayer(Box):
                             orientation="v",
                             start_children=Image(
                                 h_align="end",
-                                icon_name=name,
+                                icon_name=get_app_icon_name(name),
                                 pixel_size=24,
                                 style="margin: 18px 18px 0px 0px;",
                             ),

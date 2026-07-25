@@ -8,7 +8,7 @@ from services.player import PlayerService
 from icons import MediaIcon
 from snippets import ClippingBox
 from services.singletons import player_manager
-from utils.helpers import load_cover_pixbuf, load_scaled_pixbuf
+from utils.helpers import load_cover_pixbuf, load_scaled_pixbuf, get_app_icon_name
 
 
 def format_time(seconds: float) -> str:
@@ -168,7 +168,7 @@ class DesktopMediaPlayer(Box):
                                     h_expand=True,
                                     h_align="start",
                                 ),
-                                Image(icon_name=name, pixel_size=24),
+                                Image(icon_name=get_app_icon_name(name), pixel_size=24),
                             ],
                         ),
                         # Middle: artist + title
