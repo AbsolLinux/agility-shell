@@ -49,7 +49,7 @@ class NoMediaPlaceholder(Box):
                             end_children=Box(
                                 orientation="v",
                                 h_align="start",
-                                style="margin: 16px;",
+                                style="margin: 16px; opacity: 0.8;",
                                 spacing=8,
                                 children=[
                                     Label(

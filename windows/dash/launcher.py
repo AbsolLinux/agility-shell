@@ -121,7 +121,7 @@ class LauncherDesktopAppletItem(Box):
 
     def _show_context_menu(self, event: Gdk.EventButton):
         menu = Gtk.Menu()
-        remove_item = Gtk.MenuItem(label="Remove from Launcher")
+        remove_item = Gtk.MenuItem(label="Remove")
         remove_item.connect("activate", lambda _: self._on_remove(self._key))
         menu.append(remove_item)
         menu.show_all()

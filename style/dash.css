@@ -212,7 +212,6 @@
     border-radius: apply(radius-l);
 }
 
-
 .dash-theme-preview-title {
     /* margin-top: 32px;
     margin-left: 64px; */
@@ -259,19 +258,21 @@ tooltip label {
 }
 
 .applet-drop-zone {
-    background-color: var(--background);
-    padding: 12px;
+    background-color: var(--surface_container_lowest);
+}
+
+.applet-drop-zone * {
+    min-width: 64px;
 }
 
 .canvas-mode-hidden {
     opacity: 0;
-    transition: opacity 250ms ease;
+    transition: opacity 300ms ease;
 }
 
-/* Also add a transition on the normal state so the fade-in is smooth */
 .dash-stack,
 .dash-header-button-container {
-    transition: opacity 250ms ease;
+    transition: opacity 300ms ease;
 }
 
 .launcher-drop-placeholder {

@@ -40,7 +40,7 @@ class DesktopNoMediaPlaceholder(Box):
                     v_align="center",
                     v_expand=True,
                     h_align="start",
-                    style="margin-left: 4px;",
+                    style="margin-left: 4px; opacity: 0.8;",
                     spacing=4,
                     children=[
                         Label(

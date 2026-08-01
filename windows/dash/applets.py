@@ -208,7 +208,7 @@ class AppletDropZone(EventBox):
         self._hover_timer: int | None = None
 
         icon_name = "dash-duotone" if side == "left" else "monitor-duotone"
-        label_text = "Add to Launcher" if side == "left" else "Add to Desktop"
+        label_text = "Dash" if side == "left" else "Desktop"
 
         inner = Box(
             orientation="v",
