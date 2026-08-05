@@ -7,7 +7,7 @@ from snippets.animator import Animator
 
 
 class AppletReveal(Box):
-    SCALE_START = 0.88
+    SCALE_START = 0.6
 
     def __init__(
         self,

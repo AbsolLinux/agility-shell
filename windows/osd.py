@@ -468,10 +468,7 @@ class OSD(WaylandWindow):
             self._blur_ctx = None
         
         self._blur_ctx = enable_blur(self)
-        
-        target_widget = self.revealer.children[0] 
-        
-        traced = trace_widget_regions(target_widget, accuracy=1, erode=2)
+        target_widget = self.revealer.children[0]
 
         def on_progress(value):
             if not self._blur_ctx:
@@ -483,15 +480,25 @@ class OSD(WaylandWindow):
             cx, cy = coords
             
             alloc = target_widget.get_allocation()
-            
-            scale = DashReveal.SCALE_START + (1.0 - DashReveal.SCALE_START)
-            
+            if alloc.width <= 1 or alloc.height <= 1:
+                return
+
+            # retrace every time so regions are always based on current allocation
+            traced = trace_widget_regions(target_widget, accuracy=1, erode=2)
+            if not traced:
+                return
+
+            scale = DashReveal.SCALE_START + (1.0 - DashReveal.SCALE_START) * value
+
+            if value < 0.05:
+                set_blur_regions(self._blur_ctx, [])
+                return
+
             anchor_x = cx + alloc.width / 2.0
             anchor_y = cy + alloc.height / 2.0
 
             clipped = []
             for r in traced:
-
                 x1 = anchor_x + (cx + r.x - anchor_x) * scale
                 y1 = anchor_y + (cy + r.y - anchor_y) * scale
                 x2 = anchor_x + (cx + r.x + r.width - anchor_x) * scale

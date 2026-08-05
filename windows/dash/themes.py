@@ -11,6 +11,7 @@ from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch, Fl
 from services.singletons import theme_service
 from services.templates import template_service, TEMPLATES_DIR
 from services.themes import WALLPAPER_THEME
+from services.desktop_applets import DesktopAppletService
 from user_options import user_options
 
 THUMB_BG_W   = 174
@@ -571,6 +572,7 @@ class ThemePreview(Box):
         user_options.theme.blur = state
         user_options.save()
         self.bar_manager.apply_blur(state)
+        DesktopAppletService.get_instance().apply_blur(state)
 
     def _on_accent_clicked(self, name: str) -> None:
         theme_service.apply_accent(name)

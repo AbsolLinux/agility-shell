@@ -15,7 +15,8 @@ from user_options import user_options
 from utils.helpers import popup_with_blur
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
 from .themes import wallpaper
-from snippets import Animator
+from snippets import Animator, disable_blur, free_blur, set_blur_regions_from_widget, enable_blur, trace_widget_regions
+from snippets.blur.blur import set_blur_regions
 
 CELL      = 81
 GAP       = 12
@@ -216,6 +217,7 @@ class DesktopAppletWindow(WaylandWindow):
         self._fade_in_timer: int | None = None
         self._ready              = False
         self._in_size_allocate   = False
+        self._blur_ctx = None
 
         self._canvas_active  = False
         self._dragging_key: str | None = None
@@ -294,8 +296,8 @@ class DesktopAppletWindow(WaylandWindow):
         self.connect("button-press-event", self._on_button_press)
         self._setup_drag_and_drop()
         self.show_all()
+        
         GLib.timeout_add(1000, self._initial_build)
-
 
     def _initial_build(self) -> bool:
         self._ready = True
@@ -339,7 +341,37 @@ class DesktopAppletWindow(WaylandWindow):
         self._fade_in_timer = None
         self._fade_in()
         return False
+    
+    def _apply_blur(self) -> None:
+        if not user_options.theme.blur:
+            return
+        from .singletons import style_service
 
+        style_service.connect("notify::style-changed", self._retrace_blur)
+
+        self._blur_ctx = enable_blur(self)
+        if not self._blur_ctx:
+            return
+
+        self._retrace_blur()
+
+    def _retrace_blur(self) -> None:
+        if not self._blur_ctx:
+            return
+
+        rects = []
+        for key, eb in self._children.items():
+            if not eb.get_visible():
+                continue
+            coords = eb.translate_coordinates(self, 0, 0)
+            if not coords:
+                continue
+            cx, cy = coords
+            traced = trace_widget_regions(eb, accuracy=1, erode=0)
+            for r in traced:
+                rects.append((cx + r.x, cy + r.y, r.width, r.height))
+
+        set_blur_regions(self._blur_ctx, rects)
 
     def _show_canvas(self) -> None:
         self._canvas_da.set_opacity(0.0)
@@ -550,6 +582,7 @@ class DesktopAppletWindow(WaylandWindow):
                 continue
             px, py = _grid_to_pixel(grid_x, grid_y)
             self._fixed.move(widget, self._pad_x + px, self._pad_y + py)
+        GLib.idle_add(self._retrace_blur)
 
     @property
     def cols(self) -> int:
@@ -615,6 +648,7 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
+            
         except Exception as e:
             logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
@@ -623,6 +657,7 @@ class DesktopAppletWindow(WaylandWindow):
         if widget:
             self._fixed.remove(widget)
             widget.destroy()
+            GLib.idle_add(self._retrace_blur)
 
     def _setup_applet_drag(self, eb: Gtk.EventBox, key: str) -> None:
         eb.drag_source_set(
@@ -643,6 +678,7 @@ class DesktopAppletWindow(WaylandWindow):
         )
         eb.hide()
         self._drop_success = False
+        # GLib.timeout_add(1000, self._retrace_blur)
         self.enter_canvas_mode(key, origin=origin)
 
     def _on_applet_drag_data_get(self, eb, ctx, data_obj, info, time, key: str) -> None:
@@ -655,11 +691,14 @@ class DesktopAppletWindow(WaylandWindow):
             eb.show()
             if self._canvas_active and self._dragging_key == key:
                 self.exit_canvas_mode(restore=False)
+        GLib.idle_add(self._retrace_blur)
+
 
     def _on_applet_drag_failed(self, eb, ctx, result, key: str) -> bool:
         eb.show()
         if self._canvas_active and self._dragging_key == key:
             self.exit_canvas_mode(restore=False)
+            GLib.idle_add(self._retrace_blur)
         return True
 
     def _on_applet_right_click(self, eb, event: Gdk.EventButton, key: str) -> bool:
@@ -764,7 +803,13 @@ class DesktopAppletWindow(WaylandWindow):
                 logger.info(f"Drop on monitor {self._monitor_id}: {path!r} at ({nx:.3f}, {ny:.3f})")
                 wallpaper.set_wallpaper(path, pos=(nx, ny))
         ctx.finish(True, False, time)
-
+        
+    def destroy(self) -> None:
+        if self._blur_ctx:
+            disable_blur(self._blur_ctx)
+            free_blur(self._blur_ctx)
+            self._blur_ctx = None
+        super().destroy()
 
 class DesktopAppletService(Service):
     _instance: "DesktopAppletService | None" = None
@@ -793,6 +838,13 @@ class DesktopAppletService(Service):
         self._sync_monitors()
         for win in self._windows.values():
             win.rebuild()
+
+        if user_options.theme.blur:
+            GLib.timeout_add(1500, self._initial_blur)
+
+    def _initial_blur(self) -> bool:
+        self.apply_blur(True)
+        return False
 
     def _sync_monitors(self) -> None:
         display  = Gdk.Display.get_default()
@@ -823,6 +875,16 @@ class DesktopAppletService(Service):
     def _on_monitor_removed(self, _display, _monitor) -> None:
         logger.info("[DesktopAppletService] monitor removed, resyncing...")
         self._sync_monitors()
+
+    def apply_blur(self, enabled: bool) -> None:
+        for win in self._windows.values():
+            if enabled:
+                win._apply_blur()
+            else:
+                if win._blur_ctx:
+                    disable_blur(win._blur_ctx)
+                    free_blur(win._blur_ctx)
+                    win._blur_ctx = None
 
     def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> bool:
         win  = self._windows.get(monitor_id)

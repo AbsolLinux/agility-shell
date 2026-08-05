@@ -22,7 +22,8 @@ class DashReveal(Box):
         self._target = 0.0
         self._on_close_callbacks: list = []
         self._cached_surface: cairo.ImageSurface | None = None
-
+        self.progress_cb = None
+        
         self.open_bezier = open_bezier
         self.close_bezier = close_bezier
         self.open_duration = open_duration
@@ -136,6 +137,8 @@ class DashReveal(Box):
 
     def _set_progress(self, value: float):
         self._progress = max(0.0, min(value, 1.0))
+        if hasattr(self, 'progress_cb') and self.progress_cb:
+            self.progress_cb(self._progress)
         self.queue_draw()
 
     def _on_open_finished(self, *_):

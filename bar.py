@@ -321,7 +321,6 @@ class AppletWindow(PopupWindow):
         def on_progress(value):
             if not self._blur_ctx:
                 return
-
             try:
                 cx, cy = self._content_box.translate_coordinates(self, 0, 0)
             except Exception:
@@ -331,8 +330,7 @@ class AppletWindow(PopupWindow):
 
             scale = (
                 self.revealer.SCALE_START
-                + (1.0 - self.revealer.SCALE_START)
-                # * _ease_out_expo(value)
+                + (1.0 - self.revealer.SCALE_START) * value
             )
 
             anchor_x = cx + (content_w / 2.0)
