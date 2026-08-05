@@ -191,6 +191,8 @@ class Dash(Window):
         )
 
         self.revealer = DashReveal(
+            open_duration=0.15,
+            close_duration=0.2,
             child=self._main_box,
             h_expand=True,
             v_expand=True,

@@ -308,7 +308,7 @@ class DashAppletPage(DashPage):
         has_desktop  = key in DESKTOP_APPLET_SIZES
         in_desktop   = key in self._get_desktop_keys()
 
-        show_left  = not in_launcher
+        show_left  = has_desktop and not in_launcher
         show_right = has_desktop and not in_desktop
 
         if self._on_applet_drag_begin:
@@ -346,7 +346,11 @@ class DashAppletPage(DashPage):
         return set().union(*(b.get_active_keys() for b in bars))
 
     def _get_launcher_keys(self) -> set[str]:
-        return {e["key"] for e in user_options.desktop_applets.get_applets()}
+        return {
+            e["key"]
+            for e in user_options.desktop_applets.get_applets()
+            if e.get("type", "applet") == "applet" and "key" in e
+        }
 
 
     def refresh_bar_state(self) -> None:

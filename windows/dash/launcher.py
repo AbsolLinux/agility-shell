@@ -532,6 +532,26 @@ class DashLauncherPage(DashPage):
             self._placeholder_slot = slot
             self._rebuild(placeholder_slot=slot, dragging_key=self._drag_key or key)
 
+    def _find_free_slot(self, key: str, preferred_slot: int, exclude_key: str | None = None) -> int:
+        """Return the first slot >= preferred_slot where key's span fits without
+        overlapping any other placed applet (optionally ignoring exclude_key,
+        used during reorders so the item doesn't block itself)."""
+        span = DESKTOP_APPLET_SIZES.get(key, 1)
+
+        occupied: set[int] = set()
+        for item in self._placed_items:
+            if item.key == exclude_key:
+                continue
+            item_span = DESKTOP_APPLET_SIZES.get(item.key, 1)
+            for offset in range(item_span):
+                occupied.add(item._slot + offset)
+
+        slot = preferred_slot
+        while True:
+            if not any((slot + offset) in occupied for offset in range(span)):
+                return slot
+            slot += 1
+
     def _on_applet_dropped(self, key: str, slot: int) -> None:
         """Called when an applet is dropped onto the hybrid grid — handles both
         new placements (drag_receive_mode) and reorders (reorder_mode)."""
@@ -540,6 +560,7 @@ class DashLauncherPage(DashPage):
 
         if self._reorder_mode and user_options.desktop_applets.is_placed(key):
             # Reorder: remove from old slot and re-place at new slot
+            slot = self._find_free_slot(key, slot, exclude_key=key)
             user_options.desktop_applets.remove(key)
             user_options.desktop_applets.place(key, slot)
             user_options.save()
@@ -582,6 +603,7 @@ class DashLauncherPage(DashPage):
             on_reorder_begin=self._on_reorder_begin,
             on_reorder_end=self._on_reorder_end,
         )
+        slot = self._find_free_slot(key, slot)
         item._slot = slot
         self._placed_items.append(item)
 

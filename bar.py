@@ -6,7 +6,6 @@ from fabric.widgets.box import Box
 from fabric.widgets.centerbox import CenterBox
 from fabric.widgets.eventbox import EventBox
 from snippets import HackedRevealer, enable_blur, set_blur_regions_from_widget, disable_blur, free_blur, AppletReveal
-from snippets.applet_reveal import _ease_out_expo
 from snippets.blur.blur import set_blur_regions
 from snippets.blur.region_trace import Rect
 from gi.repository import Gdk, Gtk, GLib, GtkLayerShell
@@ -209,7 +208,8 @@ class AppletWindow(PopupWindow):
         animation_direction = "up" if alignment == "bottom" else "down"
 
         self.revealer = AppletReveal(
-
+            open_duration=0.125,
+            close_duration=0.1,
             direction=animation_direction,
             child=Box(children=[build_content(self, alignment)])
         )
@@ -332,7 +332,7 @@ class AppletWindow(PopupWindow):
             scale = (
                 self.revealer.SCALE_START
                 + (1.0 - self.revealer.SCALE_START)
-                * _ease_out_expo(value)
+                # * _ease_out_expo(value)
             )
 
             anchor_x = cx + (content_w / 2.0)
