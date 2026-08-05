@@ -1,10 +1,11 @@
 import os
 import sys
+import math
 import subprocess
+import threading
 import gi
 import pam
 import fabric
-import cairo
 import datetime
 import getpass
 
@@ -25,36 +26,29 @@ from fabric.widgets.button import Button
 from fabric.widgets.revealer import Revealer
 from fabric.widgets.image import Image
 from fabric import Application
-from fabric.utils import get_relative_path
-from snippets import Icon, Animator, DashReveal
+from snippets import Icon, Animator
 
 WALLPAPER_PATH  = os.path.expanduser("~/.cache/caffyne-shell/wallpaper_blurred")
 IDLE_TIMEOUT_MS = 5_000
 
-DUR_WAKE  = 0.42
-DUR_SLEEP = 0.30
-
-DUR_REVEAL  = 0.30
-DUR_CONCEAL = 0.30
+DUR_WAKE  = 0.38
+DUR_SLEEP = 0.24
 
 
 class CoverWindow(WaylandWindow):
-    def __init__(self, monitor: Gdk.Monitor, monitor_id):
+    def __init__(self, monitor: Gdk.Monitor, monitor_id: int):
         self._monitor = monitor
         geo = monitor.get_geometry()
         self._w = geo.width
         self._h = geo.height
 
-        self._wallpaper = self._load_wallpaper()
-
-        self._reveal = DashReveal(
-            child=Image(pixbuf=self._wallpaper, h_align="fill", v_align="fill", h_expand=True, v_expand=True),
-            h_expand="fill",
+        self._wallpaper_pixbuf = self._load_wallpaper()
+        self._image = Image(
+            pixbuf=self._wallpaper_pixbuf,
+            h_align="fill",
             v_align="fill",
-            open_bezier=(0.22, 0.6, 0.36, 1.0),
-            close_bezier=(0.4, 0.0, 0.2, 1.0),
-            open_duration=DUR_REVEAL,
-            close_duration=DUR_CONCEAL,
+            h_expand=True,
+            v_expand=True
         )
 
         super().__init__(
@@ -63,36 +57,81 @@ class CoverWindow(WaylandWindow):
             monitor=monitor_id,
             visible=True,
             all_visible=True,
-            child=self._reveal,
+            child=self._image,
         )
         GtkLayerShell.set_exclusive_zone(self, -1)
+
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(b"window { background-color: #000000; }")
+        self.get_style_context().add_provider(
+            css_provider, 
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        self.set_opacity(0.0)
+        self._anim_source = None
 
     def _load_wallpaper(self):
         try:
             if os.path.exists(WALLPAPER_PATH):
                 return GdkPixbuf.Pixbuf.new_from_file_at_scale(
-                    WALLPAPER_PATH, self._w, self._h, False
+                    WALLPAPER_PATH, 
+                    self._w, 
+                    self._h, 
+                    False
                 )
         except Exception as e:
-            print(f"[CoverWindow] wallpaper load error: {e}")
+            print(f"[CoverWindow] Wallpaper load error: {e}")
         return None
 
-    def play_unlock(self, on_done=None):
-        self._reveal.close(on_done=lambda: self._finish(on_done))
+    def fade_in(self, duration=0.28, on_done=None):
+        self._animate_opacity(start=0.0, target=1.0, duration=duration, on_done=on_done)
+
+    def fade_out(self, duration=0.22, on_done=None):
+        self._animate_opacity(start=1.0, target=0.0, duration=duration, on_done=lambda: self._finish(on_done))
+
+    def _animate_opacity(self, start: float, target: float, duration: float, on_done=None):
+        if self._anim_source:
+            GLib.source_remove(self._anim_source)
+
+        start_time = GLib.get_monotonic_time() / 1_000_000.0
+
+        def _step():
+            now = GLib.get_monotonic_time() / 1_000_000.0
+            elapsed = now - start_time
+            t = min(1.0, elapsed / duration)
+
+            ease = 1.0 - math.pow(1.0 - t, 3)
+            current_opacity = start + (target - start) * ease
+
+            self.set_opacity(current_opacity)
+
+            if t >= 1.0:
+                self._anim_source = None
+                if on_done:
+                    on_done()
+                return False
+            return True
+
+        self._anim_source = GLib.timeout_add(16, _step)
 
     def _finish(self, on_done):
-        self.hide()
         if on_done:
             on_done()
+        GLib.timeout_add(40, self._destroy_cover)
+
+    def _destroy_cover(self):
+        self.hide()
+        return False
 
 
 class LockScreen(Window):
-    def __init__(self, lock: GtkSessionLock.Lock, monitor: Gdk.Monitor, cover: CoverWindow, manager: "LockManager"):
+    def __init__(self, lock: GtkSessionLock.Lock, monitor: Gdk.Monitor, manager: "LockManager"):
         self._manager = manager
         self.lock      = lock
-        self._cover    = cover
         self._awake    = False
         self._idle_src = None
+        self._authenticating = False
 
         self._entry_field = Entry(
             password=True,
@@ -152,7 +191,7 @@ class LockScreen(Window):
 
         self.clock_revealer = Revealer(
             transition_type="crossfade",
-            transition_duration=400,
+            transition_duration=300,
             reveal_child=False,
             child=self.clock_circle,
         )
@@ -178,9 +217,16 @@ class LockScreen(Window):
         )
         self.set_decorated(False)
 
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(b"window { background-color: #000000; }")
+        self.get_style_context().add_provider(
+            css_provider, 
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
         self._wake_anim = (
             Animator(
-                bezier_curve=(0.22, 0.6, 0.36, 1.0),
+                bezier_curve=(0.16, 1.0, 0.3, 1.0),
                 duration=DUR_WAKE,
                 min_value=0.0,
                 max_value=1.0,
@@ -209,19 +255,27 @@ class LockScreen(Window):
         self.connect("key-press-event",     self._on_key)
         self.connect("motion-notify-event", self._on_motion)
         self.connect("button-press-event",  self._on_motion)
-        GLib.timeout_add(300, self.reveal_clock)
+        
         GLib.timeout_add(1000, self._update_time)
         self._update_time()
 
     def reveal_clock(self):
         self.clock_revealer.set_reveal_child(True)
-        return False
 
     def hide_clock(self, on_done=None):
         self.clock_revealer.set_reveal_child(False)
         if on_done:
             duration_ms = self.clock_revealer.get_transition_duration()
-            GLib.timeout_add(duration_ms + 16, lambda: (on_done(), False)[1])
+            GLib.timeout_add(duration_ms + 10, lambda: (on_done(), False)[1])
+
+    def fade_out_ui(self, on_done=None):
+        self.hide_clock()
+        if self._awake:
+            self._do_sleep()
+        
+        duration_ms = self.clock_revealer.get_transition_duration()
+        if on_done:
+            GLib.timeout_add(duration_ms + 50, lambda: (on_done(), False)[1])
 
     def _update_time(self):
         now = datetime.datetime.now()
@@ -260,10 +314,14 @@ class LockScreen(Window):
     def _on_wake_tick(self, anim, _):
         p = anim.value
         self._entry_group.set_opacity(p)
-        self._entry_group.set_style(f"margin-top: {int((1.0 - p) * 20)}px;")
+        offset = int((1.0 - p) * 20)
+        self._entry_group.set_style(f"margin-top: {offset}px;")
 
     def _on_sleep_tick(self, anim, _):
-        self._entry_group.set_opacity(1.0 - anim.value)
+        p = anim.value
+        self._entry_group.set_opacity(1.0 - p)
+        offset = int(p * 10)
+        self._entry_group.set_style(f"margin-top: {offset}px;")
 
     def _on_sleep_done(self, *_):
         self._layout.set_start_children([])
@@ -283,17 +341,31 @@ class LockScreen(Window):
         return False
 
     def _on_activate(self, entry, *args):
+        if self._authenticating:
+            return
+
         text = (entry.get_text() or "").strip()
-        if not pam.authenticate(getpass.getuser(), text):
+        if not text:
+            return
+
+        self._authenticating = True
+        user = getpass.getuser()
+
+        def _auth_worker():
+            success = pam.authenticate(user, text)
+            GLib.idle_add(self._on_auth_result, success, entry)
+
+        threading.Thread(target=_auth_worker, daemon=True).start()
+
+    def _on_auth_result(self, success: bool, entry: Entry):
+        self._authenticating = False
+        if not success:
             entry.set_text("")
             self._shake_entry()
             entry.grab_focus()
             return
-        self._do_sleep()
-        self.hide_clock(on_done=self._do_unlock)
 
-    def _do_unlock(self):
-        self._manager.unlock()
+        self._manager.start_unlock_sequence()
 
     def _shake_entry(self):
         offsets = [10, -10, 7, -7, 4, -4, 0]
@@ -307,7 +379,7 @@ class LockScreen(Window):
             idx[0] += 1
             return True
 
-        GLib.timeout_add(38, _step)
+        GLib.timeout_add(25, _step)
 
 
 class LockManager:
@@ -325,7 +397,7 @@ class LockManager:
         display.connect(
             "monitor-added",
             lambda _, mon: GLib.timeout_add(
-                1000,
+                500,
                 lambda: self._add_monitor(mon)
             )
         )
@@ -339,25 +411,24 @@ class LockManager:
             self._engage_lock(monitor, cover=None)
             return
 
+        display = Gdk.Display.get_default()
         if monitor_id is None:
-            monitor_id = list(self._covers).index(monitor) if monitor in self._covers else 0
+            monitor_id = 0
+            for idx in range(display.get_n_monitors()):
+                if display.get_monitor(idx) == monitor:
+                    monitor_id = idx
+                    break
 
         self._pending.add(monitor)
         cover = CoverWindow(monitor, monitor_id)
         self._covers[monitor] = cover
         cover.show_all()
-        cover._reveal.open()
-        GLib.timeout_add(
-            int(DUR_REVEAL * 1000 + 200),
-            lambda: self._on_cover_ready(monitor, cover)
-        )
 
-    def _on_cover_ready(self, monitor: Gdk.Monitor, cover: CoverWindow) -> bool:
-        if monitor not in self._covers:
-            self._pending.discard(monitor)
-            return False
+        cover.fade_in(duration=0.28, on_done=lambda: self._on_cover_opened(monitor, cover))
 
-        self._engage_lock(monitor, cover)
+    def _on_cover_opened(self, monitor: Gdk.Monitor, cover: CoverWindow) -> bool:
+        if monitor in self._covers and monitor not in self._surfaces:
+            self._engage_lock(monitor, cover)
         return False
 
     def _engage_lock(self, monitor: Gdk.Monitor, cover: CoverWindow | None):
@@ -369,16 +440,101 @@ class LockManager:
             self.lock.lock_lock()
             self._locked = True
 
-        surface = LockScreen(self.lock, monitor, cover, manager=self)
+        surface = LockScreen(self.lock, monitor, manager=self)
         self.lock.new_surface(surface, monitor)
         surface.show_all()
+        surface.queue_draw()
+
+        display = monitor.get_display()
+        if display:
+            display.flush()
+
         self._surfaces[monitor] = surface
         self._pending.discard(monitor)
 
+        # Seamless transition: Reveal UI directly over the wallpaper surface,
+        # then silently hide the temporary setup cover window without fading out.
+        surface.reveal_clock()
+
         if cover is not None:
-            cover._reveal.close(on_done=surface.reveal_clock)
-        else:
-            surface.reveal_clock()
+            GLib.timeout_add(100, cover.hide)
+
+    def start_unlock_sequence(self):
+        surfaces = list(self._surfaces.values())
+        if not surfaces:
+            self.unlock()
+            return
+
+        completed = [0]
+        total = len(surfaces)
+
+        def _on_ui_faded():
+            completed[0] += 1
+            if completed[0] >= total:
+                self.unlock_with_cover_fade()
+
+        for surface in surfaces:
+            surface.fade_out_ui(on_done=_on_ui_faded)
+
+    def unlock_with_cover_fade(self):
+        display = Gdk.Display.get_default()
+        unlock_covers = []
+
+        # Create overlay covers over all monitors BEFORE releasing the session lock
+        for i in range(display.get_n_monitors()):
+            mon = display.get_monitor(i)
+            c = CoverWindow(mon, i)
+            c.set_opacity(1.0)
+            c.show_all()
+            c.queue_draw()
+            unlock_covers.append(c)
+
+        display.flush()
+
+        # Brief delay to force compositor to present cover front-buffers
+        GLib.timeout_add(50, lambda: self._complete_unlock_fade(unlock_covers))
+
+    def _complete_unlock_fade(self, unlock_covers):
+        self._locked = False
+        Gdk.Display.get_default().sync()
+        self.lock.unlock_and_destroy()
+
+        for surface in list(self._surfaces.values()):
+            GtkSessionLock.unmap_lock_window(surface)
+            surface.destroy()
+
+        self._surfaces.clear()
+
+        finished_covers = [0]
+        total_covers = len(unlock_covers)
+
+        def _on_cover_done():
+            finished_covers[0] += 1
+            if finished_covers[0] >= total_covers:
+                self._covers.clear()
+                self._pending.clear()
+                GLib.idle_add(fabric.Application.get_default().quit)
+
+        # Smoothly fade out covers to reveal unlocked desktop
+        for cover in unlock_covers:
+            cover.fade_out(duration=0.32, on_done=_on_cover_done)
+
+        return False
+
+    def unlock(self):
+        self._locked = False
+        Gdk.Display.get_default().sync()
+        self.lock.unlock_and_destroy()
+
+        for surface in list(self._surfaces.values()):
+            GtkSessionLock.unmap_lock_window(surface)
+            surface.destroy()
+
+        self._surfaces.clear()
+        self._covers.clear()
+        self._pending.clear()
+
+        GLib.idle_add(fabric.Application.get_default().quit)
 
     def _remove_monitor(self, monitor: Gdk.Monitor):
         self._pending.discard(monitor)
@@ -391,24 +547,6 @@ class LockManager:
         if cover:
             cover.destroy()
 
-    def unlock(self):
-        self._locked = False
-
-        Gdk.Display.get_default().sync()
-        self.lock.unlock_and_destroy()
-
-        for surface in list(self._surfaces.values()):
-            GtkSessionLock.unmap_lock_window(surface)
-
-        for surface in list(self._surfaces.values()):
-            surface.destroy()
-
-        self._surfaces.clear()
-        self._covers.clear()
-        self._pending.clear()
-
-        GLib.idle_add(fabric.Application.get_default().quit)
-
 
 def lock():
     if __name__ != "__main__":
@@ -418,7 +556,7 @@ def lock():
             stderr=subprocess.DEVNULL
         )
         return None
-        
+
     app = Application("lock")
     app.set_stylesheet_from_file(os.path.expanduser("~/.config/caffyne-shell/style/style.css"))
     manager = LockManager()

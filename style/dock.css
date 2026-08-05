@@ -33,6 +33,10 @@
     background-color: var(--surface_container_high);
 }
 
+.dock-item.pinned.active {
+    background-color: var(--surface_container);
+}
+
 .dock-item.running {
     /* you can add a small dot indicator here via a separate widget if desired */
     /* opacity: 1.0; background-color: red; */

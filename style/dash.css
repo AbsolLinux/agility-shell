@@ -1,3 +1,11 @@
+@define-color canvas-empty                      alpha(var(--primary), 0.00);
+@define-color canvas-occupied                   alpha(var(--primary), 0.00);
+@define-color canvas-border                     alpha(var(--outline), 0.00);
+/* @define-color canvas-placeholder-valid          alpha(var(--secondary), 0.35);
+@define-color canvas-placeholder-invalid        alpha(var(--error), 0.35);
+@define-color canvas-placeholder-valid-border   alpha(var(--secondary), 0.75);
+@define-color canvas-placeholder-invalid-border alpha(var(--error), 0.75); */
+
 .dash {
     background-color: rgba(0, 0, 0, 0.2);
 }
@@ -204,7 +212,6 @@
     border-radius: apply(radius-l);
 }
 
-
 .dash-theme-preview-title {
     /* margin-top: 32px;
     margin-left: 64px; */
@@ -248,4 +255,43 @@ tooltip label {
     to {
         opacity: 1;
     }
+}
+
+.applet-drop-zone {
+    background-color: var(--surface_container_lowest);
+}
+
+.applet-drop-zone * {
+    min-width: 64px;
+}
+
+.canvas-mode-hidden {
+    opacity: 0;
+    transition: opacity 300ms ease;
+}
+
+.dash-stack,
+.dash-header-button-container {
+    transition: opacity 300ms ease;
+}
+
+.launcher-drop-placeholder {
+    border-radius: apply(radius-xl);
+}
+
+.desktop-applet-preview {
+    /* background-color: rgba(255, 255, 255, 0.1); */
+    /* border-color: rgba(255, 255, 255, 0.3); */
+    border-radius: apply(radius-xl);
+}
+
+.launcher-drop-placeholder,
+.desktop-applet-preview.valid {
+    background-color: alpha(var(--primary), 0.2);
+    border-color: alpha(var(--primary), 0.6);
+}
+
+.desktop-applet-preview.invalid {
+    background-color: alpha(var(--error), 0.2);
+    border-color: alpha(var(--error), 0.6);
 }

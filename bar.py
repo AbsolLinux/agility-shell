@@ -6,7 +6,6 @@ from fabric.widgets.box import Box
 from fabric.widgets.centerbox import CenterBox
 from fabric.widgets.eventbox import EventBox
 from snippets import HackedRevealer, enable_blur, set_blur_regions_from_widget, disable_blur, free_blur, AppletReveal
-from snippets.applet_reveal import _ease_out_expo
 from snippets.blur.blur import set_blur_regions
 from snippets.blur.region_trace import Rect
 from gi.repository import Gdk, Gtk, GLib, GtkLayerShell
@@ -209,7 +208,8 @@ class AppletWindow(PopupWindow):
         animation_direction = "up" if alignment == "bottom" else "down"
 
         self.revealer = AppletReveal(
-
+            open_duration=0.125,
+            close_duration=0.1,
             direction=animation_direction,
             child=Box(children=[build_content(self, alignment)])
         )
@@ -332,7 +332,7 @@ class AppletWindow(PopupWindow):
             scale = (
                 self.revealer.SCALE_START
                 + (1.0 - self.revealer.SCALE_START)
-                * _ease_out_expo(value)
+                # * _ease_out_expo(value)
             )
 
             anchor_x = cx + (content_w / 2.0)
@@ -1337,11 +1337,12 @@ class Bar(Window):
             bezier_curve=(0.17, 0.67, 0, 1),
             transition_type=transition,
             child=self._centerbox,
-            child_revealed=not self.auto_hide,
+            child_revealed=False,
             h_expand=True,
             duration=0.3,
 
         )
+        self._revealer.set_reveal_child(False)
 
         super().__init__(
             title=f"caffyne-shell-bar",
@@ -1371,6 +1372,11 @@ class Bar(Window):
         if user_options.theme.blur:
             self._blur_ctx = enable_blur(self)
             GLib.timeout_add(1500, self._update_blur_region)
+
+        if not self.auto_hide:
+            GLib.idle_add(self._revealer.set_reveal_child, True)
+            # GLib.timeout_add(750, lambda: setattr(self, "exclusivity", "auto"))
+
 
     def _build_section(self, section_name: str) -> DraggableSection:
         entries: list = self.bar_config.get(section_name, [])
@@ -1443,7 +1449,8 @@ class Bar(Window):
             self._centerbox.add_style_class("floating")
         else:
             self._centerbox.remove_style_class("floating")
-        GLib.timeout_add(1000, self._update_blur_region)
+        if self._blur_ctx:
+            GLib.timeout_add(1000, self._update_blur_region)
         for i, cfg in enumerate(user_options.bars.configs):
             if cfg.get("monitor") == self.monitor_id:
                 user_options.bars.configs[i]["floating_bar"] = floating
@@ -1541,16 +1548,18 @@ class Bar(Window):
         self.auto_hide = not self.auto_hide
         self.bar_config["auto_hide"] = self.auto_hide
         if self.auto_hide:
-            self._update_blur_region()
+            if self._blur_ctx:
+                self._update_blur_region()
             self._centerbox.add_style_class("auto-hide")
             self.exclusivity = "none"
             self._revealer.set_reveal_child(False)
             self._centerbox.remove_style_class("revealed")
         else:
             self._centerbox.remove_style_class("auto-hide")
-            self.exclusivity = "auto"
             self._revealer.set_reveal_child(True)
-            GLib.timeout_add(320, self._update_blur_region)
+            GLib.timeout_add(320, lambda: setattr(self, "exclusivity", "auto"))
+            if self._blur_ctx:
+                GLib.timeout_add(320, self._update_blur_region)
         user_options.save()
 
     def _swap_bars(self):
@@ -1891,7 +1900,6 @@ class BarManager:
 
         if monitor_id is None:
             return
-
         monitor_cfg = next(
             (c for c in user_options.bars.configs if c.get("monitor") == monitor_id),
             None,

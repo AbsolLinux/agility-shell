@@ -11,7 +11,8 @@
 }
 
 .hourly-item {
-    margin-right: 18px;
+    margin-right: 12px;
+    min-width: 32px;
 }
 
 .hourly-item:last-child {
@@ -21,7 +22,6 @@
 .hourly-time {
     font-size: 11px;
     color: var(--on_surface_variant);
-    min-width: 24px;
 }
 
 .hourly-temp {

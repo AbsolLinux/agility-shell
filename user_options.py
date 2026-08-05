@@ -2,6 +2,7 @@ import os
 import json
 from loguru import logger
 from fabric.utils import get_relative_path
+
 CONFIG_PATH = os.path.expanduser("~/.config/caffyne-shell/config/config.json")
 
 
@@ -83,9 +84,9 @@ class UserOptions:
         def __init__(self):
             self.clocks = [
                 "Europe/London",
-                "Africa/Addis_Ababa"
+                "Europe/Paris"
             ]
-            
+
     class Dock:
         def __init__(self):
             self.entries = []
@@ -118,16 +119,146 @@ class UserOptions:
         def __init__(self):
             self.grid = False
 
-    class WorldClocks:
-        def __init__(self):
-            self.clocks = [
-                "Europe/London",
-                "Europe/Paris"
-            ]
-
     class Wallpaper:
         def __init__(self):
             self.path = f"{get_relative_path('wallpapers/wall14.jpg')}"
+
+    class DesktopApplets:
+        def __init__(self):
+            self.applets: list[dict] = []
+
+        def get_applets(self) -> list[dict]:
+            return self.applets
+
+        def place(self, key: str, slot: int) -> bool:
+            if any(e["key"] == key for e in self.applets):
+                return False
+            self.applets.append({"key": key, "slot": slot})
+            return True
+
+        def remove(self, key: str) -> bool:
+            new_applets = [e for e in self.applets if e["key"] != key]
+            if len(new_applets) == len(self.applets):
+                return False
+            self.applets = new_applets
+            return True
+
+        def update_slot(self, key: str, slot: int) -> None:
+            for e in self.applets:
+                if e["key"] == key:
+                    e["slot"] = slot
+                    break
+
+        def is_placed(self, key: str) -> bool:
+            return any(e["key"] == key for e in self.applets)
+
+    class DesktopCanvas:
+        def __init__(self):
+            self.placements: dict[str, list[dict]] = {}
+
+        def get_applets(self, monitor_id: int) -> list[dict]:
+            return self.placements.get(str(monitor_id), [])
+
+        def is_placed(self, monitor_id: int, key: str) -> bool:
+            return any(e["key"] == key for e in self.get_applets(monitor_id))
+
+        @staticmethod
+        def _compute_anchor(grid_x: int, cc: int, cols: int) -> tuple[str, int]:
+            left_boundary  = int(cols * 0.4)
+            right_boundary = int(cols * 0.6)
+            center_col     = cols // 2
+
+            if grid_x < left_boundary:
+                return "left", grid_x
+            elif grid_x >= right_boundary:
+                return "right", cols - grid_x - cc
+            else:
+                return "center", grid_x - center_col
+
+        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int, ry: float) -> bool:
+            mid = str(monitor_id)
+            if any(e["key"] == key for e in self.placements.get(mid, [])):
+                return False
+            from desktop_applets import DESKTOP_CANVAS_SIZES
+            base_cols, _ = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+            cc = base_cols * 2
+            ax, dx = self._compute_anchor(grid_x, cc, cols)
+            self.placements.setdefault(mid, []).append(
+                {"key": key, "grid_x": grid_x, "grid_y": grid_y, "ax": ax, "dx": dx, "ry": ry}
+            )
+            return True
+
+        def remove(self, monitor_id: int, key: str) -> bool:
+            mid = str(monitor_id)
+            before = self.placements.get(mid, [])
+            after  = [e for e in before if e["key"] != key]
+            if len(after) == len(before):
+                return False
+            self.placements[mid] = after
+            return True
+
+        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int) -> None:
+            from desktop_applets import DESKTOP_CANVAS_SIZES
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key:
+                    base_cols, _ = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+                    cc = base_cols * 2
+                    ax, dx = self._compute_anchor(grid_x, cc, cols)
+                    e["grid_x"] = grid_x
+                    e["grid_y"] = grid_y
+                    e["ax"]     = ax
+                    e["dx"]     = dx
+                    break
+
+        def clear_monitor(self, monitor_id: int) -> None:
+            self.placements.pop(str(monitor_id), None)
+
+        def resolve(self, monitor_id: int, cols: int, rows: int) -> None:
+            from desktop_applets import DESKTOP_CANVAS_SIZES
+
+            def _applet_cell_size(key: str) -> tuple[int, int]:
+                base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+                return base_cols * 2, base_rows * 2
+
+            def _cells(gx: int, gy: int, cc: int, cr: int) -> set[tuple[int, int]]:
+                return {(gx + dx, gy + dy) for dx in range(cc) for dy in range(cr)}
+
+            center_col = cols // 2
+            entries    = self.placements.get(str(monitor_id), [])
+            occupied: set[tuple[int, int]] = set()
+
+            for entry in entries:
+                key = entry["key"]
+                ry  = entry.get("ry", 0.0)
+                cc, cr = _applet_cell_size(key)
+
+                ax = entry.get("ax")
+                if ax == "left":
+                    gx = max(0, min(entry["dx"], cols - cc))
+                elif ax == "right":
+                    gx = max(0, min(cols - entry["dx"] - cc, cols - cc))
+                elif ax == "center":
+                    gx = max(0, min(center_col + entry["dx"], cols - cc))
+                else:
+                    rx = entry.get("rx", 0.0)
+                    gx = max(0, min(round(rx * cols), cols - cc))
+                    ax, dx = self._compute_anchor(gx, cc, cols)
+                    entry["ax"] = ax
+                    entry["dx"] = dx
+                    entry.pop("rx", None)
+
+                gy = max(0, min(round(ry * rows), rows - cr))
+
+                candidate_gy = gy
+                while _cells(gx, candidate_gy, cc, cr) & occupied:
+                    candidate_gy += 1
+                    if candidate_gy + cr > rows:
+                        candidate_gy = gy
+                        break
+
+                entry["grid_x"] = gx
+                entry["grid_y"] = candidate_gy
+                occupied |= _cells(gx, candidate_gy, cc, cr)
 
     def __init__(self):
         self.user = self.User()
@@ -140,6 +271,8 @@ class UserOptions:
         self.dock = self.Dock()
         self.world_clocks = self.WorldClocks()
         self.wallpaper = self.Wallpaper()
+        self.desktop_applets = self.DesktopApplets()
+        self.desktop_canvas = self.DesktopCanvas()
         self._load()
 
     def _load(self) -> None:
@@ -183,7 +316,9 @@ class UserOptions:
                     "dock",
                     "world_clocks",
                     "wallpaper",
-                    "templates"
+                    "templates",
+                    "desktop_applets",
+                    "desktop_canvas"
                 )
             }
 

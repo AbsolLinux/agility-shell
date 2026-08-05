@@ -6,10 +6,6 @@ from gi.repository import GLib, Gdk
 
 
 class ClippingScrolledWindow(ScrolledWindow):
-    """A ScrolledWindow that respects border-radius like `overflow: hidden`,
-    with rubber-band bounce scrolling at boundaries."""
-
-    # Bounce tuning constants
     BOUNCE_SPRING = 0.15     # Spring-back speed per tick (0.0–1.0, lower = bouncier)
     BOUNCE_THRESHOLD = 0.4   # Pixels from 0 at which we snap and stop
     BOUNCE_FPS = 14          # Tick interval in ms (lower = smoother)
@@ -60,9 +56,39 @@ class ClippingScrolledWindow(ScrolledWindow):
         self._overshoot_offset = 0.0
         self._is_bouncing = False
         self._bounce_velocity = 0.0
+        self._scroll_velocity = 0.0
+        self._last_adj_value = 0.0
 
         self.connect("map", self._on_map)
+        self.connect("map", self._connect_adjustment)
         self.connect("scroll-event", self._on_scroll_event)
+
+    def _connect_adjustment(self, _):
+        adj = self.get_vadjustment()
+        if adj:
+            self._last_adj_value = adj.get_value()
+            adj.connect("value-changed", self._on_adj_value_changed)
+
+    def _on_adj_value_changed(self, adj):
+        val = adj.get_value()
+        delta = val - self._last_adj_value
+        self._last_adj_value = val
+
+        self._scroll_velocity = self._scroll_velocity * 0.6 + delta * 0.4
+
+        lower = adj.get_lower()
+        upper = adj.get_upper() - adj.get_page_size()
+
+        at_top = val <= lower and delta < 0
+        at_bottom = val >= upper - self.BOUNDARY_EPSILON and delta > 0
+
+        if at_top or at_bottom:
+            self._bounce_velocity = self._scroll_velocity * -0.5
+            self._overshoot_offset = delta * -0.5
+            self._overshoot_offset = max(-self.MAX_OVERSHOOT, min(self.MAX_OVERSHOOT, self._overshoot_offset))
+            self._scroll_velocity = 0.0
+            self._start_bounce()
+            self.queue_draw()
 
     def _on_map(self, _):
         self.set_overlay_scrolling(False)
@@ -94,9 +120,10 @@ class ClippingScrolledWindow(ScrolledWindow):
         at_bottom = val >= upper - self.BOUNDARY_EPSILON and dy > 0
 
         if at_top or at_bottom:
-            self._bounce_velocity += dy * -8  # kick velocity instead of offset directly
+            self._bounce_velocity += dy * -8
             self._start_bounce()
             return True
+
         if self._is_bouncing:
             self._stop_bounce()
 
@@ -113,6 +140,7 @@ class ClippingScrolledWindow(ScrolledWindow):
             self._bounce_id = None
         self._overshoot_offset = 0.0
         self._is_bouncing = False
+        self._scroll_velocity = 0.0
         self.queue_draw()
 
     def _bounce_tick(self) -> bool:

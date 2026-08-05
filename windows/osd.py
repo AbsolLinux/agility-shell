@@ -13,7 +13,7 @@ REVEAL_DURATION = 300
 import math
 from snippets.blur.region_trace import trace_widget_regions
 from snippets.blur.blur import set_blur_regions
-from snippets.dashreveal import _ease_out_expo
+# from snippets.dashreveal import _ease_out_expo
 from utils.update_checker import check_for_updates, do_pull, restart_shell
 from utils.sounds import play_sound
 
@@ -269,6 +269,8 @@ class OSD(WaylandWindow):
         self.battery_critical_icon = OSDIcon(icon_name="battery-warning-duotone", label_text="Critical!")
 
         self.revealer = DashReveal(
+            open_duration=0.15,
+            close_duration=0.2,
             reveal_child=False,
             style_classes=["osd-revealer"],
             child=Box(
@@ -482,7 +484,7 @@ class OSD(WaylandWindow):
             
             alloc = target_widget.get_allocation()
             
-            scale = DashReveal.SCALE_START + (1.0 - DashReveal.SCALE_START) * _ease_out_expo(value)
+            scale = DashReveal.SCALE_START + (1.0 - DashReveal.SCALE_START)
             
             anchor_x = cx + alloc.width / 2.0
             anchor_y = cy + alloc.height / 2.0

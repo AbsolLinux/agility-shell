@@ -5,36 +5,18 @@ from gi.repository import Gtk
 from fabric.widgets.box import Box
 from snippets.animator import Animator
 
+
 class AppletReveal(Box):
-    """
-    Cairo-drawn widget that animates an applet popup in with a scale + fade,
-    anchored to the bar edge (top or bottom center).
-
-    Scales from SCALE_START → 1.0 and fades from 0.0 → 1.0 simultaneously,
-    growing outward from the bar edge so it feels physically connected to it.
-
-    Usage:
-        reveal = AppletReveal(
-            direction="down",   # "down" for top bar, "up" for bottom bar
-            child=your_content,
-        )
-        reveal.open()
-        reveal.close(on_done=cb)
-
-    Optional progress callback (for blur region tracking etc):
-        reveal.progress_cb = lambda p: update_blur(p)
-    """
-
-    SCALE_START = 0.40
+    SCALE_START = 0.88
 
     def __init__(
         self,
         direction: Literal["down", "up"] = "down",
         child: Gtk.Widget | None = None,
-        open_bezier: tuple[float, float, float, float] = (0.22, 1.0, 0.36, 1.0),
-        close_bezier: tuple[float, float, float, float] = (0.5, 0.0, 0.75, 0.0),
-        open_duration: float = 0.28,
-        close_duration: float = 0.18,
+        open_bezier: tuple[float, float, float, float] = (0.16, 1.0, 0.3, 1.0),
+        close_bezier: tuple[float, float, float, float] = (0.16, 1.0, 0.3, 1.0),
+        open_duration: float = 0.22,
+        close_duration: float = 0.16,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -44,54 +26,72 @@ class AppletReveal(Box):
         self._on_close_callbacks: list = []
         self.progress_cb: Callable[[float], None] | None = None
 
+        self.open_bezier = open_bezier
+        self.close_bezier = close_bezier
+        self.open_duration = open_duration
+        self.close_duration = close_duration
+
+        self._cached_surface: cairo.ImageSurface | None = None
+        self.active_animator: Animator | None = None
+        self.show_all()
+
         if child:
             self.add(child)
 
         self.set_app_paintable(True)
 
-        self.open_animator = (
-            Animator(
-                bezier_curve=open_bezier,
-                duration=open_duration,
-                min_value=0.0,
-                max_value=1.0,
-                tick_widget=self,
-            )
-            .build()
-            .unwrap()
-        )
+    def _update_cache(self):
+        """Snapshots the applet hierarchy into a static Cairo surface."""
+        w = self.get_allocated_width()
+        h = self.get_allocated_height()
+        if w <= 1 or h <= 1:
+            return
 
-        self.close_animator = (
-            Animator(
-                bezier_curve=close_bezier,
-                duration=close_duration,
-                min_value=0.0,
-                max_value=1.0,
-                tick_widget=self,
-            )
-            .build()
-            .unwrap()
-        )
+        self._cached_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+        cr = cairo.Context(self._cached_surface)
+        Gtk.Box.do_draw(self, cr)
 
-        self.open_animator.connect(
-            "notify::value", lambda a, _: self._set_progress(a.value)
-        )
-        self.close_animator.connect(
-            "notify::value", lambda a, _: self._set_progress(1.0 - a.value)
-        )
-        self.close_animator.connect("finished", self._on_close_finished)
+    def _clear_cache(self):
+        self._cached_surface = None
 
     def open(self):
         """Animate the applet in. Safe to call mid-close."""
         self._target = 1.0
-        self.close_animator.pause()
 
-        self.open_animator.pause()
-        self.open_animator.min_value = self._progress
-        self.open_animator.max_value = 1.0
-        self.open_animator.value = self._progress
-        self.open_animator._start_time = None
-        self.open_animator.play()
+        if self.active_animator:
+            self.active_animator.pause()
+            self.active_animator = None
+
+        self._update_cache()
+
+        start_val = self._progress
+        end_val = 1.0
+        distance = abs(end_val - start_val)
+
+        if distance < 0.001:
+            self._set_progress(1.0)
+            self._clear_cache()
+            return
+
+        effective_duration = max(0.01, self.open_duration * distance)
+
+        self.active_animator = (
+            Animator(
+                bezier_curve=self.open_bezier,
+                duration=effective_duration,
+                min_value=start_val,
+                max_value=end_val,
+                tick_widget=self,
+            )
+            .build()
+            .unwrap()
+        )
+
+        self.active_animator.connect(
+            "notify::value", lambda a, _: self._set_progress(a.value)
+        )
+        self.active_animator.connect("finished", self._on_open_finished)
+        self.active_animator.play()
 
     def close(self, on_done=None):
         """Animate the applet out. on_done called when animation finishes."""
@@ -106,15 +106,40 @@ class AppletReveal(Box):
                     pass
             self._on_close_callbacks.append(_once)
 
-        self.open_animator.pause()
+        if self.active_animator:
+            self.active_animator.pause()
+            self.active_animator = None
 
-        start = 1.0 - self._progress
-        self.close_animator.pause()
-        self.close_animator.min_value = start
-        self.close_animator.max_value = 1.0
-        self.close_animator.value = start
-        self.close_animator._start_time = None
-        self.close_animator.play()
+        self._update_cache()
+
+        start_val = self._progress
+        end_val = 0.0
+        distance = abs(end_val - start_val)
+
+        if distance < 0.001:
+            self._set_progress(0.0)
+            self._on_close_finished()
+            return
+
+        effective_duration = max(0.01, self.close_duration * distance)
+
+        self.active_animator = (
+            Animator(
+                bezier_curve=self.close_bezier,
+                duration=effective_duration,
+                min_value=start_val,
+                max_value=end_val,
+                tick_widget=self,
+            )
+            .build()
+            .unwrap()
+        )
+
+        self.active_animator.connect(
+            "notify::value", lambda a, _: self._set_progress(a.value)
+        )
+        self.active_animator.connect("finished", self._on_close_finished)
+        self.active_animator.play()
 
     @property
     def direction(self) -> str:
@@ -131,12 +156,17 @@ class AppletReveal(Box):
 
     def _set_progress(self, value: float):
         self._progress = max(0.0, min(value, 1.0))
-        self.set_opacity(self._progress)
         if self.progress_cb:
             self.progress_cb(self._progress)
         self.queue_draw()
 
+    def _on_open_finished(self, *_):
+        self._set_progress(1.0)
+        self._clear_cache()
+
     def _on_close_finished(self, *_):
+        self._set_progress(0.0)
+        self._clear_cache()
         if self._target == 0.0:
             for cb in self._on_close_callbacks:
                 cb()
@@ -146,20 +176,17 @@ class AppletReveal(Box):
         if p <= 0.0:
             return True
 
+        # When fully open and not animating, draw live widget tree for input/hover events
+        if p >= 1.0 and self._cached_surface is None:
+            return Gtk.Box.do_draw(self, cr)
+
         w = self.get_allocated_width()
         h = self.get_allocated_height()
 
-        scale = self.SCALE_START + (1.0 - self.SCALE_START) * _ease_out_expo(p)
+        scale = self.SCALE_START + (1.0 - self.SCALE_START) * p
 
         anchor_x = w / 2.0
-        anchor_y = 0.0 if self._direction == "down" else h
-
-        radius = int(
-            self.get_style_context().get_property(
-                "border-radius", self.get_state_flags()
-            )
-        )
-        radius = max(radius, 0)
+        anchor_y = 0.0 if self._direction == "down" else float(h)
 
         cr.save()
 
@@ -167,34 +194,11 @@ class AppletReveal(Box):
         cr.scale(scale, scale)
         cr.translate(-anchor_x, -anchor_y)
 
-        _draw_rounded_rect(cr, 0, 0, w, h, radius)
-        cr.clip()
-
-        Gtk.Box.do_draw(self, cr)
+        if self._cached_surface:
+            cr.set_source_surface(self._cached_surface, 0, 0)
+            cr.paint_with_alpha(p)
+        else:
+            Gtk.Box.do_draw(self, cr)
 
         cr.restore()
         return True
-
-def _ease_out_expo(t: float) -> float:
-    if t >= 1.0:
-        return 1.0
-    return 1.0 - pow(2.0, -10.0 * t)
-
-
-def _draw_rounded_rect(
-    cr: cairo.Context,
-    x: float, y: float,
-    w: float, h: float,
-    r: float,
-):
-    r = min(r, w / 2, h / 2)
-    cr.move_to(x + r, y)
-    cr.line_to(x + w - r, y)
-    cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
-    cr.line_to(x + w, y + h - r)
-    cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-    cr.line_to(x + r, y + h)
-    cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
-    cr.line_to(x, y + r)
-    cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
-    cr.close_path()
