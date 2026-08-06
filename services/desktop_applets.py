@@ -371,6 +371,12 @@ class DesktopAppletWindow(WaylandWindow):
             for r in traced:
                 rects.append((cx + r.x, cy + r.y, r.width, r.height))
 
+        if not rects:
+            disable_blur(self._blur_ctx)
+            free_blur(self._blur_ctx)
+            self._blur_ctx = None
+            return
+
         set_blur_regions(self._blur_ctx, rects)
 
     def _show_canvas(self) -> None:
@@ -648,7 +654,10 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
-            
+
+            if not self._blur_ctx and user_options.theme.blur:
+                self._apply_blur()
+                    
         except Exception as e:
             logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
@@ -840,7 +849,7 @@ class DesktopAppletService(Service):
             win.rebuild()
 
         if user_options.theme.blur:
-            GLib.timeout_add(1500, self._initial_blur)
+            GLib.timeout_add(2000, self._initial_blur)
 
     def _initial_blur(self) -> bool:
         self.apply_blur(True)
