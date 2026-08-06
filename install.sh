@@ -139,6 +139,7 @@ install_pacman_deps() {
         libdbusmenu-gtk3
         cinnamon-desktop
         gnome-bluetooth-3.0
+        gtk-session-lock
 
         # Theming
         matugen
@@ -148,6 +149,7 @@ install_pacman_deps() {
         brightnessctl
         wf-recorder
         upower
+        swayidle
 
         # Networking / Bluetooth
         networkmanager
@@ -242,7 +244,7 @@ inject_niri_include() {
 # ── Matugen Setup ─────────────────────────────────────────────────────────────
 setup_matugen() {
     info "Configuring Matugen templates..."
-    
+
     local matugen_config_dir="$HOME/.config/matugen"
     local matugen_conf="$matugen_config_dir/config.toml"
     local target_template="$matugen_config_dir/caffyne-shell-colors.css"
@@ -259,7 +261,7 @@ setup_matugen() {
         info "Adding [config] section..."
         printf "[config]\n" >> "$matugen_conf"
     fi
-    
+
     if grep -q "\[templates.caffyne\]" "$matugen_conf"; then
         info "Matugen config entry already exists — skipping append."
     else
@@ -333,7 +335,7 @@ do_install() {
     install_aur_deps
     clone_repo
     setup_venv
-    
+
     compile_snippets
     inject_niri_include
     setup_matugen
