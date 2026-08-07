@@ -70,19 +70,12 @@ def load_cover_pixbuf(path: str, width: int, height: int):
 
     src_w = pixbuf.get_width()
     src_h = pixbuf.get_height()
+    
+    # Crop to centered square using the smaller dimension
+    square_size = min(src_w, src_h)
+    x = (src_w - square_size) // 2
+    y = (src_h - square_size) // 2
+    cropped = pixbuf.new_subpixbuf(x, y, square_size, square_size)
 
-    scale = max(width / src_w, height / src_h)
-
-    scaled_w = int(src_w * scale)
-    scaled_h = int(src_h * scale)
-
-    scaled = pixbuf.scale_simple(
-        scaled_w,
-        scaled_h,
-        GdkPixbuf.InterpType.BILINEAR,
-    )
-
-    x = (scaled_w - width) // 2
-    y = (scaled_h - height) // 2
-
-    return scaled.new_subpixbuf(x, y, width, height)
+    # Now scale the square down to the target size
+    return cropped.scale_simple(width, height, GdkPixbuf.InterpType.BILINEAR)

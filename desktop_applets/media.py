@@ -249,7 +249,7 @@ class DesktopMediaPlayer(Box):
         )
 
     def _on_artwork_change(self, service, art_path: str):
-        pixbuf = load_scaled_pixbuf(art_path, 36, 36)
+        pixbuf = load_cover_pixbuf(art_path, 36, 36)
         if pixbuf:
             self.album_art.set_from_pixbuf(pixbuf)
             self.album_stack.set_visible_child(self.album_art)
