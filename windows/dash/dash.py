@@ -69,12 +69,14 @@ class DashDismissLayer(Window):
             anchor="left right top bottom",
             layer="top",
             title="caffyne-shell-dash",
-            keyboard_mode="none",
+            keyboard_mode="on-demand",
             style_classes=["dash"],
             visible=False,
             child=zone_box,
         )
         GtkLayerShell.set_exclusive_zone(self, -1)
+        self.add_keybinding("escape", lambda: self._dash.toggle())
+
 
     def _on_button_press(self, widget, event: Gdk.EventButton):
         if event.button == 1:
