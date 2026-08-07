@@ -1,7 +1,7 @@
 from fabric.widgets.box import Box
 from fabric.widgets.label import Label
 from fabric.widgets.button import Button
-from snippets import Icon
+from snippets import Icon, HackedRevealer
 from .menu import QSAppletPage
 from snippets import AppletPage
 from fabric.utils import get_relative_path
@@ -15,6 +15,7 @@ from utils.session import SESSION_MANAGER
 from gi.repository import GLib
 from utils.sounds import play_sound
 from lockscreen import lock
+from utils.update_checker import restart_shell
 session_id = os.environ.get("XDG_SESSION_ID", "")
 
 
@@ -172,6 +173,31 @@ class LogoutMenu(QSAppletPage):
                 ],
             ),
             **kwargs,
+        )
+
+        self.hint_revealer = HackedRevealer(
+            bezier_curve=(0.05, 0.9, 0.1, 1.0),
+            transition_type="slide-left",
+            transition_duration=200,
+            child=Label(label="Restart shell?"),
+            reveal_child=False,
+        )
+        self.restart_button = Button(
+            style_classes=["applet-misc-button"],
+            child=Icon(icon_name="arrows-clockwise-duotone"),
+            on_clicked=lambda *_: restart_shell(),
+        )
+        self.restart_button.connect("enter-notify-event", lambda *_: self.hint_revealer.set_reveal_child(True))
+        self.restart_button.connect("leave-notify-event", lambda *_: self.hint_revealer.set_reveal_child(False))
+        self.restart_button.connect("focus-in-event", lambda *_: self.hint_revealer.set_reveal_child(True))
+        self.restart_button.connect("focus-out-event", lambda *_: self.hint_revealer.set_reveal_child(False))
+        self.header_right_children = Box(
+            h_expand=False,
+            spacing=12,
+            children=[
+                self.hint_revealer,
+                self.restart_button,
+            ],
         )
         self.connect("realize", self._add_confirm_menu)
 
