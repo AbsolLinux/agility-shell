@@ -5,7 +5,7 @@ Summary:        A modern, GTK-based desktop shell built on top of Fabric
 
 License:        GPL-3.0-only
 URL:            https://github.com/caffyne-org/caffyne-shell
-Source0:        https://github.com/WynnCr/caffyne-shell/archive/refs/heads/main.tar.gz#/caffyne-shell-1.0.0.tar.gz
+Source0:        https://github.com/caffyne-org/caffyne-shell/archive/refs/heads/main.tar.gz#/caffyne-shell-1.0.0.tar.gz
 Source1:        https://github.com/Fabric-Development/fabric/archive/refs/heads/main.tar.gz#/fabric-main.tar.gz
 Source2:        https://github.com/Fabric-Development/fabric-cli/archive/refs/heads/main.tar.gz#/fabric-cli-main.tar.gz
 Source3:        https://codeberg.org/LGFae/awww/archive/main.tar.gz#/awww-main.tar.gz
