@@ -1,0 +1,32 @@
+diff --git a/fabric/core/service.py b/fabric/core/service.py
+index 6f02f56..9b512a5 100644
+--- a/fabric/core/service.py
++++ b/fabric/core/service.py
+@@ -118,13 +118,16 @@ class Property(OldProperty, Generic[T]):
+                 lambda instance, value: self.fset(instance, value),  # type: ignore
+             )
+         try:
+-            _type = type if issubclass(type, (bool, int, float, str)) else object
++            _type = type if issubclass(type, (bool, int, float, str)) and not issubclass(type, __import__("enum").Enum) else object
+         except TypeError:
+             _type = object
+ 
++        _default = default_value if _type is not object else None
++        self.fabric_default = default_value
++
+         super().__init__(
+             type=_type,
+-            default=default_value,
++            default=_default,
+             nick=nickname or "",
+             blurb=description,
+             flags=flags,
+@@ -136,7 +139,7 @@ class Property(OldProperty, Generic[T]):
+         )
+ 
+     def _default_getter(self, instance) -> T:
+-        return getattr(instance, ("_property_helper_" + self.name), self.default)
++        return getattr(instance, ("_property_helper_" + self.name), getattr(self, "fabric_default", self.default))
+ 
+     def _default_setter(self, instance, value: T) -> None:
+         return setattr(instance, ("_property_helper_" + self.name), value)

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+SYSTEM_DATA="/usr/share/caffyne-shell"
+USER_CONFIG="$HOME/.config/caffyne-shell"
+
+mkdir -p "$USER_CONFIG"
+
+# Seed default configurations if they do not exist
+for dir in config themes matugen wallpapers style; do
+    if [ ! -d "$USER_CONFIG/$dir" ] && [ -d "$SYSTEM_DATA/$dir" ]; then
+        cp -r "$SYSTEM_DATA/$dir" "$USER_CONFIG/"
+    fi
+done
+
+export CAFFYNE_STYLE_DIR="$USER_CONFIG/style"
+
+cd "$SYSTEM_DATA" || {
+    echo "Error: Could not change directory to $SYSTEM_DATA"
+    exit 1
+}
+
+exec python3 main.py "$@"
