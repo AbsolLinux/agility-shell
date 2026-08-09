@@ -1,6 +1,6 @@
 Name:           caffyne-shell
 Version:        1.0.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        A modern, GTK-based desktop shell built on top of Fabric
 
 License:        GPL-3.0-only
@@ -150,3 +150,4 @@ install -m 755 awww/target/release/awww-daemon %{buildroot}%{_bindir}/awww-daemo
 * Fri Jul 03 2026 Maintainer <amritanshukumar13012008@gmail.com> - 1.0.0-1
 - First packaging for Fedora COPR.
 - Bundled fabric and fabric-cli into the monolithic package.
+* Sun Aug 09 2026 Maintainer <caffyne@proton.me> - 1.0.0-3
