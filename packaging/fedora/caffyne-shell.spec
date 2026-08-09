@@ -109,7 +109,7 @@ popd
 mkdir -p %{buildroot}/usr/share/caffyne-shell
 mkdir -p %{buildroot}%{_bindir}
 
-cp -r assets bar_widgets config desktop_applets greetd icons lightdm matugen services snippets sounds style svgs themes utils wallpapers windows bar.py lockscreen.py main.py plugin_loader.py user_options.py %{buildroot}/usr/share/caffyne-shell/
+cp -r assets bar_widgets config desktop_applets greetd icons lightdm services snippets sounds style svgs themes utils wallpapers windows bar.py lockscreen.py main.py plugin_loader.py user_options.py %{buildroot}/usr/share/caffyne-shell/
 
 cp packaging/fedora/caffyne-shell %{buildroot}%{_bindir}/caffyne-shell
 chmod +x %{buildroot}%{_bindir}/caffyne-shell
