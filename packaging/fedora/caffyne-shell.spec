@@ -111,8 +111,8 @@ mkdir -p %{buildroot}%{_bindir}
 
 cp -r assets bar_widgets config desktop_applets greetd icons lightdm matugen services snippets sounds style svgs themes utils wallpapers windows bar.py lockscreen.py main.py plugin_loader.py user_options.py %{buildroot}/usr/share/caffyne-shell/
 
-cp packaging/fedora/startcaffyneshell %{buildroot}%{_bindir}/startcaffyneshell
-chmod +x %{buildroot}%{_bindir}/startcaffyneshell
+cp packaging/fedora/caffyne-shell %{buildroot}%{_bindir}/caffyne-shell
+chmod +x %{buildroot}%{_bindir}/caffyne-shell
 
 # Fix permissions on shared libraries
 chmod +x %{buildroot}/usr/share/caffyne-shell/snippets/blur/lib/libblur.so
@@ -134,7 +134,7 @@ install -m 755 awww/target/release/awww-daemon %{buildroot}%{_bindir}/awww-daemo
 
 %files
 /usr/share/caffyne-shell/
-%{_bindir}/startcaffyneshell
+%{_bindir}/caffyne-shell
 %{_bindir}/fabric-cli
 %{_bindir}/awww
 %{_bindir}/awww-daemon
