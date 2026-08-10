@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Script for running caffyne-shell where it is globally installed
+
 SYSTEM_DATA="/usr/share/caffyne-shell"
 USER_CONFIG="$HOME/.config/caffyne-shell"
 
