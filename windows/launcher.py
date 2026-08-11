@@ -43,7 +43,6 @@ class LauncherAppItem(Button):
         self._app = app
         self._launcher = launcher
         self.box = Box(
-            style_classes=["launcher-app"],
             orientation="h",
             spacing=10,
             children=[
@@ -70,34 +69,35 @@ class LauncherAppItem(Button):
             ],
         )
         super().__init__(
+            style_classes=["launcher-app"],
             on_clicked=lambda *_: self.launch(),
             child=self.box
         )
-        self.connect("enter-notify-event", self._on_enter)
-        self.connect("leave-notify-event", self._on_leave)
-        self.connect("button-press-event", self._on_press)
-        self.connect("button-release-event", self._on_release)
-        self.connect("focus-in-event", self._on_focus_in)
-        self.connect("focus-out-event", self._on_focus_out)
+    #     self.connect("enter-notify-event", self._on_enter)
+    #     self.connect("leave-notify-event", self._on_leave)
+    #     self.connect("button-press-event", self._on_press)
+    #     self.connect("button-release-event", self._on_release)
+    #     self.connect("focus-in-event", self._on_focus_in)
+    #     self.connect("focus-out-event", self._on_focus_out)
 
-    def _on_enter(self, *_):
-        self.box.add_style_class("hover")
+    # def _on_enter(self, *_):
+    #     self.box.add_style_class("hover")
 
-    def _on_leave(self, *_):
-        self.box.remove_style_class("hover")
-        self.box.remove_style_class("active")
+    # def _on_leave(self, *_):
+    #     self.box.remove_style_class("hover")
+    #     self.box.remove_style_class("active")
 
-    def _on_press(self, *_):
-        self.box.add_style_class("active")
+    # def _on_press(self, *_):
+    #     self.box.add_style_class("active")
 
-    def _on_release(self, *_):
-        self.box.remove_style_class("active")
+    # def _on_release(self, *_):
+    #     self.box.remove_style_class("active")
 
-    def _on_focus_in(self, *_):
-        self.box.add_style_class("focus")
+    # def _on_focus_in(self, *_):
+    #     self.box.add_style_class("focus")
 
-    def _on_focus_out(self, *_):
-        self.box.remove_style_class("focus")
+    # def _on_focus_out(self, *_):
+    #     self.box.remove_style_class("focus")
 
     def launch(self):
         increment_usage(self._app)
@@ -110,7 +110,6 @@ class LauncherGridItem(Button):
         self._app = app
         self._launcher = launcher
         self.box = Box(
-            style_classes=["launcher-grid-app"],
             orientation="v",
             spacing=6,
             h_align="center",
@@ -128,34 +127,35 @@ class LauncherGridItem(Button):
             ],
         )
         super().__init__(
+            style_classes=["launcher-grid-app"],
             on_clicked=lambda *_: self.launch(),
             child=self.box,
         )
-        self.connect("enter-notify-event", self._on_enter)
-        self.connect("leave-notify-event", self._on_leave)
-        self.connect("button-press-event", self._on_press)
-        self.connect("button-release-event", self._on_release)
-        self.connect("focus-in-event", self._on_focus_in)
-        self.connect("focus-out-event", self._on_focus_out)
+    #     self.connect("enter-notify-event", self._on_enter)
+    #     self.connect("leave-notify-event", self._on_leave)
+    #     self.connect("button-press-event", self._on_press)
+    #     self.connect("button-release-event", self._on_release)
+    #     self.connect("focus-in-event", self._on_focus_in)
+    #     self.connect("focus-out-event", self._on_focus_out)
 
-    def _on_enter(self, *_):
-        self.box.add_style_class("hover")
+    # def _on_enter(self, *_):
+    #     self.box.add_style_class("hover")
 
-    def _on_leave(self, *_):
-        self.box.remove_style_class("hover")
-        self.box.remove_style_class("active")
+    # def _on_leave(self, *_):
+    #     self.box.remove_style_class("hover")
+    #     self.box.remove_style_class("active")
 
-    def _on_press(self, *_):
-        self.box.add_style_class("active")
+    # def _on_press(self, *_):
+    #     self.box.add_style_class("active")
 
-    def _on_release(self, *_):
-        self.box.remove_style_class("active")
+    # def _on_release(self, *_):
+    #     self.box.remove_style_class("active")
 
-    def _on_focus_in(self, *_):
-        self.box.add_style_class("focus")
+    # def _on_focus_in(self, *_):
+    #     self.box.add_style_class("focus")
 
-    def _on_focus_out(self, *_):
-        self.box.remove_style_class("focus")
+    # def _on_focus_out(self, *_):
+    #     self.box.remove_style_class("focus")
 
     def launch(self):
         increment_usage(self._app)

@@ -69,7 +69,7 @@ class DashDismissLayer(Window):
             anchor="left right top bottom",
             layer="top",
             title="caffyne-shell-dash",
-            keyboard_mode="on-demand",
+            keyboard_mode="none",
             style_classes=["dash"],
             visible=False,
             child=zone_box,
