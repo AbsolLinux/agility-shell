@@ -18,7 +18,6 @@ COLUMNS = 6
 _TARGET = Gtk.TargetEntry.new("text/plain", Gtk.TargetFlags.SAME_APP, 0)
 
 
-
 class DashLauncherAppItem(Button):
     def __init__(self, app: DesktopApp, launcher):
         self._app = app
@@ -79,7 +78,6 @@ class DashLauncherAppItem(Button):
         self._launcher.toggle()
 
 
-
 class LauncherDesktopAppletItem(Box):
     def __init__(self, key: str, applet_widget: Gtk.Widget, on_remove: callable,
                  on_reorder_begin: callable = None, on_reorder_end: callable = None):
@@ -130,7 +128,6 @@ class LauncherDesktopAppletItem(Box):
     def _on_drag_begin(self, widget, ctx):
         import bar as _bar_module
         _bar_module._dragging_key = self._key
-        # Hide self so the grid shows the placeholder in its place
         self.set_opacity(0.0)
         if self._on_reorder_begin:
             self._on_reorder_begin(self._key)
@@ -158,7 +155,6 @@ class LauncherDesktopAppletItem(Box):
         return self._key
 
 
-
 class LauncherDropPlaceholder(Box):
     def __init__(self, col_span: int = 1):
         super().__init__(
@@ -167,181 +163,196 @@ class LauncherDropPlaceholder(Box):
         self.col_span = col_span
 
 
+def compute_grid_layout(
+    applet_items: list,
+    app_items: list,
+    dragging_key: str | None = None,
+    placeholder_slot: int | None = None,
+) -> list[tuple]:
+    ph_span = DESKTOP_APPLET_SIZES.get(dragging_key, 1) if dragging_key else 1
+
+    applet_cells: dict[int, object] = {}
+    for item in applet_items:
+        if item.key == dragging_key:
+            continue
+        s = item._slot
+        for offset in range(item.col_span):
+            applet_cells[s + offset] = item if offset == 0 else None
+
+    ph_cells: dict[int, bool] = {}
+    if placeholder_slot is not None:
+        for offset in range(ph_span):
+            ph_cells[placeholder_slot + offset] = (offset == 0)
+
+    app_iter = iter(app_items)
+    app_exhausted = False
+    placed_applets: set[str] = set()
+    remaining_applets = [i for i in applet_items if i.key != dragging_key]
+
+    result: list[tuple] = []
+    ci = 0
+    col_cursor = 0
+    row_cursor = 0
+
+    def place(widget, span):
+        nonlocal col_cursor, row_cursor
+        if widget is not None:
+            result.append((widget, col_cursor, row_cursor, span))
+        col_cursor += span
+        if col_cursor >= COLUMNS:
+            col_cursor = 0
+            row_cursor += 1
+
+    def fill_to_fit(span):
+        nonlocal col_cursor, row_cursor, app_exhausted, ci
+        while col_cursor + span > COLUMNS:
+            if not app_exhausted:
+                try:
+                    app = next(app_iter)
+                    place(app, 1)
+                except StopIteration:
+                    app_exhausted = True
+                    place(None, 1)
+            else:
+                place(None, 1)
+            ci += 1
+
+    while True:
+        if ci in applet_cells:
+            item = applet_cells[ci]
+            if item is not None and item.key not in placed_applets:
+                fill_to_fit(item.col_span)
+                place(item, item.col_span)
+                placed_applets.add(item.key)
+                ci += item.col_span
+            else:
+                ci += 1
+                continue
+        elif ci in ph_cells:
+            if ph_cells[ci]:
+                fill_to_fit(ph_span)
+                result.append(("__placeholder__", col_cursor, row_cursor, ph_span))
+                col_cursor += ph_span
+                if col_cursor >= COLUMNS:
+                    col_cursor = 0
+                    row_cursor += 1
+                ci += ph_span
+            else:
+                ci += 1
+                continue
+        else:
+            if not app_exhausted:
+                try:
+                    app = next(app_iter)
+                    place(app, 1)
+                except StopIteration:
+                    app_exhausted = True
+                    place(None, 1)
+            else:
+                place(None, 1)
+            ci += 1
+
+        all_applets_placed = all(i.key in placed_applets for i in remaining_applets)
+        if app_exhausted and all_applets_placed and placeholder_slot is None:
+            break
+        if (
+            placeholder_slot is not None
+            and ci > placeholder_slot + ph_span
+            and app_exhausted
+            and all_applets_placed
+        ):
+            break
+        if ci > 10000:
+            break
+
+    return result
+
 
 class HybridGrid(Gtk.Grid):
-    FOLD_ROWS = 3
-
     def __init__(self, on_placeholder_changed=None, on_applet_dropped=None):
         super().__init__()
         self.set_column_homogeneous(True)
         self.set_row_homogeneous(True)
         self.set_column_spacing(12)
         self.set_row_spacing(12)
+
         self._placeholder_slot: int | None = None
         self._drop_pending: bool = False
         self._on_placeholder_changed = on_placeholder_changed
         self._on_applet_dropped = on_applet_dropped
-        self._tracked_app_items: list[DashLauncherAppItem] = []
-
+        self._grid_cache: dict[str, Gtk.Widget] = {}
+        self._grid_positions: dict[str, tuple[int, int, int]] = {}
         self.drag_dest_set(
             Gtk.DestDefaults.ALL,
             [_TARGET],
             Gdk.DragAction.MOVE,
         )
         self.connect("drag-motion", self._on_drag_motion)
-        self.connect("drag-leave", self._on_drag_leave)
+        self.connect("drag-leave",  self._on_drag_leave)
         self.connect("drag-data-received", self._on_drag_received)
-
 
     def layout(
         self,
-        applet_items: list[LauncherDesktopAppletItem],
-        app_items: list[DashLauncherAppItem],
+        applet_items: list,
+        app_items: list,
         dragging_key: str | None = None,
         placeholder_slot: int | None = None,
+        app_widget_cache: dict | None = None,
     ) -> None:
-        for item in self._tracked_app_items:
-            item.destroy()
-        self._tracked_app_items = []
-        for child in self.get_children():
-            self.remove(child)
-
         ph_span = DESKTOP_APPLET_SIZES.get(dragging_key, 1) if dragging_key else 1
+        desired_layout = compute_grid_layout(
+            applet_items, app_items, dragging_key, placeholder_slot
+        )
 
-        app_iter = iter(app_items)
-
-        applet_cells: dict[int, LauncherDesktopAppletItem] = {}
-        for item in applet_items:
-            if item.key == dragging_key:
+        desired: dict[str, tuple] = {}
+        for entry in desired_layout:
+            widget, col, row, span = entry
+            if widget is None:
                 continue
-            s = item._slot
-            for offset in range(item.col_span):
-                if s + offset < 10000:
-                    applet_cells[s + offset] = item if offset == 0 else None
+            if widget == "__placeholder__":
+                cache_key = "__placeholder__"
+                existing_ph = self._grid_cache.get(cache_key)
+                if existing_ph is None or existing_ph.col_span != ph_span:
+                    if existing_ph is not None:
+                        self.remove(existing_ph)
+                        existing_ph.destroy()
+                    existing_ph = LauncherDropPlaceholder(ph_span)
+                    self._grid_cache[cache_key] = existing_ph
+                desired[cache_key] = (existing_ph, col, row, span)
+            elif isinstance(widget, DashLauncherAppItem):
+                app_id = widget._app._app.get_id()
+                cache_key = f"app:{app_id}"
+                desired[cache_key] = (widget, col, row, span)
+            elif isinstance(widget, LauncherDesktopAppletItem):
+                cache_key = f"applet:{widget.key}"
+                desired[cache_key] = (widget, col, row, span)
 
-        ph_cells: dict[int, bool] = {}
-        if placeholder_slot is not None:
-            for offset in range(ph_span):
-                ph_cells[placeholder_slot + offset] = (offset == 0)
+        current_positions = self._grid_positions
+        for key in list(self._grid_cache):
+            if key not in desired:
+                widget = self._grid_cache.pop(key)
+                self._grid_positions.pop(key, None)  # ← clean up
+                self.remove(widget)
+                if isinstance(widget, LauncherDropPlaceholder):
+                    widget.destroy()
 
-        ci = 0
-        app_exhausted = False
-        placed_applets: set[str] = set()
-
-        rows_widgets: list[list[tuple[Gtk.Widget, int]]] = []
-        current_row: list[tuple[Gtk.Widget, int]] = []
-        col_cursor = 0
-
-        def flush_row():
-            nonlocal col_cursor
-            rows_widgets.append(current_row[:])
-            current_row.clear()
-            col_cursor = 0
-
-        while True:
-            if ci in applet_cells:
-                item = applet_cells[ci]
-                if item is not None and item.key not in placed_applets:
-                    span = item.col_span
-                    while col_cursor + span > COLUMNS:
-                        if not app_exhausted:
-                            try:
-                                app = next(app_iter)
-                                current_row.append((app, 1))
-                                col_cursor += 1
-                                ci += 1
-                            except StopIteration:
-                                app_exhausted = True
-                                current_row.append((None, 1))
-                                col_cursor += 1
-                                ci += 1
-                        else:
-                            current_row.append((None, 1))
-                            col_cursor += 1
-                            ci += 1
-                        if col_cursor >= COLUMNS:
-                            flush_row()
-                    current_row.append((item, span))
-                    col_cursor += span
-                    ci += span
-                    placed_applets.add(item.key)
-                else:
-                    ci += 1
+        for key, (widget, col, row, span) in desired.items():
+            self._grid_cache[key] = widget
+            if key in current_positions:
+                old_col, old_row, old_span = current_positions[key]
+                if (old_col, old_row, old_span) == (col, row, span):
                     continue
-            elif ci in ph_cells:
-                if ph_cells[ci]:
-                    span = ph_span
-                    while col_cursor + span > COLUMNS:
-                        if not app_exhausted:
-                            try:
-                                app = next(app_iter)
-                                current_row.append((app, 1))
-                                col_cursor += 1
-                                ci += 1
-                            except StopIteration:
-                                app_exhausted = True
-                                current_row.append((None, 1))
-                                col_cursor += 1
-                                ci += 1
-                        else:
-                            current_row.append((None, 1))
-                            col_cursor += 1
-                            ci += 1
-                        if col_cursor >= COLUMNS:
-                            flush_row()
-                    ph = LauncherDropPlaceholder(ph_span)
-                    current_row.append((ph, span))
-                    col_cursor += span
-                    ci += span
-                else:
-                    ci += 1
-                    continue
-            else:
-                if not app_exhausted:
-                    try:
-                        app = next(app_iter)
-                        current_row.append((app, 1))
-                    except StopIteration:
-                        app_exhausted = True
-                        current_row.append((None, 1))
-                else:
-                    current_row.append((None, 1))
-                col_cursor += 1
-                ci += 1
+                self.remove(widget)
+            self.attach(widget, col, row, span, 1)
+            self._grid_positions[key] = (col, row, span)
+            widget.show_all()
 
-            if col_cursor >= COLUMNS:
-                flush_row()
-
-            remaining_applets = [item for item in applet_items if item.key != dragging_key]
-            if (
-                app_exhausted
-                and not any(item.key not in placed_applets for item in remaining_applets)
-                and placeholder_slot is None
-            ) or (
-                placeholder_slot is not None and ci > placeholder_slot + ph_span
-                and app_exhausted
-                and all(item.key in placed_applets for item in remaining_applets)
-            ):
-                if col_cursor > 0:
-                    flush_row()
-                break
-
-            if ci > 10000:
-                break
-
-        if col_cursor > 0:
-            flush_row()
-
-        for r, row_items in enumerate(rows_widgets):
-            c = 0
-            for widget, span in row_items:
-                if widget is not None:
-                    self.attach(widget, c, r, span, 1)
-                    widget.show_all()
-                    if isinstance(widget, DashLauncherAppItem):
-                        self._tracked_app_items.append(widget)
-                c += span
-
+    def clear_all(self):
+        for key, widget in list(self._grid_cache.items()):
+            self.remove(widget)
+            if isinstance(widget, LauncherDropPlaceholder):
+                widget.destroy()
+        self._grid_cache.clear()
 
     def _on_drag_motion(self, widget, ctx, x, y, time):
         import bar as _bar_module
@@ -361,14 +372,14 @@ class HybridGrid(Gtk.Grid):
 
     def _on_drag_leave(self, widget, ctx, time):
         self._drop_pending = True
-        def _check_drop_pending():
+        def _check():
             if self._drop_pending:
                 self._drop_pending = False
                 self._placeholder_slot = None
                 if self._on_placeholder_changed:
                     self._on_placeholder_changed(-1, "")
             return False
-        GLib.idle_add(_check_drop_pending)
+        GLib.idle_add(_check)
 
     def _on_drag_received(self, widget, ctx, x, y, data_obj, info, time):
         self._drop_pending = False
@@ -395,8 +406,7 @@ class HybridGrid(Gtk.Grid):
         cell_h = cell_w + self.get_row_spacing()
         col = max(0, min(COLUMNS - 1, int(x / cell_w)))
         row = max(0, int(y / cell_h))
-        slot = row * COLUMNS + col
-        return slot
+        return row * COLUMNS + col
 
 
 class DashLauncherPage(DashPage):
@@ -408,7 +418,11 @@ class DashLauncherPage(DashPage):
 
         self._placed_items: list[LauncherDesktopAppletItem] = []
         self._applet_widget_cache: dict[str, Gtk.Widget] = {}
+
+        self._app_widget_cache: dict[str, DashLauncherAppItem] = {}
+
         self._rebuild_generation: int = 0
+        self._rebuild_pending_id: int | None = None
 
         self._drag_receive_mode: bool = False
         self._drag_key: str | None = None
@@ -429,7 +443,6 @@ class DashLauncherPage(DashPage):
         self.connect("realize", self._on_realise)
         self._load_placed_applets()
         self._rebuild()
-
 
     def _load_placed_applets(self) -> None:
         entries = user_options.desktop_applets.get_applets()
@@ -462,14 +475,26 @@ class DashLauncherPage(DashPage):
                 self._applet_widget_cache.pop(stale_key).destroy()
         self._placed_items = items
 
+    def _get_app_widgets(self, apps: list[DesktopApp]) -> list[DashLauncherAppItem]:
+        wanted_ids = {a._app.get_id() for a in apps}
 
-    def _rebuild(
-        self,
-        apps: list | None = None,
-        placeholder_slot: int | None = None,
-        dragging_key: str | None = None,
-        applet_items_override: list | None = None,
-    ) -> None:
+        for stale_id in [k for k in self._app_widget_cache if k not in wanted_ids]:
+            widget = self._app_widget_cache.pop(stale_id)
+            grid_key = f"app:{stale_id}"
+            if grid_key not in self._hybrid_grid._grid_cache:
+                widget.destroy()
+
+        for app in apps:
+            if app._app.get_id() not in self._app_widget_cache:
+                self._app_widget_cache[app._app.get_id()] = DashLauncherAppItem(app, self.window)
+
+        return [self._app_widget_cache[a._app.get_id()] for a in apps]
+
+    def _rebuild(self, apps=None, placeholder_slot=None, dragging_key=None, applet_items_override=None):
+        if self._rebuild_pending_id is not None:
+            GLib.source_remove(self._rebuild_pending_id)
+            self._rebuild_pending_id = None
+
         if apps is None:
             apps = self._sorted_by_usage(self._all_apps)
 
@@ -477,24 +502,66 @@ class DashLauncherPage(DashPage):
         generation = self._rebuild_generation
         applet_items = applet_items_override if applet_items_override is not None else self._placed_items
 
-        def _build_and_commit():
-            app_widgets = [DashLauncherAppItem(a, self.window) for a in apps]
+        wanted_ids = {a._app.get_id() for a in apps}
+        needs_creation = [a for a in apps if a._app.get_id() not in self._app_widget_cache]
+
+        def _build_new_widgets():
+            new_widgets = {
+                a._app.get_id(): DashLauncherAppItem(a, self.window)
+                for a in needs_creation
+            }
 
             def _commit():
                 if generation != self._rebuild_generation:
-                    for w in app_widgets:
+                    for w in new_widgets.values():
                         w.destroy()
                     return
+                self._app_widget_cache.update(new_widgets)
+                for stale_id in [k for k in self._app_widget_cache if k not in wanted_ids]:
+                    widget = self._app_widget_cache.pop(stale_id)
+                    if f"app:{stale_id}" not in self._hybrid_grid._grid_cache:
+                        widget.destroy()
+                app_widgets = [self._app_widget_cache[a._app.get_id()] for a in apps]
                 self._hybrid_grid.layout(
                     applet_items=applet_items,
                     app_items=app_widgets,
                     dragging_key=dragging_key,
                     placeholder_slot=placeholder_slot,
                 )
+
             GLib.idle_add(_commit)
 
-        threading.Thread(target=_build_and_commit, daemon=True).start()
+        if needs_creation:
+            threading.Thread(target=_build_new_widgets, daemon=True).start()
+        else:
+            app_widgets = [self._app_widget_cache[a._app.get_id()] for a in apps]
+            GLib.idle_add(lambda: (
+                self._hybrid_grid.layout(
+                    applet_items=applet_items,
+                    app_items=app_widgets,
+                    dragging_key=dragging_key,
+                    placeholder_slot=placeholder_slot,
+                ) if generation == self._rebuild_generation else None
+            ))
 
+    def _rebuild_debounced(
+        self,
+        apps: list | None = None,
+        placeholder_slot: int | None = None,
+        dragging_key: str | None = None,
+        applet_items_override: list | None = None,
+        delay_ms: int = 40,
+    ) -> None:
+        if self._rebuild_pending_id is not None:
+            GLib.source_remove(self._rebuild_pending_id)
+            self._rebuild_pending_id = None
+
+        def _fire():
+            self._rebuild_pending_id = None
+            self._rebuild(apps, placeholder_slot, dragging_key, applet_items_override)
+            return False
+
+        self._rebuild_pending_id = GLib.timeout_add(delay_ms, _fire)
 
     def _on_reorder_begin(self, key: str) -> None:
         self._reorder_mode = True
@@ -527,17 +594,13 @@ class DashLauncherPage(DashPage):
     def _on_placeholder_changed(self, slot: int, key: str) -> None:
         if slot < 0:
             self._placeholder_slot = None
-            self._rebuild(dragging_key=self._drag_key)
+            self._rebuild_debounced(dragging_key=self._drag_key)
         else:
             self._placeholder_slot = slot
-            self._rebuild(placeholder_slot=slot, dragging_key=self._drag_key or key)
+            self._rebuild_debounced(placeholder_slot=slot, dragging_key=self._drag_key or key)
 
     def _find_free_slot(self, key: str, preferred_slot: int, exclude_key: str | None = None) -> int:
-        """Return the first slot >= preferred_slot where key's span fits without
-        overlapping any other placed applet (optionally ignoring exclude_key,
-        used during reorders so the item doesn't block itself)."""
         span = DESKTOP_APPLET_SIZES.get(key, 1)
-
         occupied: set[int] = set()
         for item in self._placed_items:
             if item.key == exclude_key:
@@ -545,7 +608,6 @@ class DashLauncherPage(DashPage):
             item_span = DESKTOP_APPLET_SIZES.get(item.key, 1)
             for offset in range(item_span):
                 occupied.add(item._slot + offset)
-
         slot = preferred_slot
         while True:
             if not any((slot + offset) in occupied for offset in range(span)):
@@ -553,37 +615,28 @@ class DashLauncherPage(DashPage):
             slot += 1
 
     def _on_applet_dropped(self, key: str, slot: int) -> None:
-        """Called when an applet is dropped onto the hybrid grid — handles both
-        new placements (drag_receive_mode) and reorders (reorder_mode)."""
         if key not in DESKTOP_APPLET_SIZES:
             return
 
         if self._reorder_mode and user_options.desktop_applets.is_placed(key):
-            # Reorder: remove from old slot and re-place at new slot
             slot = self._find_free_slot(key, slot, exclude_key=key)
             user_options.desktop_applets.remove(key)
             user_options.desktop_applets.place(key, slot)
             user_options.save()
-
-            # Update the existing item's slot in-place — no widget rebuild needed
             for item in self._placed_items:
                 if item.key == key:
                     item._slot = slot
                     break
-
             self._reorder_mode = False
             self._drag_key = None
             self._placeholder_slot = None
             self._rebuild()
-
             if self._applet_page_ref is not None:
                 self._applet_page_ref.on_launcher_applet_changed()
-
             from utils.sounds import play_sound
             play_sound("widget-placed")
             return
 
-        # New placement — guard against duplicates
         if user_options.desktop_applets.is_placed(key):
             return
 
@@ -609,17 +662,14 @@ class DashLauncherPage(DashPage):
 
         user_options.desktop_applets.place(key, slot)
         user_options.save()
-
         self.exit_drag_receive_mode()
 
         if self._applet_page_ref is not None:
             self._applet_page_ref.on_launcher_applet_changed()
-
         from utils.sounds import play_sound
         play_sound("widget-placed")
 
     def _remove_applet(self, key: str) -> None:
-        """Remove a placed applet by key and destroy its cached widget."""
         self._placed_items = [i for i in self._placed_items if i.key != key]
         if key in self._applet_widget_cache:
             self._applet_widget_cache.pop(key).destroy()
@@ -628,8 +678,6 @@ class DashLauncherPage(DashPage):
         self._rebuild()
         if self._applet_page_ref is not None:
             self._applet_page_ref.on_launcher_applet_changed()
-
-    # ── search ─────────────────────────────────────────────────────────────
 
     def _attach_search_entry(self, entry: Entry):
         if self._search_entry is entry:
@@ -646,8 +694,7 @@ class DashLauncherPage(DashPage):
         entry.connect("key-press-event", self._on_entry_key_press)
 
     def _launch_first(self):
-        children = self._hybrid_grid.get_children()
-        for child in reversed(children):
+        for child in reversed(self._hybrid_grid.get_children()):
             if isinstance(child, DashLauncherAppItem):
                 child.launch()
                 return
@@ -677,9 +724,6 @@ class DashLauncherPage(DashPage):
         usage = load_usage()
         return sorted(apps, key=lambda a: get_usage_count(a, usage), reverse=True)
 
-    def _render_apps(self, apps: list):
-        self._rebuild(apps=apps)
-
     def _search(self, entry):
         query = entry.get_text()
         if not query:
@@ -697,10 +741,7 @@ class DashLauncherPage(DashPage):
         filtered = [(app, score) for app, score in raw_results if score >= 60]
         boosted = sorted(
             filtered,
-            key=lambda pair: (
-                round(pair[1] / 10) * 10,
-                get_usage_count(pair[0], usage),
-            ),
+            key=lambda pair: (round(pair[1] / 10) * 10, get_usage_count(pair[0], usage)),
             reverse=True,
         )
         adj = self.scroll.get_vadjustment()
