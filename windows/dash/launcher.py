@@ -23,7 +23,6 @@ class DashLauncherAppItem(Button):
         self._app = app
         self._launcher = launcher
         self.box = Box(
-            style_classes=["dash-launcher-app"],
             orientation="v",
             spacing=18,
             h_expand=False,
@@ -43,34 +42,35 @@ class DashLauncherAppItem(Button):
             ],
         )
         super().__init__(
+            style_classes=["dash-launcher-app"],
             on_clicked=lambda *_: self.launch(),
             child=self.box,
         )
-        self.connect("enter-notify-event", self._on_enter)
-        self.connect("leave-notify-event", self._on_leave)
-        self.connect("button-press-event", self._on_press)
-        self.connect("button-release-event", self._on_release)
-        self.connect("focus-in-event", self._on_focus_in)
-        self.connect("focus-out-event", self._on_focus_out)
+    #     self.connect("enter-notify-event", self._on_enter)
+    #     self.connect("leave-notify-event", self._on_leave)
+    #     self.connect("button-press-event", self._on_press)
+    #     self.connect("button-release-event", self._on_release)
+    #     self.connect("focus-in-event", self._on_focus_in)
+    #     self.connect("focus-out-event", self._on_focus_out)
 
-    def _on_enter(self, *_):
-        self.box.add_style_class("hover")
+    # def _on_enter(self, *_):
+    #     self.box.add_style_class("hover")
 
-    def _on_leave(self, *_):
-        self.box.remove_style_class("hover")
-        self.box.remove_style_class("active")
+    # def _on_leave(self, *_):
+    #     self.box.remove_style_class("hover")
+    #     self.box.remove_style_class("active")
 
-    def _on_press(self, *_):
-        self.box.add_style_class("active")
+    # def _on_press(self, *_):
+    #     self.box.add_style_class("active")
 
-    def _on_release(self, *_):
-        self.box.remove_style_class("active")
+    # def _on_release(self, *_):
+    #     self.box.remove_style_class("active")
 
-    def _on_focus_in(self, *_):
-        self.box.add_style_class("focus")
+    # def _on_focus_in(self, *_):
+    #     self.box.add_style_class("focus")
 
-    def _on_focus_out(self, *_):
-        self.box.remove_style_class("focus")
+    # def _on_focus_out(self, *_):
+    #     self.box.remove_style_class("focus")
 
     def launch(self):
         increment_usage(self._app)
@@ -701,10 +701,19 @@ class DashLauncherPage(DashPage):
 
     def _on_entry_key_press(self, widget, event):
         if event.keyval == Gdk.KEY_Down:
-            children = self._hybrid_grid.get_children()
-            if children:
-                children[-1].grab_focus()
-            return True
+            best = None
+            best_pos = (float("inf"), float("inf"))
+            for key, pos in self._hybrid_grid._grid_positions.items():
+                if not key.startswith("app:"):
+                    continue
+                col, row, span = pos
+                if (row, col) < best_pos:
+                    best_pos = (row, col)
+                    best = self._hybrid_grid._grid_cache.get(key)
+            
+            if best is not None:
+                result = best.grab_focus()
+                return True
         return False
 
     def _on_realise(self, *_):

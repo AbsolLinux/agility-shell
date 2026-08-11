@@ -98,13 +98,8 @@ class DashAppletItem(Button):
         )
 
         self.box = Box(
-            style_classes=["dash-applet-item"],
             orientation="v",
             spacing=10,
-            h_expand=False,
-            h_align="center",
-            v_expand=True,
-            v_align="center",
             children=[
                 Icon(v_expand=True, v_align="end", icon_name=icon_name, icon_size=52),
                 Label(
@@ -119,7 +114,14 @@ class DashAppletItem(Button):
                 self._indicator_row,
             ],
         )
-        super().__init__(child=self.box)
+        super().__init__(
+            style_classes=["dash-applet-item"],
+            child=self.box,
+            h_expand=False,
+            h_align="center",
+            v_expand=True,
+            v_align="center",
+        )
 
         self.drag_source_set(
             Gdk.ModifierType.BUTTON1_MASK,
@@ -130,32 +132,32 @@ class DashAppletItem(Button):
         self.connect("drag-data-get", self._on_drag_data_get)
         self.connect("drag-end", self._on_drag_end)
         self.connect("drag-failed", self._on_drag_failed)
-        self.connect("enter-notify-event", self._on_enter)
-        self.connect("leave-notify-event", self._on_leave)
-        self.connect("button-press-event", self._on_press)
-        self.connect("button-release-event", self._on_release)
-        self.connect("focus-in-event", self._on_focus_in)
-        self.connect("focus-out-event", self._on_focus_out)
+        # self.connect("enter-notify-event", self._on_enter)
+        # self.connect("leave-notify-event", self._on_leave)
+        # self.connect("button-press-event", self._on_press)
+        # self.connect("button-release-event", self._on_release)
+        # self.connect("focus-in-event", self._on_focus_in)
+        # self.connect("focus-out-event", self._on_focus_out)
 
 
-    def _on_enter(self, *_):
-        self.box.add_style_class("hover")
+    # def _on_enter(self, *_):
+    #     self.box.add_style_class("hover")
 
-    def _on_leave(self, *_):
-        self.box.remove_style_class("hover")
-        self.box.remove_style_class("active")
+    # def _on_leave(self, *_):
+    #     self.box.remove_style_class("hover")
+    #     self.box.remove_style_class("active")
 
-    def _on_press(self, *_):
-        self.box.add_style_class("active")
+    # def _on_press(self, *_):
+    #     self.box.add_style_class("active")
 
-    def _on_release(self, *_):
-        self.box.remove_style_class("active")
+    # def _on_release(self, *_):
+    #     self.box.remove_style_class("active")
 
-    def _on_focus_in(self, *_):
-        self.box.add_style_class("focus")
+    # def _on_focus_in(self, *_):
+    #     self.box.add_style_class("focus")
 
-    def _on_focus_out(self, *_):
-        self.box.remove_style_class("focus")
+    # def _on_focus_out(self, *_):
+    #     self.box.remove_style_class("focus")
 
 
     def _on_drag_begin(self, widget, ctx):
