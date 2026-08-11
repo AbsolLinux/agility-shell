@@ -8,13 +8,63 @@ from .tab import TabStack, TabMenu
 from services.singletons import bluetooth
 from services.bluetooth import BluetoothAdapter, BluetoothDevice
 from enum import Enum, auto
-from gi.repository import GLib
+from gi.repository import GLib, Gdk, Gtk
+from utils.helpers import popup_with_blur
+from user_options import user_options
+
 
 class BTState(Enum):
-    IDLE       = auto()
-    CONNECTED  = auto()
-    CONNECTING = auto()
-    FAILED     = auto()
+    IDLE          = auto()
+    CONNECTED     = auto()
+    CONNECTING    = auto()
+    DISCONNECTING = auto()
+    FAILED        = auto()
+
+
+class BluetoothBatteryWidget(Box):
+    def __init__(self, device: BluetoothDevice, **kwargs):
+        self._device = device
+
+        self._icon  = Icon(icon_name="battery-full-duotone", icon_size=12)
+        self._label = Label(label="", max_chars_width=4, ellipsize=True)
+
+        super().__init__(
+            style_classes=["qs-device-item-detail"],
+            style="margin-right: 6px;",
+            spacing=2,
+            children=[self._icon, self._label],
+            **kwargs,
+        )
+
+        self._device.connect("changed", self._on_changed)
+        self._update()
+
+    def _on_changed(self, *_):
+        self._update()
+
+    def _update(self, *_):
+        pct        = self._device.battery_level
+        has_battery = pct > 0
+
+        self.set_visible(has_battery)
+        if not has_battery:
+            return
+
+        self._label.set_label(f"{pct}%")
+        self._icon.icon_name = self._get_battery_icon(pct)
+
+    @staticmethod
+    def _get_battery_icon(pct: int) -> str:
+        if pct > 80:
+            return "battery-vertical-full-duotone"
+        elif pct > 60:
+            return "battery-vertical-high-duotone"
+        elif pct > 40:
+            return "battery-vertical-medium-duotone"
+        elif pct > 20:
+            return "battery-vertical-low-duotone"
+        else:
+            return "battery-vertical-warning-duotone"
 
 
 class BluetoothIcon(Icon):
@@ -34,77 +84,159 @@ class BluetoothIcon(Icon):
         }.get(device_type, "bluetooth-duotone")
 
 
-class BluetoothDeviceItem(Button):
+def _build_device_menu(device: BluetoothDevice, event: Gdk.EventButton) -> None:
+    menu = Gtk.Menu()
+
+    connect_item = Gtk.MenuItem(
+        label="Disconnect" if device.connected else "Connect"
+    )
+    connect_item.connect(
+        "activate",
+        lambda _: setattr(device, "connecting", not device.connected),
+    )
+    menu.append(connect_item)
+
+    menu.append(Gtk.SeparatorMenuItem())
+
+    pair_item = Gtk.MenuItem(label="Unpair" if device.paired else "Pair")
+    # Can't unpair while connected — mirrors blueman behaviour
+    pair_item.set_sensitive(not device.connected)
+    pair_item.connect(
+        "activate",
+        lambda _: setattr(device, "paired", not device.paired),
+    )
+    menu.append(pair_item)
+
+    trust_item = Gtk.MenuItem(label="Untrust" if device.trusted else "Trust")
+    trust_item.connect(
+        "activate",
+        lambda _: setattr(device, "trusted", not device.trusted),
+    )
+    menu.append(trust_item)
+
+    if user_options.theme.blur:
+        popup_with_blur(menu, event)
+    else:
+        menu.show_all()
+        menu.popup_at_pointer(event)
+
+
+class BluetoothDeviceItem(Box):
     def __init__(self, device: BluetoothDevice, **kwargs):
-        self.device = device
-        self._state = BTState.IDLE
-        self._destroyed = False
+        self.device   = device
+        self._state   = BTState.IDLE
+        self._destroyed  = False
         self._sig_changed = None
-        self._sig_closed = None
+        self._sig_closed  = None
+
+        self._connect_attempted = False
 
         self.status_icon = Icon(icon_name="plugs-duotone", icon_size=16)
-        self.content = Box(
+
+        self.battery_widget = BluetoothBatteryWidget(device)
+
+        info_box = Box(
+            h_expand=True,
+            h_align="end",
             spacing=4,
-            children=[
-                BluetoothIcon(device),
-                Label(label=device.name or device.address),
-                Box(h_expand=True, h_align="end", children=[self.status_icon]),
-            ],
+            children=[self.battery_widget, self.status_icon],
         )
-        super().__init__(
-            style_classes=["menu-device-item"],
-            child=self.content,
+
+        self.content = Button(
+            style_classes=["qs-device-item", "left"],
+            h_expand=True,
+            h_align="fill",
             on_clicked=lambda *_: self._handle_click(),
+            child=Box(
+                spacing=4,
+                children=[
+                    BluetoothIcon(device),
+                    Label(
+                        style_classes=["qs-device-item-label"],
+                        label=device.name or device.address,
+                        max_chars_width=20,
+                        ellipsize=True,
+                    ),
+                    info_box,
+                ],
+            ),
+        )
+
+        self._dots_btn = Button(
+            child=Icon(icon_name="dots-three-outline-vertical-duotone", icon_size=16),
+            style_classes=["qs-device-item", "right"],
+        )
+        self._dots_btn.connect("button-press-event", self._open_context_menu)
+
+        super().__init__(
+            spacing=1,
+            children=[self.content, self._dots_btn],
             **kwargs,
         )
 
         self._sig_changed = self.device.connect("changed", self._on_device_changed)
-        self._sig_closed = self.device.connect(
+        self._sig_closed  = self.device.connect(
             "notify::closed", self._on_device_closed
         )
         self._refresh_state()
 
+    def _open_context_menu(self, _widget, event: Gdk.EventButton):
+        _build_device_menu(self.device, event)
+        return True
+
     def _on_device_closed(self, *_):
         if self.device.closed:
             self._disconnect_signals()
+            GLib.idle_add(self._safe_destroy)
+
+    def _safe_destroy(self):
+        if not self._destroyed:
             self.destroy()
+        return False
 
     def _disconnect_signals(self):
-        if self._sig_changed is not None:
-            try:
-                self.device.disconnect(self._sig_changed)
-            except Exception:
-                pass
-            self._sig_changed = None
-        if self._sig_closed is not None:
-            try:
-                self.device.disconnect(self._sig_closed)
-            except Exception:
-                pass
-            self._sig_closed = None
+        for attr in ("_sig_changed", "_sig_closed"):
+            sig_id = getattr(self, attr, None)
+            if sig_id is not None:
+                try:
+                    self.device.disconnect(sig_id)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
 
     def destroy(self):
         self._destroyed = True
         self._disconnect_signals()
         super().destroy()
 
-    def _handle_click(self):
+    def _handle_click(self, *_):
         if self._destroyed:
             return
         if self._state == BTState.CONNECTED:
+            self._connect_attempted = False
+            self._set_state(BTState.DISCONNECTING)
             self.device.connecting = False
-            self._set_state(BTState.IDLE)
-        elif self._state != BTState.CONNECTING:
+        elif self._state == BTState.IDLE:
+            self._connect_attempted = True
             self._set_state(BTState.CONNECTING)
             self.device.connecting = True
 
     def _on_device_changed(self, *_):
         if self._destroyed:
             return
+
         if self.device.connected:
+            self._connect_attempted = False
             self._set_state(BTState.CONNECTED)
+
         elif self._state == BTState.CONNECTING:
-            self._set_state(BTState.FAILED)
+            if self._connect_attempted:
+                self._connect_attempted = False
+                self._set_state(BTState.FAILED)
+
+        elif self._state == BTState.DISCONNECTING:
+            self._set_state(BTState.IDLE)
+
         else:
             self._set_state(BTState.IDLE)
 
@@ -115,24 +247,34 @@ class BluetoothDeviceItem(Button):
         if self._destroyed:
             return
         self._state = state
-        for cls in ["active", "connecting", "failed"]:
-            self.remove_style_class(cls)
+
+        for cls in ("active", "connecting", "disconnecting", "failed"):
+            self.content.remove_style_class(cls)
 
         if state == BTState.CONNECTED:
-            self.add_style_class("active")
+            self.content.add_style_class("active")
             self.status_icon.set_visible(True)
             self.status_icon.icon_name = "plugs-connected-duotone"
+
         elif state == BTState.CONNECTING:
-            self.add_style_class("connecting")
+            self.content.add_style_class("connecting")
             self.status_icon.set_visible(True)
             self.status_icon.icon_name = "plugs-duotone"
+
+        elif state == BTState.DISCONNECTING:
+            self.content.add_style_class("disconnecting")
+            self.status_icon.set_visible(True)
+            self.status_icon.icon_name = "plugs-duotone"
+
         elif state == BTState.FAILED:
-            self.add_style_class("failed")
+            self.content.add_style_class("failed")
             self.status_icon.set_visible(True)
             self.status_icon.icon_name = "plugs-duotone"
             GLib.timeout_add(5000, self._reset_from_failed)
+
         else:
-            self.status_icon.set_visible(self.device.paired)
+            has_status = self.device.paired or self.device.trusted
+            self.status_icon.set_visible(has_status)
             self.status_icon.icon_name = "plugs-duotone"
 
     def _reset_from_failed(self):
@@ -140,19 +282,19 @@ class BluetoothDeviceItem(Button):
             self._set_state(BTState.IDLE)
         return False
 
-
 class BluetoothAdapterTab:
-    """
-    Manages the device list and per-adapter power switch state for one adapter.
-    Created/destroyed as adapters appear and disappear.
-    """
 
-    def __init__(self, adapter: BluetoothAdapter, tab_stack: "TabStack", switch: SmoothSwitch):
-        self._adapter = adapter
-        self._tab_stack = tab_stack
-        self._switch = switch
+    def __init__(
+        self,
+        adapter: BluetoothAdapter,
+        tab_stack: "TabStack",
+        switch: SmoothSwitch,
+    ):
+        self._adapter     = adapter
+        self._tab_stack   = tab_stack
+        self._switch      = switch
         self._device_items: dict[str, BluetoothDeviceItem] = {}
-        self._destroyed = False
+        self._destroyed   = False
 
         self._devices_box = Box(orientation="v", spacing=6)
 
@@ -168,23 +310,24 @@ class BluetoothAdapterTab:
                 )
             ],
         )
+        self._placeholder_label: Label = self._placeholder.get_children()[0]
 
         self._content_stack = Stack(
             transition_duration=200,
             transition_type="crossfade",
-            children=[
-                self._devices_box,
-                self._placeholder,
-            ],
+            children=[self._devices_box, self._placeholder],
         )
-
-        for device in adapter.devices:
-            self._add_device_item(device)
-        self._update_placeholder()
 
         self._sig_added   = adapter.connect("device-added",   self._on_device_added)
         self._sig_removed = adapter.connect("device-removed", self._on_device_removed)
-        self._sig_changed = adapter.connect("changed",        lambda *_: self._update_placeholder())
+        self._sig_changed = adapter.connect(
+            "changed", lambda *_: self._on_adapter_changed()
+        )
+
+        for device in adapter._devices.values():
+            self._add_device_item(device)
+
+        self._update_placeholder()
 
         tab_name  = adapter.object_path.split("/")[-1]
         tab_label = adapter.name or tab_name
@@ -195,6 +338,26 @@ class BluetoothAdapterTab:
             content=TabMenu(child=self._content_stack),
         )
         self._tab_name = tab_name
+
+    def _on_adapter_changed(self):
+        if self._destroyed:
+            return
+        if not self._adapter.scanning:
+            self._prune_unknown_devices()
+        self._update_placeholder()
+
+    def _prune_unknown_devices(self):
+        to_remove = [
+            addr for addr, item in self._device_items.items()
+            if not (item.device.paired or item.device.trusted)
+        ]
+        for addr in to_remove:
+            item = self._device_items.pop(addr)
+            item.destroy()
+            try:
+                self._devices_box.remove(item)
+            except Exception:
+                pass
 
     def _on_device_added(self, adapter: BluetoothAdapter, address: str):
         if self._destroyed:
@@ -216,17 +379,14 @@ class BluetoothAdapterTab:
         self._update_placeholder()
 
     def sync_switch(self):
-        """Update the shared power switch to reflect this adapter's state."""
         if not self._destroyed:
             self._switch.set_active(self._adapter.powered)
 
     def handle_switch_toggle(self, value: bool):
-        """Apply a switch toggle to this adapter only."""
         if not self._destroyed:
             self._adapter.powered = value
 
     def handle_scan(self):
-        """Trigger a timed scan on this adapter."""
         if not self._destroyed:
             self._adapter.scan()
 
@@ -242,12 +402,23 @@ class BluetoothAdapterTab:
     def _update_placeholder(self):
         if self._destroyed:
             return
-        label = "No devices found" if self._adapter.powered else "Adapter is off"
-        self._placeholder.get_children()[0].set_label(label)
-        if self._device_items:
-            self._content_stack.set_visible_child(self._content_stack.get_children()[0])
+
+        if not self._adapter.powered:
+            label   = "Adapter is off"
+            show_ph = True
+        elif not self._device_items:
+            label   = "No devices found"
+            show_ph = True
         else:
+            label   = ""
+            show_ph = False
+
+        self._placeholder_label.set_label(label)
+
+        if show_ph:
             self._content_stack.set_visible_child(self._placeholder)
+        else:
+            self._content_stack.set_visible_child(self._devices_box)
 
     def destroy(self):
         if self._destroyed:
@@ -272,9 +443,9 @@ class BluetoothAdapterTab:
 
         self._tab_stack.remove_tab(self._tab_name)
 
+
 class BluetoothMenu(QSAppletPage):
     def __init__(self, parent=None, stack=None, **kwargs):
-        # dict[adapter_path] -> (BluetoothAdapterTab, powered_signal_id)
         self._adapter_tabs: dict[str, tuple[BluetoothAdapterTab, int]] = {}
 
         self.tab_stack = TabStack()
@@ -338,7 +509,7 @@ class BluetoothMenu(QSAppletPage):
         tab.destroy()
         self._sync_switch_to_active_tab()
 
-    def _get_active_tab(self) -> BluetoothAdapterTab | None:
+    def _get_active_tab(self) -> "BluetoothAdapterTab | None":
         try:
             visible_name = self.tab_stack.get_visible_child_name()
             if visible_name:

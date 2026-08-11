@@ -289,3 +289,39 @@
     box-shadow: inset 0 0 0 1px var(--outline);
     transition: 0.3s ease;
 }
+
+.qs-device-item {
+    min-height: 32px;
+    padding: 2px 10px;
+    background-color: var(--surface_container);
+    transition: 0.3s ease;
+}
+.qs-device-item:hover {
+    background-color: var(--surface_container_high);
+    transition: 0.3s ease;
+}
+.qs-device-item.left {
+    border-radius: apply(radius-m) 0 0 apply(radius-m);
+}
+.qs-device-item.right {
+    border-radius: 0 apply(radius-m) apply(radius-m) 0;
+}
+
+.qs-device-item.connecting * {
+    color: var(--secondary);
+}
+
+.qs-device-item.failed * {
+    color: var(--on_error);
+}
+
+.qs-device-item.active * {
+    color: var(--primary);
+}
+
+.qs-device-item-detail * {
+    opacity: 0.8;
+    font-size: 11px;
+    /* border: 2px solid red; */
+    color: var(--on_surface);
+}

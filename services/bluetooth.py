@@ -14,6 +14,7 @@ BLUEZ_BATTERY_IFACE = "org.bluez.Battery1"
 DBUS_OM_IFACE       = "org.freedesktop.DBus.ObjectManager"
 DBUS_PROPS_IFACE    = "org.freedesktop.DBus.Properties"
 
+
 def _unpack_variant(v):
     if v is None:
         return None
@@ -24,6 +25,7 @@ def _unpack_variant(v):
     if isinstance(v, (list, tuple)):
         return [_unpack_variant(i) for i in v]
     return v
+
 
 def _make_proxy(bus: Gio.DBusConnection, path: str, iface: str) -> Gio.DBusProxy:
     return Gio.DBusProxy.new_sync(
@@ -60,9 +62,16 @@ class BluetoothDevice(Service):
         def _cb(proxy, res, _):
             try:
                 proxy.call_finish(res)
-                logger.info(f"[Bluetooth] {'Connected' if value else 'Disconnected'}: {self.address}")
+                logger.info(
+                    f"[Bluetooth] {'Connected' if value else 'Disconnected'}: {self.address}"
+                )
+                if value:
+                    self._try_acquire_battery_proxy()
             except Exception as e:
-                logger.warning(f"[Bluetooth] connect_device failed for {self.address}: {e}")
+                logger.warning(
+                    f"[Bluetooth] {'Connect' if value else 'Disconnect'} failed "
+                    f"for {self.address}: {e}"
+                )
             finally:
                 self._connecting = False
                 self.notify("connecting")
@@ -72,17 +81,80 @@ class BluetoothDevice(Service):
         method = "Connect" if value else "Disconnect"
         self._proxy.call(method, None, Gio.DBusCallFlags.NONE, 30000, None, _cb, None)
 
-    @Property(bool, "readable", "is-closed", default_value=False)
-    def closed(self) -> bool:
-        return self._closed
-
     @Property(bool, "read-write", "is-paired", default_value=False)
     def paired(self) -> bool:
         return bool(self._get_prop("Paired"))
 
-    @Property(bool, "readable", "is-trusted", default_value=False)
+    @paired.setter
+    def paired(self, value: bool):
+        if value:
+            self._pair_async()
+        else:
+            self._unpair_async()
+
+    def _pair_async(self):
+        def _cb(proxy, res, _):
+            try:
+                proxy.call_finish(res)
+                logger.info(f"[Bluetooth] Paired: {self.address}")
+            except Exception as e:
+                logger.warning(f"[Bluetooth] Pair failed for {self.address}: {e}")
+            finally:
+                self.notify("paired")
+                self.emit("changed")
+
+        self._proxy.call("Pair", None, Gio.DBusCallFlags.NONE, 30000, None, _cb, None)
+
+    def _unpair_async(self):
+        if self._adapter_proxy is None:
+            logger.warning(
+                f"[Bluetooth] Cannot unpair {self.address}: no adapter proxy available"
+            )
+            return
+
+        def _cb(proxy, res, _):
+            try:
+                proxy.call_finish(res)
+                logger.info(f"[Bluetooth] Unpaired: {self.address}")
+            except Exception as e:
+                logger.warning(f"[Bluetooth] Unpair failed for {self.address}: {e}")
+            finally:
+                self.notify("paired")
+                self.emit("changed")
+
+        self._adapter_proxy.call(
+            "RemoveDevice",
+            GLib.Variant("(o)", (self._object_path,)),
+            Gio.DBusCallFlags.NONE, 10000, None, _cb, None,
+        )
+
+    @Property(bool, "read-write", "is-trusted", default_value=False)
     def trusted(self) -> bool:
         return bool(self._get_prop("Trusted"))
+
+    @trusted.setter
+    def trusted(self, value: bool):
+        try:
+            self._proxy.call_sync(
+                "org.freedesktop.DBus.Properties.Set",
+                GLib.Variant(
+                    "(ssv)",
+                    (BLUEZ_DEVICE_IFACE, "Trusted", GLib.Variant("b", value)),
+                ),
+                Gio.DBusCallFlags.NONE, 5000, None,
+            )
+            logger.info(
+                f"[Bluetooth] {'Trusted' if value else 'Untrusted'}: {self.address}"
+            )
+        except Exception as e:
+            logger.warning(f"[Bluetooth] Set Trusted failed for {self.address}: {e}")
+        finally:
+            self.notify("trusted")
+            self.emit("changed")
+
+    @Property(bool, "readable", "is-closed", default_value=False)
+    def closed(self) -> bool:
+        return self._closed
 
     @Property(str, "readable")
     def address(self) -> str:
@@ -112,28 +184,111 @@ class BluetoothDevice(Service):
     def battery_percentage(self) -> float:
         return float(self._get_battery_prop("Percentage") or 0.0)
 
-    def __init__(self, bus: Gio.DBusConnection, object_path: str, props: dict, **kwargs):
+    def __init__(
+        self,
+        bus: Gio.DBusConnection,
+        object_path: str,
+        props: dict,
+        adapter_proxy: Gio.DBusProxy | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        self._bus = bus
-        self._object_path = object_path
-        self._props: dict = props
-        self._connecting = False
-        self._closed = False
-        self._prop_sub_id: int = 0
+        self._bus           = bus
+        self._object_path   = object_path
+        self._props: dict   = props
+        self._connecting    = False
+        self._closed        = False
+        self._prop_sub_id          = 0
+        self._battery_sub_id       = 0
+        self._iface_added_sub_id   = 0
+        self._iface_removed_sub_id = 0
         self._battery_proxy: Gio.DBusProxy | None = None
+        self._adapter_proxy: Gio.DBusProxy | None = adapter_proxy
 
         self._proxy = _make_proxy(bus, object_path, BLUEZ_DEVICE_IFACE)
 
-        try:
-            self._battery_proxy = _make_proxy(bus, object_path, BLUEZ_BATTERY_IFACE)
-        except Exception:
-            pass
+        self._try_acquire_battery_proxy()
 
         self._prop_sub_id = bus.signal_subscribe(
             BLUEZ_SERVICE, DBUS_PROPS_IFACE, "PropertiesChanged",
             object_path, None, Gio.DBusSignalFlags.NONE,
             self._on_properties_changed, None,
         )
+
+        self._iface_added_sub_id = bus.signal_subscribe(
+            BLUEZ_SERVICE, DBUS_OM_IFACE, "InterfacesAdded",
+            None, None, Gio.DBusSignalFlags.NONE,
+            self._on_interfaces_added, None,
+        )
+        self._iface_removed_sub_id = bus.signal_subscribe(
+            BLUEZ_SERVICE, DBUS_OM_IFACE, "InterfacesRemoved",
+            None, None, Gio.DBusSignalFlags.NONE,
+            self._on_interfaces_removed, None,
+        )
+
+    def _try_acquire_battery_proxy(self):
+        if self._battery_proxy is not None:
+            return
+        try:
+            proxy = _make_proxy(self._bus, self._object_path, BLUEZ_BATTERY_IFACE)
+            if proxy.get_cached_property("Percentage") is not None:
+                self._battery_proxy = proxy
+                self._subscribe_battery_props()
+                logger.debug(f"[Bluetooth] Battery proxy acquired for {self.address}")
+        except Exception:
+            pass
+
+    def _subscribe_battery_props(self):
+        if self._battery_sub_id or self._battery_proxy is None:
+            return
+        self._battery_sub_id = self._bus.signal_subscribe(
+            BLUEZ_SERVICE, DBUS_PROPS_IFACE, "PropertiesChanged",
+            self._object_path, BLUEZ_BATTERY_IFACE, Gio.DBusSignalFlags.NONE,
+            self._on_battery_properties_changed, None,
+        )
+
+    def _on_interfaces_added(self, _conn, _sender, _path, _iface, _signal, params, _data):
+        try:
+            unpacked = _unpack_variant(params)
+            obj_path = unpacked[0]
+            ifaces   = unpacked[1]
+        except Exception:
+            return
+
+        if obj_path != self._object_path:
+            return
+        if BLUEZ_BATTERY_IFACE in ifaces:
+            self._battery_proxy = None
+            self._try_acquire_battery_proxy()
+            self.notify("battery-level")
+            self.notify("battery-percentage")
+            self.emit("changed")
+
+    def _on_interfaces_removed(self, _conn, _sender, _path, _iface, _signal, params, _data):
+        try:
+            unpacked = _unpack_variant(params)
+            obj_path = unpacked[0]
+            ifaces   = unpacked[1]
+        except Exception:
+            return
+
+        if obj_path != self._object_path:
+            return
+        if BLUEZ_BATTERY_IFACE in ifaces:
+            if self._battery_sub_id:
+                self._bus.signal_unsubscribe(self._battery_sub_id)
+                self._battery_sub_id = 0
+            self._battery_proxy = None
+            self.notify("battery-level")
+            self.notify("battery-percentage")
+            self.emit("changed")
+
+    def _on_battery_properties_changed(self, _conn, _sender, _path, _iface, _signal, params, _data):
+        changed = _unpack_variant(params)[1] if params else {}
+        if "Percentage" in changed:
+            self.notify("battery-level")
+            self.notify("battery-percentage")
+            self.emit("changed")
 
     def _get_prop(self, name: str):
         try:
@@ -171,9 +326,11 @@ class BluetoothDevice(Service):
         self.emit("changed")
 
     def close(self):
-        if self._prop_sub_id:
-            self._bus.signal_unsubscribe(self._prop_sub_id)
-            self._prop_sub_id = 0
+        for sub_id_attr in ("_prop_sub_id", "_battery_sub_id", "_iface_sub_id"):
+            sub_id = getattr(self, sub_id_attr, 0)
+            if sub_id:
+                self._bus.signal_unsubscribe(sub_id)
+                setattr(self, sub_id_attr, 0)
         self._closed = True
         self.notify("closed")
 
@@ -207,7 +364,8 @@ class BluetoothAdapter(Service):
 
     @Property(list, "readable")
     def devices(self) -> list:
-
+        if self._get_prop("Discovering"):
+            return list(self._devices.values())
         return [d for d in self._devices.values() if d.paired or d.trusted]
 
     @Property(list, "readable")
@@ -266,12 +424,12 @@ class BluetoothAdapter(Service):
 
     def __init__(self, bus: Gio.DBusConnection, object_path: str, props: dict, **kwargs):
         super().__init__(**kwargs)
-        self._bus = bus
+        self._bus         = bus
         self._object_path = object_path
         self._props: dict = props
 
         self._devices: dict[str, BluetoothDevice] = {}
-        self._prop_sub_id: int = 0
+        self._prop_sub_id:    int = 0
         self._scan_timeout_id: int = 0
 
         self._proxy = _make_proxy(bus, object_path, BLUEZ_ADAPTER_IFACE)
@@ -317,39 +475,48 @@ class BluetoothAdapter(Service):
                 self.notify("state")
         self.emit("changed")
 
+
     def add_device(self, object_path: str, props: dict):
         addr: str = props.get("Address", _path_to_addr(object_path))
         if addr in self._devices:
             return
 
+        paired  = bool(props.get("Paired", False))
+        trusted = bool(props.get("Trusted", False))
+        connected = bool(props.get("Connected", False))
+
+        logger.info(
+            f"[Bluetooth:{self.name}] Adding device: {addr} "
+            f"(paired={paired} trusted={trusted} connected={connected})"
+        )
+
         device = BluetoothDevice(
-            self._bus, object_path, props,
+            self._bus,
+            object_path,
+            props,
+            adapter_proxy=self._proxy,
             on_changed=lambda *_: self.emit("changed"),
         )
         self._devices[addr] = device
 
-        logger.info(f"[Bluetooth:{self.name}] Adding device: {addr}")
         self.emit("device-added", addr)
         self.notify("devices")
         self.notify("connected-devices")
         self.emit("changed")
 
     def remove_device(self, object_path: str):
-        addr = _path_to_addr(object_path)
+        addr   = _path_to_addr(object_path)
         device = self._devices.pop(addr, None)
         if not device:
-
             return
 
-        was_visible = device.paired or device.trusted
         logger.info(f"[Bluetooth:{self.name}] Removing device: {addr}")
 
-        if was_visible:
-            self.emit("device-removed", addr)
-            if device.connected:
-                self.notify("connected-devices")
-            self.notify("devices")
-            self.emit("changed")
+        self.emit("device-removed", addr)
+        if device.connected:
+            self.notify("connected-devices")
+        self.notify("devices")
+        self.emit("changed")
 
         device.close()
 
@@ -357,7 +524,6 @@ class BluetoothAdapter(Service):
         return self._devices.get(address)
 
     def scan(self, duration_ms: int = 10_000):
-        """Start discovery and automatically stop after duration_ms."""
         if self._scan_timeout_id:
             GLib.source_remove(self._scan_timeout_id)
             self._scan_timeout_id = 0
@@ -471,7 +637,7 @@ class BluetoothClient(Service):
         self._adapters: dict[str, BluetoothAdapter] = {}
         self._bus: Gio.DBusConnection | None = None
         self._om_proxy: Gio.DBusProxy | None = None
-        self._iface_added_sub: int = 0
+        self._iface_added_sub:   int = 0
         self._iface_removed_sub: int = 0
 
         self._bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
@@ -495,7 +661,7 @@ class BluetoothClient(Service):
 
     def _populate_from_object_manager(self):
         try:
-            result = self._om_proxy.call_sync(
+            result  = self._om_proxy.call_sync(
                 "GetManagedObjects", None, Gio.DBusCallFlags.NONE, 5000, None
             )
             objects = _unpack_variant(result)[0]
@@ -538,17 +704,16 @@ class BluetoothClient(Service):
 
     def _add_device(self, path: str, props: dict):
         adapter_path = _device_path_to_adapter_path(path)
-        adapter = self._adapters.get(adapter_path)
+        adapter      = self._adapters.get(adapter_path)
         if not adapter:
             logger.warning(f"[Bluetooth] No adapter found for device at {path}")
             return
-
         adapter.add_device(path, props)
 
     def _on_interfaces_added(self, _conn, _sender, _path, _iface, _signal, params, _data):
         unpacked = _unpack_variant(params)
         obj_path: str = unpacked[0]
-        ifaces: dict = unpacked[1]
+        ifaces: dict  = unpacked[1]
 
         if BLUEZ_ADAPTER_IFACE in ifaces:
             self._add_adapter(obj_path, ifaces[BLUEZ_ADAPTER_IFACE])
@@ -558,7 +723,7 @@ class BluetoothClient(Service):
     def _on_interfaces_removed(self, _conn, _sender, _path, _iface, _signal, params, _data):
         unpacked = _unpack_variant(params)
         obj_path: str = unpacked[0]
-        ifaces: list = unpacked[1]
+        ifaces: list  = unpacked[1]
 
         if BLUEZ_ADAPTER_IFACE in ifaces:
             adapter = self._adapters.pop(obj_path, None)
@@ -571,7 +736,7 @@ class BluetoothClient(Service):
 
         if BLUEZ_DEVICE_IFACE in ifaces:
             adapter_path = _device_path_to_adapter_path(obj_path)
-            adapter = self._adapters.get(adapter_path)
+            adapter      = self._adapters.get(adapter_path)
             if adapter:
                 adapter.remove_device(obj_path)
 
@@ -611,12 +776,15 @@ class BluetoothClient(Service):
         self.notify(name)
         self.emit("changed")
 
+
 def _device_path_to_adapter_path(device_path: str) -> str:
     parts = device_path.rsplit("/", 1)
     return parts[0] if len(parts) == 2 else device_path
 
+
 def _path_to_addr(object_path: str) -> str:
     return object_path.split("/")[-1][4:].replace("_", ":")
+
 
 def _icon_to_type(icon: str) -> str:
     return {

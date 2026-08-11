@@ -78,18 +78,6 @@
     transition: background-color 0.3s ease;
 }
 
-.menu-device-item.connecting * {
-    color: var(--secondary);
-}
-
-.menu-device-item.failed * {
-    color: var(--on_error);
-}
-
-.menu-device-item.active * {
-    color: var(--primary);
-}
-
 .menu-device-item:hover{
     background-color: var(--surface_container_high);
 }
