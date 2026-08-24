@@ -31,6 +31,8 @@ For a rapid deployment on Arch Linux, you can stream the setup script directly:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AbsolLinux/agility-shell/main/install.sh | bash
 ```
+>[!NOTE]
+>`reboot` is requred after installtion (it will directly loads shell into the niri (menual config will not needed-after it))
 
 ---
 
