@@ -1,4 +1,4 @@
-agility shell is a modern, GTK-based desktop shell built on top of Fabric, Python, and GTK. It features a highly customizable drag-and-drop panel, fluid animations, and deeply integrated system applets designed specifically for modern Wayland compositors.
+-  *agility shell is a modern, GTK-based desktop shell built on top of Fabric, Python, and GTK. It features a highly customizable drag-and-drop panel, fluid animations, and deeply integrated system applets designed specifically for modern Wayland compositors.*
 
 ---
 
