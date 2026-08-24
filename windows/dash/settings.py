@@ -1,0 +1,259 @@
+from __future__ import annotations
+from fabric.widgets.box import Box
+from fabric.widgets.button import Button
+from fabric.widgets.label import Label
+from gi.repository import Gtk, GLib
+from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch, FlatScale
+from user_options import user_options
+import services.singletons as singletons
+from .themes import Section
+
+
+class DashSettingsPage(Box):
+    """
+    Dash settings page for configuring:
+      - Hover-to-Open behavior & delay
+      - Bar Transparency (Opacity percentage slider)
+      - Bar Position (Top / Bottom alignment)
+    """
+
+    def __init__(self, bar_manager=None, **kwargs):
+        self._bar_manager = bar_manager
+        content = self._build_content()
+
+        self.scroll = ClippingScrolledWindow(
+            h_expand=False,
+            h_align="center",
+            style_classes=["dash-grid"],
+            child=content,
+            max_content_size=(1104, 604),
+            fade_distance=56,
+            overlay_scroll=True,
+            kinetic_scroll=True,
+        )
+        self.scroll.set_size_request(1104, 604)
+
+        super().__init__(
+            orientation="v",
+            v_align="center",
+            spacing=24,
+            children=[self.scroll],
+            **kwargs,
+        )
+
+    def _build_content(self) -> Box:
+        # --- Section 1: Bar Behavior & Hover ---
+        self._hover_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_hover_toggled,
+            width=48,
+        )
+        self._hover_switch.set_active(getattr(user_options.settings, "hover_open", True))
+
+        hover_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Hover to Open", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Open Dash and bar applets when hovering the mouse over them", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._hover_switch]),
+            ],
+        )
+
+        current_delay = getattr(user_options.settings, "hover_delay", 180)
+        self._delay_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=50,
+            max_value=500,
+            step=10,
+            value=current_delay,
+            value_formatter=lambda val: f"{int(val)}ms",
+            h_expand=True,
+        )
+        self._delay_slider.connect("value-changed", self._on_delay_changed)
+
+        delay_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Hover Delay", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Debounce duration before opening on hover", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", style="min-width: 224px;", children=[self._delay_slider]),
+            ],
+        )
+
+        behavior_section = Section(
+            title="Bar Behavior",
+            children=[hover_row, delay_row],
+        )
+
+        # --- Section 2: Appearance & Transparency ---
+        current_opacity = getattr(user_options.settings, "bar_opacity", 1.0)
+        self._opacity_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            value=current_opacity,
+            value_formatter=lambda val: f"{round(val * 100)}%",
+            h_expand=True,
+        )
+        self._opacity_slider.connect("value-changed", self._on_opacity_changed)
+
+        opacity_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Bar Transparency", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Adjust background opacity (100% is solid, 0% is fully transparent)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", style="min-width: 224px;", children=[self._opacity_slider]),
+            ],
+        )
+
+        appearance_section = Section(
+            title="Bar Appearance",
+            children=[opacity_row],
+        )
+
+        # --- Section 3: Position & Layout ---
+        current_pos = self._get_current_bar_alignment()
+
+        self._top_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=6,
+                children=[
+                    Icon(icon_name="align-top-duotone", icon_size=16),
+                    Label(label="Top"),
+                ],
+            ),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._set_position("top"),
+        )
+
+        self._bottom_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=6,
+                children=[
+                    Icon(icon_name="align-bottom-duotone", icon_size=16),
+                    Label(label="Bottom"),
+                ],
+            ),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._set_position("bottom"),
+        )
+
+        self._update_position_buttons(current_pos)
+
+        pos_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Bar Position", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Attach the bar to the top or bottom screen edge", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(
+                    style_classes=["option-selection-container"],
+                    orientation="h",
+                    spacing=6,
+                    h_align="end",
+                    children=[self._top_btn, self._bottom_btn],
+                ),
+            ],
+        )
+
+        position_section = Section(
+            title="Bar Position",
+            children=[pos_row],
+        )
+
+        container = Box(
+            orientation="v",
+            spacing=32,
+            h_align="center",
+            children=[
+                behavior_section,
+                appearance_section,
+                position_section,
+            ],
+        )
+        return container
+
+    def _get_current_bar_alignment(self) -> str:
+        if user_options.bars.configs and user_options.bars.configs[0].get("bars"):
+            return user_options.bars.configs[0]["bars"][0].get("alignment", "bottom")
+        return "bottom"
+
+    def _update_position_buttons(self, alignment: str):
+        if alignment == "top":
+            self._top_btn.add_style_class("active")
+            self._bottom_btn.remove_style_class("active")
+        else:
+            self._bottom_btn.add_style_class("active")
+            self._top_btn.remove_style_class("active")
+
+    def _on_hover_toggled(self, state: bool):
+        user_options.settings.hover_open = state
+        user_options.save()
+
+    def _on_delay_changed(self, _scale, val: float):
+        user_options.settings.hover_delay = int(val)
+        user_options.save()
+
+    def _on_opacity_changed(self, _scale, val: float):
+        opacity = max(0.0, min(1.0, float(val)))
+        user_options.settings.bar_opacity = opacity
+        user_options.save()
+
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "apply_bar_opacity"):
+            bm.apply_bar_opacity(opacity)
+
+    def _set_position(self, alignment: str):
+        self._update_position_buttons(alignment)
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "set_bar_alignment"):
+            bm.set_bar_alignment(alignment)
+        else:
+            for cfg in user_options.bars.configs:
+                for b in cfg.get("bars", []):
+                    b["alignment"] = alignment
+            user_options.save()

@@ -87,6 +87,22 @@
     transition: 0.3s ease;
 }
 
+.menu-device-item.active, .menu-device-item.connected {
+    background-color: var(--surface_container_highest);
+}
+
+.menu-device-item.active *, .menu-device-item.connected * {
+    color: var(--primary);
+}
+
+.menu-device-item.connecting * {
+    color: var(--secondary);
+}
+
+.menu-device-item.failed * {
+    color: var(--error);
+}
+
 .menu-list-placeholder {
     background-color: var(--surface_container);
     border-radius: apply(radius-l);
