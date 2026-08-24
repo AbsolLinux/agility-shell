@@ -250,7 +250,7 @@ class NotificationWindow(Window):
         super().__init__(
             anchor="top right",
             monitor=monitor,
-            title="caffyne-shell-notifications",
+            title="agility-shell-notifications",
             layer="overlay",
             child=Box(
                 style_classes=["notification-window"],

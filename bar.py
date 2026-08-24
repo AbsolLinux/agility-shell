@@ -217,7 +217,7 @@ class AppletWindow(PopupWindow):
         self.main = Box(style="min-height: 1px;", children=[self.revealer])
         self.dismiss_layer = DismissLayer(on_dismiss=self.toggle)
 
-        super().__init__(title="caffyne-shell-applet", child=self.main, **kwargs)
+        super().__init__(title="agility-shell-applet", child=self.main, **kwargs)
         self.add_keybinding("escape", lambda: self.toggle())
         if not standalone:
             GtkLayerShell.set_exclusive_zone(self, -1)
@@ -1343,7 +1343,7 @@ class Bar(Window):
         self._revealer.set_reveal_child(False)
 
         super().__init__(
-            title=f"caffyne-shell-bar",
+            title=f"agility-shell-bar",
             layer="top",
             anchor=f"{self.alignment}" if self.min_width else f"{self.alignment} left right",
             exclusivity="none" if self.auto_hide else "auto",

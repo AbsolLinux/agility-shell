@@ -11,7 +11,7 @@ from loguru import logger
 
 
 
-CACHE_DIR = os.path.expanduser("~/.cache/caffyne-shell")
+CACHE_DIR = os.path.expanduser("~/.cache/agility-shell")
 
 ICON_CACHE_FILE = os.path.join(CACHE_DIR, "icons.json")
 os.makedirs(CACHE_DIR, exist_ok=True)

@@ -64,6 +64,13 @@ typedef struct {
 
 G_END_DECLS
 
+/* Suppress G_TYPE_INSTANCE_GET_PRIVATE deprecation warnings.
+ * This macro is used intentionally to access private struct data
+ * in GTK3 widget internals for animation hacks. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#pragma GCC diagnostic ignored "-Wcpp"
+
 
 static gdouble
 inverse_ease_out_cubic(gdouble p)
@@ -242,3 +249,5 @@ gtk_revealer_finish_transition(GtkRevealer *revealer)
     priv->target_pos = 0.0;
     gtk_widget_queue_resize(GTK_WIDGET(revealer));
 }
+
+#pragma GCC diagnostic pop

@@ -12,7 +12,7 @@ from fabric.core.service import Service, Property, Signal
 CACHE_DURATION = 600
 STALE_CACHE_MAX = 1800
 UPDATE_INTERVAL = 600
-TEMP_DIR = Path.home() / ".cache" / "caffyne-shell" / "weather"
+TEMP_DIR = Path.home() / ".cache" / "agility-shell" / "weather"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 IP_LOCATION_API = "http://ip-api.com/json/"

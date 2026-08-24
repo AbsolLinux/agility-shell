@@ -300,7 +300,7 @@ class OSD(WaylandWindow):
             layer="overlay",
             anchor="bottom",
             margin="0 0 48px 0",
-            title="caffyne-shell-osd",
+            title="agility-shell-osd",
             monitor=monitor,
             child=self.stack_box,
             visible=False,

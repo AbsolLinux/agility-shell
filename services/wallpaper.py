@@ -15,8 +15,8 @@ from fabric.widgets.wayland import WaylandWindow
 from loguru import logger
 from user_options import user_options
 from utils.helpers import popup_with_blur
-CACHE_WALLPAPER_PATH = os.path.expanduser("~/.cache/caffyne-shell/wallpaper")
-CACHE_BLURRED_PATH   = os.path.expanduser("~/.cache/caffyne-shell/wallpaper_blurred")
+CACHE_WALLPAPER_PATH = os.path.expanduser("~/.cache/agility-shell/wallpaper")
+CACHE_BLURRED_PATH   = os.path.expanduser("~/.cache/agility-shell/wallpaper_blurred")
 
 AWWW_TRANSITION_FPS      = 60
 AWWW_TRANSITION_DURATION = 1.5

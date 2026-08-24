@@ -11,9 +11,9 @@ from loguru import logger
 
 from user_options import user_options
 
-TEMPLATES_DIR        = os.path.expanduser("~/.config/caffyne-shell/templates")
-TEMPLATES_REPO       = "https://github.com/caffyne-org/caffyne-templates"
-MATUGEN_CONFIG_CACHE = os.path.expanduser("~/.cache/caffyne-shell/matugen-templates.toml")
+TEMPLATES_DIR        = os.path.expanduser("~/.config/agility-shell/templates")
+TEMPLATES_REPO       = "https://github.com/AbsolLinux/agility-templates"
+MATUGEN_CONFIG_CACHE = os.path.expanduser("~/.cache/agility-shell/matugen-templates.toml")
 MATUGEN_CONFIG_DIR  = os.path.expanduser("~/.config/matugen")
 MATUGEN_CONFIG_PATH = os.path.join(MATUGEN_CONFIG_DIR, "config.toml")
 
@@ -88,7 +88,7 @@ class TemplateService:
 
     def build_matugen_config(self) -> str:
         """
-        Build a matugen TOML config from the caffyne-shell template (always)
+        Build a matugen TOML config from the agility-shell template (always)
         plus any user-enabled templates, then merge in any [templates.*] blocks
         from the existing ~/.config/matugen/config.toml that aren't already covered.
         Always returns the config path.
@@ -96,8 +96,8 @@ class TemplateService:
         templates = self.list_templates()
         enabled   = [t for t in templates if t.get("enabled")]
 
-        # Collect all IDs that caffyne will manage so we can exclude them from the merge
-        managed_ids: set[str] = {"caffyne"}
+        # Collect all IDs that agility will manage so we can exclude them from the merge
+        managed_ids: set[str] = {"agility"}
         for t in enabled:
             sub_templates = t.get("templates")
             if sub_templates:
@@ -108,10 +108,10 @@ class TemplateService:
 
         lines = ["[config]", ""]
 
-        # caffyne-shell colors — always applied
-        lines.append("[templates.caffyne]")
-        lines.append(f"input_path = '{os.path.expanduser('~/.config/caffyne-shell/style/caffyne-shell-colors.css')}'")
-        lines.append(f"output_path = '{os.path.expanduser('~/.config/caffyne-shell/style/colors.css')}'")
+        # agility-shell colors — always applied
+        lines.append("[templates.agility]")
+        lines.append(f"input_path = '{os.path.expanduser('~/.config/agility-shell/style/agility-shell-colors.css')}'")
+        lines.append(f"output_path = '{os.path.expanduser('~/.config/agility-shell/style/colors.css')}'")
         lines.append("")
 
         for t in enabled:
@@ -195,7 +195,7 @@ class TemplateService:
                 continue
             template_id = m.group(1)
             if template_id in exclude_ids:
-                logger.info(f"[TemplateService] skipping existing template '{template_id}' (managed by caffyne)")
+                logger.info(f"[TemplateService] skipping existing template '{template_id}' (managed by agility)")
                 continue
 
             block = re.sub(

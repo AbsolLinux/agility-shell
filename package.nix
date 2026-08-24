@@ -102,7 +102,7 @@ let
   libraryPath = lib.makeLibraryPath (runtimeLibs ++ [ wayland pipewire ]);
 
 in stdenv.mkDerivation {
-  pname = "caffyne-shell";
+  pname = "agility-shell";
   version = "0.1.0";
   src = ./.;
 
@@ -123,16 +123,16 @@ in stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/share/caffyne-shell
-    cp -r ./* $out/share/caffyne-shell/
+    mkdir -p $out/share/agility-shell
+    cp -r ./* $out/share/agility-shell/
 
     # Patch dlopen paths to point to the Nix store .so locations
-    substituteInPlace $out/share/caffyne-shell/snippets/hacktk/hacktk.py \
+    substituteInPlace $out/share/agility-shell/snippets/hacktk/hacktk.py \
       --replace-fail \
         'get_relative_path("./lib/libhacktk.so")' \
         '"${libhacktk}/lib/libhacktk.so"'
 
-    substituteInPlace $out/share/caffyne-shell/snippets/blur/blur.py \
+    substituteInPlace $out/share/agility-shell/snippets/blur/blur.py \
       --replace-fail \
         'get_relative_path("./lib/libblur.so")' \
         '"${libblur}/lib/libblur.so"'
@@ -140,10 +140,10 @@ in stdenv.mkDerivation {
     mkdir -p $out/bin
     
     # Python-scoped entry setup wrapper
-    makeWrapper ${pythonEnv}/bin/python $out/bin/caffyne-shell \
-      --prefix PYTHONPATH : "$out/share/caffyne-shell" \
-      --add-flags "$out/share/caffyne-shell/main.py" \
-      --chdir "$out/share/caffyne-shell"
+    makeWrapper ${pythonEnv}/bin/python $out/bin/agility-shell \
+      --prefix PYTHONPATH : "$out/share/agility-shell" \
+      --add-flags "$out/share/agility-shell/main.py" \
+      --chdir "$out/share/agility-shell"
 
     runHook postInstall
   '';
@@ -164,6 +164,6 @@ in stdenv.mkDerivation {
     description = "A lightweight desktop shell powered by Fabric";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-    mainProgram = "caffyne-shell";
+    mainProgram = "agility-shell";
   };
 }

@@ -14,7 +14,7 @@ import threading
 import json
 import os
 
-USAGE_FILE = os.path.expanduser("~/.config/caffyne-shell/config/launcher_usage.json")
+USAGE_FILE = os.path.expanduser("~/.config/agility-shell/config/launcher_usage.json")
 
 def load_usage() -> dict:
     try:

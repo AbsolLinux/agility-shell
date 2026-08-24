@@ -1,5 +1,5 @@
 {
-  description = "caffyne-shell — a lightweight desktop shell powered by Fabric";
+  description = "agility-shell — a lightweight desktop shell powered by Fabric";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
@@ -112,7 +112,7 @@
         };
 
         devShells.default = pkgs.mkShell {
-          name = "caffyne-shell";
+          name = "agility-shell";
           packages = [ pythonEnv pkgs.ruff ] ++ nativeLibs;
           shellHook = ''
             export GI_TYPELIB_PATH=${pkgs.lib.makeSearchPathOutput "lib" "lib/girepository-1.0" nativeLibs}
