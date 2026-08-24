@@ -64,27 +64,58 @@ class WifiIcon(Icon):
 
 
 class AccessPointItem(Button):
-    def __init__(self, ap: AccessPoint, on_connect, wifi, **kwargs):
+    def __init__(self, ap: AccessPoint, on_connect, wifi, tab=None, **kwargs):
         self.ap = ap
         self._wifi = wifi
+        self._tab = tab
         self._on_connect = on_connect
         self._state = APState.IDLE
         self._state_signal: int | None = None
         self._failed_timer: int | None = None
 
+        self._icon = WifiIcon(ap)
+        self._ssid_label = Label(
+            label=ap.ssid or "Unknown Network",
+            style_classes=["menu-device-label"],
+            h_align="start",
+            ellipsize=True,
+            max_chars_width=18,
+        )
+
+        self._status_badge = Label(label="", style="font-size: 11px; font-weight: 500;", visible=False)
+        self._status_icon = Icon(icon_name="check-circle-duotone", icon_size=14, visible=False)
+
+        self._status_box = Box(
+            orientation="h",
+            spacing=4,
+            h_align="end",
+            v_align="center",
+            children=[self._status_icon, self._status_badge],
+        )
+
+        self._sec_icon = Icon(
+            icon_name=self._get_security_icon(ap),
+            icon_size=16,
+            h_align="end",
+        ) if ap.security else Box()
+
+        right_box = Box(
+            orientation="h",
+            spacing=8,
+            h_align="end",
+            h_expand=True,
+            v_align="center",
+            children=[self._status_box, self._sec_icon],
+        )
+
         super().__init__(
             events=["click"],
             child=Box(
-                spacing=4,
+                spacing=8,
                 children=[
-                    WifiIcon(ap),
-                    Label(label=ap.ssid or ""),
-                    Icon(
-                        icon_name=self._get_security_icon(ap),
-                        icon_size=16,
-                        h_align="end",
-                        h_expand=True,
-                    ) if ap.security else Box(),
+                    self._icon,
+                    self._ssid_label,
+                    right_box,
                 ],
             ),
             on_clicked=lambda _: self._handle_click(),
@@ -109,14 +140,33 @@ class AccessPointItem(Button):
 
     def _set_state(self, state: APState):
         self._state = state
-        for cls in ["active", "connecting", "failed"]:
+        for cls in ["active", "connecting", "failed", "connected"]:
             self.remove_style_class(cls)
         if state == APState.CONNECTED:
             self.add_style_class("active")
+            self.add_style_class("connected")
+            self._status_badge.set_label("Connected")
+            self._status_badge.set_visible(True)
+            self._status_icon.set_property("icon-name", "check-circle-duotone")
+            self._status_icon.set_visible(True)
         elif state == APState.CONNECTING:
             self.add_style_class("connecting")
+            self._status_badge.set_label("Connecting…")
+            self._status_badge.set_visible(True)
+            self._status_icon.set_property("icon-name", "arrows-clockwise-duotone")
+            self._status_icon.set_visible(True)
         elif state == APState.FAILED:
             self.add_style_class("failed")
+            self._status_badge.set_label("Failed")
+            self._status_badge.set_visible(True)
+            self._status_icon.set_property("icon-name", "warning-circle-duotone")
+            self._status_icon.set_visible(True)
+        else:
+            self._status_badge.set_visible(False)
+            self._status_icon.set_visible(False)
+
+        if self._tab:
+            self._tab.sort_items()
 
     def _handle_click(self):
         if self._state == APState.CONNECTED:
@@ -197,6 +247,7 @@ class _WifiTab:
             self._add_ap_from_nm(nm_ap)
 
         self._update_placeholder()
+        self.sort_items()
 
         self._device_signals.append(
             nm_device.connect(
@@ -239,12 +290,27 @@ class _WifiTab:
         if not bssid or bssid in self._ap_items:
             return
         ap = AccessPoint(ap_dict, self._wifi)
-        item = AccessPointItem(ap, on_connect=self._on_connect, wifi=self._wifi)
+        item = AccessPointItem(ap, on_connect=self._on_connect, wifi=self._wifi, tab=self)
         self._ap_items[bssid] = item
         self._ap_box.add(item)
 
+    def sort_items(self):
+        active_ap = self._wifi._device.get_active_access_point()
+        active_bssid = active_ap.get_bssid() if active_ap else None
+
+        items = list(self._ap_items.values())
+        items.sort(key=lambda item: (
+            item.ap._dict.get("bssid") == active_bssid or item._state == APState.CONNECTED,
+            item.ap.strength,
+        ), reverse=True)
+
+        for i, item in enumerate(items):
+            if item.get_parent() == self._ap_box:
+                self._ap_box.reorder_child(item, i)
+
     def _on_ap_added(self, nm_ap):
         self._add_ap_from_nm(nm_ap)
+        self.sort_items()
         self._update_placeholder()
 
     def _on_ap_removed(self, nm_ap):
@@ -253,6 +319,7 @@ class _WifiTab:
         if item:
             self._ap_box.remove(item)
             item.destroy()
+        self.sort_items()
         self._update_placeholder()
 
     def _update_placeholder(self):

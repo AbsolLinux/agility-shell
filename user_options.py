@@ -14,6 +14,9 @@ class UserOptions:
     class Settings:
         def __init__(self):
             self.dnd = False
+            self.hover_open = True
+            self.hover_delay = 180
+            self.bar_opacity = 1.0
 
     class Bars:
         def __init__(self):

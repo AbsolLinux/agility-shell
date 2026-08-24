@@ -677,14 +677,40 @@ class BluetoothClient(Service):
             if BLUEZ_DEVICE_IFACE in ifaces:
                 self._add_device(path, ifaces[BLUEZ_DEVICE_IFACE])
 
+    def _on_adapter_power_changed(self):
+        self.notify("powered")
+        self.notify("enabled")
+        self.notify("state")
+        self.emit("changed")
+
+    def _on_adapter_state_changed(self):
+        self.notify("state")
+        self.emit("changed")
+
+    def _on_adapter_scanning_changed(self):
+        self.notify("scanning")
+        self.emit("changed")
+
+    def _on_adapter_changed(self):
+        self.notify("state")
+        self.notify("enabled")
+        self.notify("powered")
+        self.notify("scanning")
+        self.notify("devices")
+        self.notify("connected-devices")
+        self.emit("changed")
+
     def _add_adapter(self, path: str, props: dict):
         if path in self._adapters:
             return
         logger.info(f"[Bluetooth] Adding adapter: {path}")
         adapter = BluetoothAdapter(
             self._bus, path, props,
-            on_changed=lambda *_: self.emit("changed"),
+            on_changed=lambda *_: self._on_adapter_changed(),
         )
+        adapter.connect("notify::powered", lambda *_: self._on_adapter_power_changed())
+        adapter.connect("notify::state", lambda *_: self._on_adapter_state_changed())
+        adapter.connect("notify::scanning", lambda *_: self._on_adapter_scanning_changed())
         adapter.connect("device-added", lambda a, addr: (
             self.emit("device-added", addr),
             self.notify("devices"),
@@ -700,7 +726,7 @@ class BluetoothClient(Service):
         self._adapters[path] = adapter
         self.emit("adapter-added", path)
         self.notify("adapters")
-        self.emit("changed")
+        self._on_adapter_changed()
 
     def _add_device(self, path: str, props: dict):
         adapter_path = _device_path_to_adapter_path(path)
@@ -709,6 +735,7 @@ class BluetoothClient(Service):
             logger.warning(f"[Bluetooth] No adapter found for device at {path}")
             return
         adapter.add_device(path, props)
+        self._on_adapter_changed()
 
     def _on_interfaces_added(self, _conn, _sender, _path, _iface, _signal, params, _data):
         unpacked = _unpack_variant(params)
