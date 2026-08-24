@@ -1,3 +1,5 @@
+#define GLIB_DISABLE_DEPRECATION_WARNINGS 1
+
 #include <gtk/gtk.h>
 #include <math.h>
 
@@ -121,6 +123,7 @@ gtk_stack_begin_transition(GtkStack *stack)
 void
 gtk_stack_set_timeline(GtkStack *stack, gdouble p, gint transition_type)
 {
+    (void)transition_type;
     GtkStackPrivate *priv = hacktk_stack_get_priv(stack);
     GtkWidget *widget = GTK_WIDGET(stack);
     if (!priv) return;

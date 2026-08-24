@@ -213,7 +213,7 @@ compile_snippets() {
     fi
 
     if [[ -d "$hacktk_dir" ]]; then
-        make -C "$hacktk_dir" EXTRA_CFLAGS="-Wno-deprecated-declarations"
+        make -C "$hacktk_dir"
         success "hacktk library compiled."
     else
         warn "hacktk directory not found -- skipping."
