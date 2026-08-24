@@ -68,7 +68,7 @@ class DashHeader(CenterBox):
                             Label(label=label),
                         ],
                     ),
-                    on_pressed=(lambda callback=cb: callback()) if not is_active else None,
+                    on_pressed=(lambda _, callback=cb: callback()) if not is_active else (lambda *_: None),
                 )
                 self._right_box.add(btn)
             self._right_box.show_all()
@@ -86,7 +86,7 @@ class DashHeader(CenterBox):
                             Label(label=label),
                         ],
                     ),
-                    on_pressed=(lambda callback=cb: callback()) if not is_active else None,
+                    on_pressed=(lambda _, callback=cb: callback()) if not is_active else (lambda *_: None),
                 )
                 self._left_box.add(btn)
             self._left_box.show_all()

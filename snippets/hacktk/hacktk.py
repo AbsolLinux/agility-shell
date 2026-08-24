@@ -25,7 +25,19 @@ ffi.cdef("""
 
 """)
 
-libhacktk = ffi.dlopen(get_relative_path("./lib/libhacktk.so"))
+import os
+import subprocess
+
+_so_path = get_relative_path("./lib/libhacktk.so")
+if not os.path.exists(_so_path):
+    _makefile_dir = get_relative_path("./lib")
+    if os.path.exists(os.path.join(_makefile_dir, "Makefile")):
+        try:
+            subprocess.run(["make", "-C", _makefile_dir], check=True, capture_output=True)
+        except Exception:
+            pass
+
+libhacktk = ffi.dlopen(_so_path)
 
 SLIDE_LEFT_RIGHT = 2
 
