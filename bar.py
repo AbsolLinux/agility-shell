@@ -406,7 +406,6 @@ class WidgetWrapper(Box):
         super().__init__()
         self.widget_key = key
         self.variant = variant
-        self._hover_timer: int | None = None
         self._variant_picker: AppletWindow | None = None 
         self._drag_signals: list[int] = []
         self._popup: PopupWindow | None = None
@@ -419,41 +418,16 @@ class WidgetWrapper(Box):
         if key not in ["Workspaces", "Dock"]:
             self.event_box.add_style_class("bar-widget")
             
-        if self.widget_key in APPLET_WIDGETS or self.widget_key == "Dash":
-            self.event_box.connect("enter-notify-event", self._on_enter)
+        if self.widget_key in APPLET_WIDGETS:
+            self.event_box.connect("enter-notify-event", lambda w, _: w.add_style_class("hovered"))
+            self.event_box.connect("leave-notify-event", self.on_leave)
+            self.event_box.connect("button-press-event", lambda w, e: w.add_style_class("active") if e.button == 1 and not edit_mode.edit_mode else None)
+        if self.widget_key == "Dash":
+            self.event_box.connect("enter-notify-event", lambda w, _: w.add_style_class("hovered"))
             self.event_box.connect("leave-notify-event", self.on_leave)
             self.event_box.connect("button-press-event", lambda w, e: w.add_style_class("active") if e.button == 1 and not edit_mode.edit_mode else None)
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self._apply_drag_state()
-
-    def _on_enter(self, widget, event):
-        widget.add_style_class("hovered")
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
-            return False
-        if self._hover_timer is not None:
-            GLib.source_remove(self._hover_timer)
-            self._hover_timer = None
-
-        delay = getattr(user_options.settings, "hover_delay", 180)
-        self._hover_timer = GLib.timeout_add(delay, self._trigger_hover_open)
-        return False
-
-    def _trigger_hover_open(self):
-        self._hover_timer = None
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
-            return False
-        if self.widget_key == "Dash":
-            import services.singletons as singletons
-            if singletons.bar_manager and singletons.bar_manager._dash:
-                if not singletons.bar_manager._dash.is_visible():
-                    bar = self._get_bar()
-                    active_monitor = bar.gdk_monitor if bar and hasattr(bar, "gdk_monitor") else None
-                    singletons.bar_manager._dash.toggle(active_monitor)
-        elif self.widget_key in APPLET_WIDGETS:
-            popup = self._ensure_popup()
-            if popup and not popup.is_visible():
-                popup.toggle()
-        return False
 
     def _on_drag_end(self, widget, ctx):
         global _dragging_key, _dragging_widget
@@ -465,12 +439,8 @@ class WidgetWrapper(Box):
             widget.remove_style_class("active")
         return False
     def on_leave(self, w, event):
-        if self._hover_timer is not None:
-            GLib.source_remove(self._hover_timer)
-            self._hover_timer = None
         if event.detail != Gdk.NotifyType.INFERIOR:
             w.remove_style_class("hovered")
-        return False
 
     def _ensure_popup(self) -> PopupWindow | None:
         if self._popup is not None:
@@ -810,13 +780,12 @@ class GroupWrapper(Box):
             self._inner.pack_start(eb, False, False, 0)
             self._event_boxes.append(eb)
 
-        self._hover_timer: int | None = None
         outer_eb = EventBox()
         outer_eb.add(self._inner)
         self.add(outer_eb)
         self._outer_eb = outer_eb
         self._outer_eb.add_style_class("bar-widget")
-        self._outer_eb.connect("enter-notify-event", self._on_enter)
+        self._outer_eb.connect("enter-notify-event", lambda w, _: w.add_style_class("hovered"))
         self._outer_eb.connect("leave-notify-event", self.on_leave)
         self._outer_eb.connect("button-press-event", lambda w, e: w.add_style_class("active") if e.button == 1 and not edit_mode.edit_mode else None)
         self._outer_eb.connect("button-release-event", self._on_outer_click)
@@ -830,34 +799,9 @@ class GroupWrapper(Box):
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self._apply_drag_state()
 
-    def _on_enter(self, widget, event):
-        widget.add_style_class("hovered")
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
-            return False
-        if self._hover_timer is not None:
-            GLib.source_remove(self._hover_timer)
-            self._hover_timer = None
-
-        delay = getattr(user_options.settings, "hover_delay", 180)
-        self._hover_timer = GLib.timeout_add(delay, self._trigger_hover_open)
-        return False
-
-    def _trigger_hover_open(self):
-        self._hover_timer = None
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
-            return False
-        popup = self._ensure_popup()
-        if popup and not popup.is_visible():
-            popup.toggle()
-        return False
-
     def on_leave(self, w, event):
-        if self._hover_timer is not None:
-            GLib.source_remove(self._hover_timer)
-            self._hover_timer = None
         if event.detail != Gdk.NotifyType.INFERIOR:
             w.remove_style_class("hovered")
-        return False
 
     def _ensure_popup(self) -> PopupWindow | None:
         if self._popup is not None:
@@ -1423,7 +1367,6 @@ class Bar(Window):
         self.connect("leave-notify-event", self._on_bar_leave)
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self.gdk_monitor = monitor
-        self.set_opacity(getattr(user_options.settings, "bar_opacity", 1.0))
         if user_options.theme.blur:
             self._blur_ctx = enable_blur(self)
             GLib.timeout_add(1500, self._update_blur_region)
@@ -1431,12 +1374,6 @@ class Bar(Window):
         if not self.auto_hide:
             GLib.idle_add(self._revealer.set_reveal_child, True)
             # GLib.timeout_add(750, lambda: setattr(self, "exclusivity", "auto"))
-
-    def set_opacity(self, opacity: float):
-        opacity = max(0.0, min(1.0, float(opacity)))
-        self._centerbox.set_style(f"background-color: alpha(var(--background), {opacity:.2f});")
-        if self._blur_ctx:
-            GLib.timeout_add(100, self._update_blur_region)
 
 
     def _build_section(self, section_name: str) -> DraggableSection:
@@ -1905,11 +1842,6 @@ class BarManager:
                 self._dash.toggle_themes(active_monitor)
             return
 
-        if key == "Settings":
-            if self._dash:
-                self._dash.toggle_settings(active_monitor)
-            return
-
         if key == "EditApplets":
             if self._dash:
                 self._dash.toggle_applets(active_monitor)
@@ -1951,14 +1883,6 @@ class BarManager:
             self._fallback_popups[key]._keys = [key]
 
         self._fallback_popups[key].toggle()
-
-    def apply_bar_opacity(self, opacity: float) -> None:
-        for bar in self._bars.values():
-            bar.set_opacity(opacity)
-
-    def set_bar_alignment(self, alignment: str) -> None:
-        for bar in self._bars.values():
-            bar._set_alignment(alignment)
 
     def apply_blur(self, enabled: bool) -> None:
         for bar in self._bars.values():

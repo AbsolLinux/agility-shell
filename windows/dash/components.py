@@ -33,20 +33,40 @@ class DashHeader(CenterBox):
     def update(
         self,
         *,
-        current_page: str,
-        primary_tabs: list,
-        secondary_tabs: list,
+        current_icon: str,
+        peer_icon: str,
+        peer_label: str,
+        peer_h_callback,
         v_icon: str,
         v_callback,
         show_search: bool = False,
-        is_secondary: bool = False,
+        current_on_left: bool = True,
+        h_switcher_on_right: bool = False,
     ):
         for child in self._left_box.get_children():
             self._left_box.remove(child)
         for child in self._right_box.get_children():
             self._right_box.remove(child)
 
-        if is_secondary:
+        current_btn = Button(
+            style_classes=["dash-header-button", "active"],
+            child=Icon(icon_name=current_icon),
+        )
+        peer_btn = Button(
+            style_classes=["dash-header-button"],
+            child=Box(
+                orientation="h",
+                spacing=6,
+                children=[
+                    Icon(icon_name=peer_icon),
+                    Label(label=peer_label),
+                ],
+            ),
+            on_pressed=lambda _: peer_h_callback(),
+        )
+
+        if h_switcher_on_right:
+
             v_btn = Button(
                 style_classes=["dash-header-button"],
                 child=Icon(icon_name=v_icon),
@@ -55,40 +75,21 @@ class DashHeader(CenterBox):
             self._left_box.add(v_btn)
             self._left_box.show_all()
 
-            for name, icon, label, cb in secondary_tabs:
-                is_active = (name == current_page)
-                classes = ["dash-header-button", "active"] if is_active else ["dash-header-button"]
-                btn = Button(
-                    style_classes=classes,
-                    child=Box(
-                        orientation="h",
-                        spacing=6,
-                        children=[
-                            Icon(icon_name=icon),
-                            Label(label=label),
-                        ],
-                    ),
-                    on_pressed=(lambda callback=cb: callback()) if not is_active else None,
-                )
-                self._right_box.add(btn)
+            if current_on_left:
+                self._right_box.add(current_btn)
+                self._right_box.add(peer_btn)
+            else:
+                self._right_box.add(peer_btn)
+                self._right_box.add(current_btn)
             self._right_box.show_all()
         else:
-            for name, icon, label, cb in primary_tabs:
-                is_active = (name == current_page)
-                classes = ["dash-header-button", "active"] if is_active else ["dash-header-button"]
-                btn = Button(
-                    style_classes=classes,
-                    child=Box(
-                        orientation="h",
-                        spacing=6,
-                        children=[
-                            Icon(icon_name=icon),
-                            Label(label=label),
-                        ],
-                    ),
-                    on_pressed=(lambda callback=cb: callback()) if not is_active else None,
-                )
-                self._left_box.add(btn)
+
+            if current_on_left:
+                self._left_box.add(current_btn)
+                self._left_box.add(peer_btn)
+            else:
+                self._left_box.add(peer_btn)
+                self._left_box.add(current_btn)
             self._left_box.show_all()
 
             v_btn = Button(

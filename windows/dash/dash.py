@@ -5,7 +5,6 @@ from fabric.widgets.stack import Stack
 from .launcher import DashLauncherPage
 from .applets import DashAppletPage, AppletDropZone
 from .components import DashGroup, DashHeader
-from .settings import DashSettingsPage
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 from services.singletons import edit_mode
 from .wallpapers import DashWallpaperPage
@@ -20,23 +19,19 @@ display = Gdk.Display.get_default()
 REVEAL_DURATION = 300
 
 _PAGE_META = {
-    "apps":       ("diamonds-four-duotone",      "Apps"),
-    "applets":    ("stack-duotone",              "Applets"),
-    "settings":   ("gear-six-duotone",           "Settings"),
-    "wallpapers": ("images-duotone",             "Wallpapers"),
-    "themes":     ("swatches-duotone",           "Themes"),
+    "apps":       ("diamonds-four-duotone",      "applets",    "themes-wallpapers", "paint-brush-broad-duotone", True),
+    "applets":    ("stack-duotone",              "apps",       "themes-wallpapers", "paint-brush-broad-duotone", False),
+    "wallpapers": ("images-duotone",             "themes",     "apps-applets",      "dash-duotone",              True),
+    "themes":     ("swatches-duotone",           "wallpapers", "apps-applets",      "dash-duotone",              False),
 }
 _PAGE_LABELS = {
     "apps":       "Apps",
     "applets":    "Applets",
-    "settings":   "Settings",
     "wallpapers": "Wallpapers",
     "themes":     "Themes",
 }
 
 _PAGES_WITH_SEARCH = {"apps", "applets"}
-_PRIMARY_PAGES = {"apps", "applets", "settings"}
-_SECONDARY_PAGES = {"wallpapers", "themes"}
 
 
 class DashDismissLayer(Window):
@@ -164,7 +159,6 @@ class Dash(Window):
             on_applet_drag_begin=self._on_applet_drag_begin,
             on_applet_drag_end=self._on_applet_drag_end,
         )
-        self.settings   = DashSettingsPage(bar_manager=bar_manager)
         self.themes     = DashThemePage(bar_manager=bar_manager)
         self.wallpapers = DashWallpaperPage()
         self.dismiss_layer = DashDismissLayer(
@@ -177,7 +171,6 @@ class Dash(Window):
 
         self.h_group_1.add_named(self.launcher,   "apps")
         self.h_group_1.add_named(self.applets,    "applets")
-        self.h_group_1.add_named(self.settings,   "settings")
         self.h_group_2.add_named(self.wallpapers, "wallpapers")
         self.h_group_2.add_named(self.themes,     "themes")
         self.v_stack.add_named(self.h_group_2,    "themes-wallpapers")
@@ -187,7 +180,6 @@ class Dash(Window):
         self._name_to_page = {
             "apps":       self.launcher,
             "applets":    self.applets,
-            "settings":   self.settings,
             "wallpapers": self.wallpapers,
             "themes":     self.themes,
         }
@@ -310,43 +302,27 @@ class Dash(Window):
     def _current_page_name(self) -> str:
         v_child = self.v_stack.get_visible_child()
         if v_child is self.h_group_1:
-            child = self.h_group_1.get_visible_child()
-            if child is self.launcher:
-                return "apps"
-            elif child is self.applets:
-                return "applets"
-            elif child is self.settings:
-                return "settings"
-            return "apps"
+            return "apps" if self.h_group_1.get_visible_child() is self.launcher else "applets"
         else:
             return "wallpapers" if self.h_group_2.get_visible_child() is self.wallpapers else "themes"
 
     def _sync_header(self):
         name = self._current_page_name()
-        is_secondary = name in _SECONDARY_PAGES
-
-        primary_tabs = [
-            ("apps", "diamonds-four-duotone", "Apps", lambda: self.h_group_1.set_visible_child_name("apps")),
-            ("applets", "stack-duotone", "Applets", lambda: self.h_group_1.set_visible_child_name("applets")),
-            ("settings", "gear-six-duotone", "Settings", lambda: self.h_group_1.set_visible_child_name("settings")),
-        ]
-
-        secondary_tabs = [
-            ("wallpapers", "images-duotone", "Wallpapers", lambda: self.h_group_2.set_visible_child_name("wallpapers")),
-            ("themes", "swatches-duotone", "Themes", lambda: self.h_group_2.set_visible_child_name("themes")),
-        ]
-
-        v_icon = "diamonds-four-duotone" if is_secondary else "paint-brush-broad-duotone"
-        v_target = "apps-applets" if is_secondary else "themes-wallpapers"
+        icon, peer_name, v_target, v_icon, current_on_left = _PAGE_META[name]
+        peer_icon  = _PAGE_META[peer_name][0]
+        peer_label = _PAGE_LABELS[peer_name]
+        h_group    = self.h_group_1 if name in ("apps", "applets") else self.h_group_2
 
         self.header.update(
-            current_page=name,
-            primary_tabs=primary_tabs,
-            secondary_tabs=secondary_tabs,
+            current_icon=icon,
+            peer_icon=peer_icon,
+            peer_label=peer_label,
+            peer_h_callback=lambda: h_group.set_visible_child_name(peer_name),
             v_icon=v_icon,
             v_callback=lambda: self.v_stack.set_visible_child_name(v_target),
             show_search=(name in _PAGES_WITH_SEARCH),
-            is_secondary=is_secondary,
+            current_on_left=current_on_left,
+            h_switcher_on_right=(name in ("wallpapers", "themes")),
         )
         if name in _PAGES_WITH_SEARCH:
             self._name_to_page[name]._attach_search_entry(self.header._entry)
@@ -414,12 +390,6 @@ class Dash(Window):
         if not self.is_visible():
             self.toggle(active_monitor)
         edit_mode.enable()
-
-    def toggle_settings(self, active_monitor=None):
-        self.h_group_1.set_visible_child(self.settings)
-        self.v_stack.set_visible_child(self.h_group_1)
-        if not self.is_visible():
-            self.toggle(active_monitor)
 
     def toggle_wallpapers(self, active_monitor=None):
         self.h_group_2.set_visible_child(self.wallpapers)

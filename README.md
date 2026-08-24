@@ -68,9 +68,9 @@ Mod+Space { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Launc
 Mod+N     { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Notifications')"; }
 ```
 
-### Available Applets & Dash Views
+### Available Applets
 You can pass any of these identifier handles into `bar_manager.toggle('<Applet>')`:
-* `Dash`, `Launcher`, `Settings`, `Wallpapers`, `Themes`, `Notifications`, `Clock`, `Calendar`, `Weather`, `Media`, `Volume`, `Wifi`, `Bluetooth`, `Energy`, `Session`, `Calculator`, `Keyboard`, `Processes`.
+* `Launcher`, `Settings`, `Notifications`, `Clock`, `Calendar`, `Weather`, `Media`, `Volume`, `Wifi`, `Bluetooth`, `Energy`, `Session`, `Calculator`, `Keyboard`, `Processes`.
 
 ---
 

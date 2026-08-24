@@ -61,6 +61,4 @@ overview {
 
 binds {
     Mod+Space { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
-    Super { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
 }
-

@@ -338,58 +338,49 @@ class NetworkClient(Service):
                         return True
         return False
 
-    def connect_wifi_bssid(self, bssid: str, callback=None):
-        import subprocess
-        import threading
-        def _run():
-            try:
-                res = subprocess.run(
-                    ["nmcli", "device", "wifi", "connect", bssid],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                success = (res.returncode == 0)
-                msg = res.stdout if success else res.stderr
-                logger.debug(f"[Network] connect_wifi_bssid result: success={success}, msg={msg}")
-                if callback:
-                    GLib.idle_add(callback, success, msg)
-            except Exception as e:
-                logger.warning(f"[Network] connect_wifi_bssid error: {e}")
-                if callback:
-                    GLib.idle_add(callback, False, str(e))
-        threading.Thread(target=_run, daemon=True).start()
+    def connect_wifi_bssid(self, bssid: str):
+        exec_shell_command_async(
+            f"nmcli device wifi connect {bssid}",
+            lambda *args: logger.debug(f"connect result: {args}"),
+        )
 
     def connect_wifi_with_password(self, bssid: str, password: str, callback):
-        import subprocess
-        import threading
         if not self._client or not self.wifi_device:
-            callback(False, "No wifi device found")
+            callback(False, "No wifi device")
             return
 
-        def _run():
-            try:
-                res = subprocess.run(
-                    ["nmcli", "device", "wifi", "connect", bssid, "password", password],
-                    capture_output=True,
-                    text=True,
-                    timeout=35,
-                )
-                success = (res.returncode == 0)
-                if success:
-                    logger.info(f"[Network] WiFi connected to {bssid}")
-                    GLib.idle_add(callback, True, "Connected")
+        device = self.wifi_device._device
+        handler_id: list[int] = []
+
+        def _on_state_changed(dev, new_state, old_state, reason):
+            state = NM.DeviceState(new_state)
+            if state == NM.DeviceState.ACTIVATED:
+                _cleanup()
+                callback(True, "Connected")
+            elif state in (NM.DeviceState.FAILED, NM.DeviceState.DISCONNECTED):
+                _cleanup()
+                reason_str = NM.DeviceStateReason(reason).value_nick
+                if "secret" in reason_str or "auth" in reason_str:
+                    callback(False, "Wrong password")
                 else:
-                    err = res.stderr or res.stdout or "Connection failed"
-                    logger.warning(f"[Network] WiFi connect failed: {err}")
-                    if "secret" in err.lower() or "password" in err.lower() or "auth" in err.lower() or "802-11-wireless-security" in err.lower():
-                        GLib.idle_add(callback, False, "Incorrect password. Please try again.")
-                    else:
-                        GLib.idle_add(callback, False, err.strip().split("\n")[-1] or "Connection failed")
-            except Exception as e:
-                logger.error(f"[Network] WiFi connection exception: {e}")
-                GLib.idle_add(callback, False, str(e))
-        threading.Thread(target=_run, daemon=True).start()
+                    callback(False, f"Failed ({reason_str})")
+            elif state == NM.DeviceState.NEED_AUTH:
+                _cleanup()
+                callback(False, "Wrong password")
+
+        def _cleanup():
+            if handler_id:
+                try:
+                    device.disconnect_by_func(_on_state_changed)
+                except Exception:
+                    pass
+
+        handler_id.append(device.connect("state-changed", _on_state_changed))
+
+        exec_shell_command_async(
+            f"nmcli device wifi connect {bssid} password {password!r}",
+            lambda *args: logger.debug(f"connect_with_password result: {args}"),
+        )
 
     @Property(str, "readable")
     def primary_device(self) -> Literal["wifi", "wired"] | None:
