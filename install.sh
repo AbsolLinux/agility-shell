@@ -29,6 +29,7 @@ error()   { echo -e "${RED}${BOLD}[ err  ]${RESET} $*" >&2; }
 die()     { error "$*"; exit 1; }
 
 cat << "EOF"
+
                        m                
                      wq                 
                    qqX                  
@@ -47,6 +48,7 @@ cat << "EOF"
        wp                     wp[       
       _b                       qq,      
       m                          Z   
+      
 EOF
 
 self_update() {
