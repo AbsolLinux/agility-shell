@@ -23,16 +23,27 @@ While agility shell does not manage window configurations itself, it connects na
 
 ---
 
-## Installation
+## Installation & Updates
 
 ### Quick Install (Arch Linux)
-For a rapid deployment on Arch Linux, you can stream the setup script directly:
+For a rapid deployment on Arch Linux, stream the setup script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AbsolLinux/agility-shell/main/install.sh | bash
 ```
 >[!NOTE]
->`reboot` is requred after installtion (it will directly loads shell into the niri (menual config will not needed-after it ) ) 
+>A system `reboot` is recommended after installation to ensure all background services, environment variables, and compositor configs load cleanly.
+
+### Updating
+To update an existing installation to the latest version while preserving your wallpapers and customizations:
+
+```bash
+~/.config/agility-shell/update.sh
+```
+Or stream the updater directly:
+```bash
+curl -fsSL https://raw.githubusercontent.com/AbsolLinux/agility-shell/main/update.sh | bash
+```
 
 ---
 
@@ -42,7 +53,7 @@ To launch agility shell automatically when logging into your compositor session,
 
 ### Niri (`config.kdl`)
 ```ini
-spawn-at-startup "~/.config/agility-shell/start.sh"
+spawn-at-startup "bash" "-c" "~/.config/agility-shell/start.sh"
 ```
 
 #### Standard Config (`hyprland.conf`)
