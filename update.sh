@@ -146,8 +146,26 @@ do_update() {
 
     success "Agility Shell updated successfully!"
     echo
-    info "Restart the shell to apply changes:"
-    echo -e "  ${CYAN}$INSTALL_DIR/start.sh${RESET}"
+    info "Restart the shell or reboot to apply changes."
+    echo -e "  Manual start: ${CYAN}$INSTALL_DIR/start.sh${RESET}"
+
+    prompt_reboot
+}
+
+prompt_reboot() {
+    echo
+    warn "A system reboot is recommended to ensure all services, environment variables, and compositor configs take effect."
+    echo
+    read -rp "  Would you like to reboot now? [y/N]: " reboot_choice
+    case "$reboot_choice" in
+        [yY]|[yY][eE][sS])
+            info "Rebooting system..."
+            systemctl reboot || sudo reboot
+            ;;
+        *)
+            info "Reboot skipped. You can manually restart the shell using: $INSTALL_DIR/start.sh"
+            ;;
+    esac
 }
 
 main() {
@@ -163,3 +181,4 @@ main() {
 }
 
 main "$@"
+
