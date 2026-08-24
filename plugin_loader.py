@@ -5,7 +5,7 @@ from fabric.utils import monitor_file
 
 PLUGIN_DIRS = [
     Path(__file__).parent / "plugins",
-    Path.home() / ".config" / "caffyne-shell" / "plugins",
+    Path.home() / ".config" / "agility-shell" / "plugins",
 ]
 
 _monitors = []
@@ -46,7 +46,7 @@ def _load_one(
     incompatible_groups: set | None,
     bean_data: list | None,
 ) -> None:
-    module_name = f"caffyne_plugin_{path.name}"
+    module_name = f"agility_plugin_{path.name}"
 
     try:
         spec = importlib.util.spec_from_file_location(

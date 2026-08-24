@@ -10,10 +10,10 @@ from user_options import user_options
 from .wallpaper import WallpaperService
 from .templates import template_service, MATUGEN_CONFIG_CACHE
 
-THEMES_DIR       = os.path.expanduser("~/.config/caffyne-shell/themes")
+THEMES_DIR       = os.path.expanduser("~/.config/agility-shell/themes")
 LIGHT_THEMES_DIR = os.path.join(THEMES_DIR, "light")
 DARK_THEMES_DIR  = os.path.join(THEMES_DIR, "dark")
-CACHE_THEME_PATH = os.path.expanduser("~/.cache/caffyne-shell/theme.json")
+CACHE_THEME_PATH = os.path.expanduser("~/.cache/agility-shell/theme.json")
 
 WALLPAPER_THEME = "Matugen"
 

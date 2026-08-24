@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Caffyne Shell — Installer & Updater
+#  Agility Shell -- Installer & Updater
 #  Arch Linux only
 # =============================================================================
 
 set -euo pipefail
 
-REPO_URL="https://github.com/caffyne-org/caffyne-shell.git"
-INSTALL_DIR="$HOME/.config/caffyne-shell"
+REPO_URL="https://github.com/AbsolLinux/agility-shell.git"
+INSTALL_DIR="$HOME/.config/agility-shell"
 CONFIG_DIR="$INSTALL_DIR/config"
-SCRIPT_URL="https://raw.githubusercontent.com/caffyne-org/caffyne-shell/main/install.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/AbsolLinux/agility-shell/main/install.sh"
 
 # Directories to preserve during updates (relative to INSTALL_DIR)
 PRESERVE_DIRS=("wallpapers")
 
-# ── Colours ──────────────────────────────────────────────────────────────────
+# -- Colours -------------------------------------------------------------------
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -22,7 +22,7 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-info()    { echo -e "${CYAN}${BOLD}[caffyne]${RESET} $*"; }
+info()    { echo -e "${CYAN}${BOLD}[agility]${RESET} $*"; }
 success() { echo -e "${GREEN}${BOLD}[  ok  ]${RESET} $*"; }
 warn()    { echo -e "${YELLOW}${BOLD}[ warn ]${RESET} $*"; }
 error()   { echo -e "${RED}${BOLD}[ err  ]${RESET} $*" >&2; }
@@ -49,7 +49,7 @@ cat << "EOF"
 @@@@@@@@@#--=@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@#--=@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@#--=@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@@@@@@@@@#--=@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%@@@@@@@@@
+@@@@@@@@@#--=@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%@@@@@@@@@@@
 @@@@@@@@@#--=%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%*--#@@@@@@@@@
 @@@@@@@@@%+----+%@@@@@@@@@@@@@@@@@@@@@@@@@@%+----=%@@@@@@@@@
 @@@@@@@@@@@%#=----=*@@@@@@@@@@@@@@@@@@@@#=----=#%@@@@@@@@@@@
@@ -74,7 +74,7 @@ self_update() {
     tmp_script=$(mktemp)
 
     if ! curl -fsSL "$SCRIPT_URL" -o "$tmp_script" 2>/dev/null; then
-        warn "Could not reach update URL — skipping self-update."
+        warn "Could not reach update URL -- skipping self-update."
         rm -f "$tmp_script"
         return
     fi
@@ -85,7 +85,7 @@ self_update() {
         return
     fi
 
-    info "New version of install.sh found — updating..."
+    info "New version of install.sh found -- updating..."
     chmod +x "$tmp_script"
     cp "$tmp_script" "$script_path"
     rm -f "$tmp_script"
@@ -94,7 +94,7 @@ self_update() {
     exec "$script_path" "$@"
 }
 
-# ── Sanity checks ─────────────────────────────────────────────────────────────
+# -- Sanity checks -------------------------------------------------------------
 check_arch() {
     if ! command -v pacman &>/dev/null; then
         die "This installer is for Arch Linux only."
@@ -107,14 +107,14 @@ check_not_root() {
     fi
 }
 
-# ── yay bootstrap ─────────────────────────────────────────────────────────────
+# -- yay bootstrap -------------------------------------------------------------
 ensure_yay() {
     if command -v yay &>/dev/null; then
         success "yay is already installed."
         return
     fi
 
-    info "yay not found — installing from AUR..."
+    info "yay not found -- installing from AUR..."
     sudo pacman -S --needed --noconfirm git base-devel
 
     local tmp
@@ -125,7 +125,7 @@ ensure_yay() {
     success "yay installed."
 }
 
-# ── System dependencies ───────────────────────────────────────────────────────
+# -- System dependencies -------------------------------------------------------
 install_pacman_deps() {
     info "Installing pacman dependencies..."
 
@@ -176,21 +176,20 @@ install_aur_deps() {
 
     local aur_pkgs=(
         fabric-cli-git
-        # gray-git we dont use no more
     )
 
     yay -S --needed --noconfirm "${aur_pkgs[@]}"
     success "AUR dependencies installed."
 }
 
-# ── Clone ─────────────────────────────────────────────────────────────────────
+# -- Clone ---------------------------------------------------------------------
 clone_repo() {
-    info "Cloning Caffyne Shell to $INSTALL_DIR..."
+    info "Cloning Agility Shell to $INSTALL_DIR..."
     git clone "$REPO_URL" "$INSTALL_DIR"
     success "Repository cloned."
 }
 
-# ── Python venv ───────────────────────────────────────────────────────────────
+# -- Python venv ---------------------------------------------------------------
 setup_venv() {
     info "Setting up Python virtual environment..."
     python -m venv "$INSTALL_DIR/venv"
@@ -199,7 +198,7 @@ setup_venv() {
     success "Python dependencies installed."
 }
 
-# ── Compile native snippets ───────────────────────────────────────────────────
+# -- Compile native snippets ---------------------------------------------------
 compile_snippets() {
     info "Compiling native libraries..."
 
@@ -210,45 +209,52 @@ compile_snippets() {
         make -C "$blur_dir"
         success "blur library compiled."
     else
-        warn "blur lib directory not found — skipping."
+        warn "blur lib directory not found -- skipping."
     fi
 
     if [[ -d "$hacktk_dir" ]]; then
-        make -C "$hacktk_dir"
+        make -C "$hacktk_dir" EXTRA_CFLAGS="-Wno-deprecated-declarations"
         success "hacktk library compiled."
     else
-        warn "hacktk directory not found — skipping."
+        warn "hacktk directory not found -- skipping."
     fi
 }
 
 inject_niri_include() {
     local niri_config="$HOME/.config/niri/config.kdl"
-    local include_line='include "~/.config/caffyne-shell/config/niri.kdl"'
+    local include_line='include "~/.config/agility-shell/config/niri.kdl"'
 
     if [[ ! -f "$niri_config" ]]; then
-        info "No niri config found at $niri_config — skipping include injection."
+        info "No niri config found at $niri_config -- creating one with agility-shell include."
+        mkdir -p "$HOME/.config/niri"
+        echo "$include_line" > "$niri_config"
+        success "Niri config created with agility-shell include."
         return
     fi
 
     if grep -qF "$include_line" "$niri_config"; then
-        info "Niri include already present — skipping."
+        info "Niri include already present -- skipping."
         return
     fi
 
-    info "Appending caffyne include to niri config..."
+    # Remove any old caffyne-shell includes
+    if grep -qF 'caffyne-shell' "$niri_config"; then
+        info "Removing old caffyne-shell include from niri config..."
+        sed -i '/caffyne-shell/d' "$niri_config"
+    fi
+
+    info "Appending agility-shell include to niri config..."
     echo "" >> "$niri_config"
     echo "$include_line" >> "$niri_config"
     success "Niri config updated."
 }
 
-# ── Matugen Setup ─────────────────────────────────────────────────────────────
+# -- Matugen Setup -------------------------------------------------------------
 setup_matugen() {
     info "Configuring Matugen templates..."
 
     local matugen_config_dir="$HOME/.config/matugen"
     local matugen_conf="$matugen_config_dir/config.toml"
-    local target_template="$matugen_config_dir/caffyne-shell-colors.css"
-    local source_template="$INSTALL_DIR/matugen/caffyne-shell-colors.css"
 
     mkdir -p "$matugen_config_dir"
 
@@ -262,21 +268,28 @@ setup_matugen() {
         printf "[config]\n" >> "$matugen_conf"
     fi
 
-    if grep -q "\[templates.caffyne\]" "$matugen_conf"; then
-        info "Matugen config entry already exists — skipping append."
-    else
-        info "Appending Caffyne template config to matugen/config.toml..."
-        cat <<EOF >> "$matugen_conf"
+    # Remove old caffyne entries if present
+    if grep -q '\[templates.caffyne\]' "$matugen_conf"; then
+        info "Removing old caffyne matugen config entries..."
+        sed -i '/\[templates.caffyne\]/,/^$/d' "$matugen_conf"
+        sed -i '/# Caffyne Shell Colors/d' "$matugen_conf"
+    fi
 
-# Caffyne Shell Colors
-[templates.caffyne]
-input_path = '~/.config/caffyne-shell/matugen/caffyne-shell-colors.css'
-output_path = '~/.config/caffyne-shell/style/colors.css'
-EOF
+    if grep -q "\[templates.agility\]" "$matugen_conf"; then
+        info "Matugen config entry already exists -- skipping append."
+    else
+        info "Appending Agility Shell template config to matugen/config.toml..."
+        cat <<MATUGEN_EOF >> "$matugen_conf"
+
+# Agility Shell Colors
+[templates.agility]
+input_path = '~/.config/agility-shell/style/agility-shell-colors.css'
+output_path = '~/.config/agility-shell/style/colors.css'
+MATUGEN_EOF
     fi
 }
 
-# ── Update ────────────────────────────────────────────────────────────────────
+# -- Update --------------------------------------------------------------------
 backup_preserved_dirs() {
     local tmp_backup="$1"
     for dir in "${PRESERVE_DIRS[@]}"; do
@@ -301,7 +314,7 @@ restore_preserved_dirs() {
 }
 
 do_update() {
-    info "Updating Caffyne Shell..."
+    info "Updating Agility Shell..."
 
     local tmp_backup
     tmp_backup=$(mktemp -d)
@@ -321,14 +334,14 @@ do_update() {
 
     compile_snippets
 
-    success "Caffyne Shell updated successfully!"
+    success "Agility Shell updated successfully!"
     echo
     info "Restart the shell to apply changes."
 }
 
-# ── Fresh install ─────────────────────────────────────────────────────────────
+# -- Fresh install -------------------------------------------------------------
 do_install() {
-    info "Starting fresh install of Caffyne Shell..."
+    info "Starting fresh install of Agility Shell..."
 
     ensure_yay
     install_pacman_deps
@@ -341,22 +354,26 @@ do_install() {
     setup_matugen
 
     echo
-    success "Caffyne Shell installed successfully!"
+    success "Agility Shell installed successfully!"
     echo
     echo -e "  ${BOLD}Start it:${RESET}"
-    echo -e "    ${CYAN}~/.config/caffyne-shell/start.sh${RESET}"
+    echo -e "    ${CYAN}~/.config/agility-shell/start.sh${RESET}"
     echo
     echo -e "  ${BOLD}Compositor configs live in:${RESET}"
-    echo -e "    ${CYAN}~/.config/caffyne-shell/config/${RESET}"
+    echo -e "    ${CYAN}~/.config/agility-shell/config/${RESET}"
+    echo
+    echo -e "  ${BOLD}Niri auto-start:${RESET}"
+    echo -e "    The shell is configured to start automatically with Niri."
+    echo -e "    Config: ${CYAN}~/.config/agility-shell/config/niri.kdl${RESET}"
     echo
 }
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# -- Entry point ---------------------------------------------------------------
 main() {
     echo
-    echo -e "${BOLD}${CYAN}╔══════════════════════════════════╗${RESET}"
-    echo -e "${BOLD}${CYAN}║       Caffyne Shell Setup        ║${RESET}"
-    echo -e "${BOLD}${CYAN}╚══════════════════════════════════╝${RESET}"
+    echo -e "${BOLD}${CYAN}+==================================+${RESET}"
+    echo -e "${BOLD}${CYAN}|       Agility Shell Setup        |${RESET}"
+    echo -e "${BOLD}${CYAN}+==================================+${RESET}"
     echo
 
     check_arch

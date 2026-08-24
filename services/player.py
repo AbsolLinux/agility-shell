@@ -12,7 +12,7 @@ from gi.repository import Playerctl, GLib
 from fabric.core.service import Service, Signal, Property
 from fabric import Fabricator
 
-TEMP_DIR = Path.home() / ".cache" / "caffyne-shell"
+TEMP_DIR = Path.home() / ".cache" / "agility-shell"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 class PlayerService(Service):

@@ -28,7 +28,7 @@ from fabric.widgets.image import Image
 from fabric import Application
 from snippets import Icon, Animator
 
-WALLPAPER_PATH  = os.path.expanduser("~/.cache/caffyne-shell/wallpaper_blurred")
+WALLPAPER_PATH  = os.path.expanduser("~/.cache/agility-shell/wallpaper_blurred")
 IDLE_TIMEOUT_MS = 5_000
 
 DUR_WAKE  = 0.38
@@ -558,7 +558,7 @@ def lock():
         return None
 
     app = Application("lock")
-    app.set_stylesheet_from_file(os.path.expanduser("~/.config/caffyne-shell/style/style.css"))
+    app.set_stylesheet_from_file(os.path.expanduser("~/.config/agility-shell/style/style.css"))
     manager = LockManager()
     app.run()
 

@@ -614,13 +614,13 @@ class ThemePreview(Box):
     def _write_border_css(self, key: str) -> None:
         values = RADIUS_MAP[key]
         css = "\n".join(f"@define {k} {v};" for k, v in values.items())
-        path = os.path.expanduser("~/.config/caffyne-shell/style/borders.css")
+        path = os.path.expanduser("~/.config/agility-shell/style/borders.css")
         with open(path, "w") as f:
             f.write(css + "\n")
     def _write_font_css(self, key: str) -> None:
         values = FONT_MAP[key]
         css = "\n".join(f"@define {k} {v};" for k, v in values.items())
-        path = os.path.expanduser("~/.config/caffyne-shell/style/fonts.css")
+        path = os.path.expanduser("~/.config/agility-shell/style/fonts.css")
         with open(path, "w") as f:
             f.write(css + "\n")
 

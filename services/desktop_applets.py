@@ -289,7 +289,7 @@ class DesktopAppletWindow(WaylandWindow):
             layer="bottom",
             child=self._root,
             visible=True,
-            title="caffyne-shell-desktop-applets",
+            title="agility-shell-desktop-applets",
         )
 
         self.connect("size-allocate",      self._on_size_allocate)

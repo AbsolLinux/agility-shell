@@ -23,8 +23,8 @@ SUPPORTED_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 PREVIEW_WIDTH  = 918
 PREVIEW_HEIGHT = 546
 
-THUMB_CACHE_DIR   = Path.home() / ".cache" / "caffyne-shell" / "thumbnails"
-PREVIEW_CACHE_DIR = Path.home() / ".cache" / "caffyne-shell" / "previews"
+THUMB_CACHE_DIR   = Path.home() / ".cache" / "agility-shell" / "thumbnails"
+PREVIEW_CACHE_DIR = Path.home() / ".cache" / "agility-shell" / "previews"
 
 def _fast_cache_key(path: str) -> str:
     stat = os.stat(path)
@@ -320,7 +320,7 @@ class DashWallpaperPage(DashSelectorPage):
         self._preview_image.set_from_pixbuf(None)
 
     def _load_wallpapers(self) -> None:
-        walls_dir = os.path.expanduser("~/.config/caffyne-shell/wallpapers")
+        walls_dir = os.path.expanduser("~/.config/agility-shell/wallpapers")
         if not os.path.isdir(walls_dir):
             return
 

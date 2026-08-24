@@ -1,4 +1,4 @@
-spawn-at-startup "~/.config/caffyne-shell/start.sh"
+spawn-at-startup "~/.config/agility-shell/start.sh"
 
 layout {
     background-color "transparent"
@@ -10,7 +10,7 @@ layer-rule {
 }
 
 layer-rule {
-    match namespace="^caffyne-shell-applet$"
+    match namespace="^agility-shell-applet$"
     background-effect {
         xray false
         saturation 1.0
@@ -19,7 +19,7 @@ layer-rule {
 }
 
 layer-rule {
-    match namespace="^caffyne-shell-notifications$"
+    match namespace="^agility-shell-notifications$"
     background-effect {
         xray false
         saturation 1.0
@@ -28,7 +28,7 @@ layer-rule {
 }
 
 layer-rule {
-    match namespace="^caffyne-shell-bar$"
+    match namespace="^agility-shell-bar$"
     background-effect {
         xray false
         saturation 1.0
@@ -37,7 +37,7 @@ layer-rule {
 }
 
 layer-rule {
-    match namespace="^caffyne-shell-osd$"
+    match namespace="^agility-shell-osd$"
     background-effect {
         xray false
         saturation 1.0
@@ -46,7 +46,7 @@ layer-rule {
 }
 
 layer-rule {
-    match namespace="^caffyne-shell-dash$"
+    match namespace="^agility-shell-dash$"
     background-effect {
         saturation 1.0
       	noise 0
@@ -60,5 +60,5 @@ overview {
 }
 
 binds {
-    Mod+Space { spawn "fabric-cli" "exec" "caffyne-shell" "bar_manager.toggle('Dash')"; }
+    Mod+Space { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
 }

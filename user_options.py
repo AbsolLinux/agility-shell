@@ -3,7 +3,7 @@ import json
 from loguru import logger
 from fabric.utils import get_relative_path
 
-CONFIG_PATH = os.path.expanduser("~/.config/caffyne-shell/config/config.json")
+CONFIG_PATH = os.path.expanduser("~/.config/agility-shell/config/config.json")
 
 
 class UserOptions:

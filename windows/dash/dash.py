@@ -68,7 +68,7 @@ class DashDismissLayer(Window):
         super().__init__(
             anchor="left right top bottom",
             layer="top",
-            title="caffyne-shell-dash",
+            title="agility-shell-dash",
             keyboard_mode="none",
             style_classes=["dash"],
             visible=False,

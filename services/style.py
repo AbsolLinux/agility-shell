@@ -12,7 +12,7 @@ class StyleService(Service):
         self.app = app
         self._style_changed = False
 
-        self.style_monitor = monitor_file(os.path.expanduser("~/.config/caffyne-shell/style"))
+        self.style_monitor = monitor_file(os.path.expanduser("~/.config/agility-shell/style"))
         self.style_monitor.connect("changed", lambda *_: self.reload())
 
     @Property(bool, default_value=False)
@@ -22,7 +22,7 @@ class StyleService(Service):
     def reload(self, *_):
         try:
             self.app.set_stylesheet_from_file(
-                file_path=os.path.expanduser("~/.config/caffyne-shell/style/style.css"),
+                file_path=os.path.expanduser("~/.config/agility-shell/style/style.css"),
             )
             
             GLib.timeout_add(100, apply_plugin_css, self.app)

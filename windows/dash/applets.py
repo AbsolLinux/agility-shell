@@ -13,7 +13,7 @@ from desktop_applets import DESKTOP_APPLET_SIZES
 import cairo
 
 ALL_BEAN_DATA: list[tuple[str, str]] = [
-    ("caffyne-duotone",                 "Dash"),
+    ("agility-duotone",                 "Dash"),
     ("magnifying-glass-duotone",        "Launcher"),
     ("dock-duotone",                    "Dock"),
     ("cards-three-duotone",             "Workspaces"),

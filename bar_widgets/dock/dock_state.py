@@ -3,7 +3,7 @@ import json
 import os
 from loguru import logger
 
-DOCK_STATE_PATH = os.path.expanduser("~/.config/caffyne-shell/config/dock_state.json")
+DOCK_STATE_PATH = os.path.expanduser("~/.config/agility-shell/config/dock_state.json")
 
 class DockEntry:
     def __init__(self, app_id: str, order: int = 0):

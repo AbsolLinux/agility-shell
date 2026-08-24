@@ -5,9 +5,9 @@ from fabric import Application
 from services.wallpaper import WallpaperService
 from services.style import StyleService
 from utils.sounds import play_sound
-setproctitle("caffyne-shell")
+setproctitle("agility-shell")
 
-app = Application("caffyne-shell")
+app = Application("agility-shell")
 
 singletons.style_service = StyleService(app)
 
