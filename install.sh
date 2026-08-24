@@ -320,10 +320,29 @@ do_update() {
     success "Python dependencies updated."
 
     compile_snippets
+    chmod +x "$INSTALL_DIR/start.sh" "$INSTALL_DIR/update.sh" "$INSTALL_DIR/install.sh" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
 
     success "Agility Shell updated successfully!"
     echo
-    info "Restart the shell to apply changes."
+    info "Restart the shell or reboot to apply changes."
+
+    prompt_reboot
+}
+
+prompt_reboot() {
+    echo
+    warn "A system reboot is recommended to ensure all services, environment variables, and compositor configs take effect."
+    echo
+    read -rp "  Would you like to reboot now? [y/N]: " reboot_choice
+    case "$reboot_choice" in
+        [yY]|[yY][eE][sS])
+            info "Rebooting system..."
+            systemctl reboot || sudo reboot
+            ;;
+        *)
+            info "Reboot skipped. You can manually start the shell using: ~/.config/agility-shell/start.sh"
+            ;;
+    esac
 }
 
 # -- Fresh install -------------------------------------------------------------
@@ -340,6 +359,8 @@ do_install() {
     inject_niri_include
     setup_matugen
 
+    chmod +x "$INSTALL_DIR/start.sh" "$INSTALL_DIR/update.sh" "$INSTALL_DIR/install.sh" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
+
     echo
     success "Agility Shell installed successfully!"
     echo
@@ -353,6 +374,8 @@ do_install() {
     echo -e "    The shell is configured to start automatically with Niri."
     echo -e "    Config: ${CYAN}~/.config/agility-shell/config/niri.kdl${RESET}"
     echo
+
+    prompt_reboot
 }
 
 # -- Entry point ---------------------------------------------------------------
