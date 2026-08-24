@@ -142,6 +142,7 @@ do_update() {
     success "Python dependencies updated."
 
     compile_snippets
+    chmod +x "$INSTALL_DIR/start.sh" "$INSTALL_DIR/update.sh" "$INSTALL_DIR/install.sh" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
 
     success "Agility Shell updated successfully!"
     echo

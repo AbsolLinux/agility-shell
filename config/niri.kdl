@@ -1,4 +1,4 @@
-spawn-at-startup "~/.config/agility-shell/start.sh"
+spawn-at-startup "bash" "-c" "~/.config/agility-shell/start.sh"
 
 layout {
     background-color "transparent"
@@ -61,6 +61,7 @@ overview {
 
 binds {
     Mod+Space { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
-    Super { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+D     { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
 }
+
 
