@@ -31,7 +31,19 @@ ffi.cdef("""
     void* gdk_wayland_window_get_wl_surface(GdkWindow *window);
 """)
 
-libblur = ffi.dlopen(get_relative_path("./lib/libblur.so"))
+import os
+import subprocess
+
+_blur_so_path = get_relative_path("./lib/libblur.so")
+if not os.path.exists(_blur_so_path):
+    _blur_makefile_dir = get_relative_path("./lib")
+    if os.path.exists(os.path.join(_blur_makefile_dir, "Makefile")):
+        try:
+            subprocess.run(["make", "-C", _blur_makefile_dir], check=True, capture_output=True)
+        except Exception:
+            pass
+
+libblur = ffi.dlopen(_blur_so_path)
 libgtk  = ffi.dlopen("libgtk-3.so.0")
 libgdk  = ffi.dlopen("libgdk-3.so.0")
 
