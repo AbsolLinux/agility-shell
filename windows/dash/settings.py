@@ -12,9 +12,10 @@ from .themes import Section
 class DashSettingsPage(Box):
     """
     Dash settings page for configuring:
-      - Hover-to-Open behavior & delay
-      - Bar Transparency (Opacity percentage slider)
+      - Bar Behavior (Hover-to-Open & Delay)
+      - Bar Appearance (Bar background opacity & Widget container opacity)
       - Bar Position (Top / Bottom alignment)
+      - Dash Appearance & Performance (Blur toggle, Dim opacity, Card opacity, Instant opening)
     """
 
     def __init__(self, bar_manager=None, **kwargs):
@@ -42,7 +43,9 @@ class DashSettingsPage(Box):
         )
 
     def _build_content(self) -> Box:
-        # --- Section 1: Bar Behavior & Hover ---
+        # =====================================================================
+        # Section 1: Bar Behavior & Hover
+        # =====================================================================
         self._hover_switch = SmoothSwitch(
             style_classes=["dash-switch"],
             v_expand=True,
@@ -64,7 +67,7 @@ class DashSettingsPage(Box):
                     h_expand=True,
                     children=[
                         Label(label="Hover to Open", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Open Dash and bar applets when hovering the mouse over them", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                        Label(label="Open Dash and bar applets automatically when hovering over them", style="font-size: 11px; opacity: 0.6;", h_align="start"),
                     ],
                 ),
                 Box(h_align="end", children=[self._hover_switch]),
@@ -95,7 +98,7 @@ class DashSettingsPage(Box):
                     h_expand=True,
                     children=[
                         Label(label="Hover Delay", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Debounce duration before opening on hover", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                        Label(label="Debounce duration before opening on hover to prevent accidental triggers", style="font-size: 11px; opacity: 0.6;", h_align="start"),
                     ],
                 ),
                 Box(h_align="end", style="min-width: 224px;", children=[self._delay_slider]),
@@ -107,20 +110,22 @@ class DashSettingsPage(Box):
             children=[hover_row, delay_row],
         )
 
-        # --- Section 2: Appearance & Transparency ---
-        current_opacity = getattr(user_options.settings, "bar_opacity", 1.0)
-        self._opacity_slider = FlatScale(
+        # =====================================================================
+        # Section 2: Bar Appearance & Transparency
+        # =====================================================================
+        current_bar_opacity = getattr(user_options.settings, "bar_opacity", 1.0)
+        self._bar_opacity_slider = FlatScale(
             style_classes=["scale"],
             min_value=0.0,
             max_value=1.0,
             step=0.05,
-            value=current_opacity,
+            value=current_bar_opacity,
             value_formatter=lambda val: f"{round(val * 100)}%",
             h_expand=True,
         )
-        self._opacity_slider.connect("value-changed", self._on_opacity_changed)
+        self._bar_opacity_slider.connect("value-changed", self._on_bar_opacity_changed)
 
-        opacity_row = Box(
+        bar_opacity_row = Box(
             orientation="h",
             spacing=6,
             h_align="fill",
@@ -131,20 +136,53 @@ class DashSettingsPage(Box):
                     h_align="start",
                     h_expand=True,
                     children=[
-                        Label(label="Bar Transparency", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Adjust background opacity (100% is solid, 0% is fully transparent)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                        Label(label="Bar Background Opacity", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Adjust outer bar background transparency (0% is fully clear)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
                     ],
                 ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._opacity_slider]),
+                Box(h_align="end", style="min-width: 224px;", children=[self._bar_opacity_slider]),
             ],
         )
 
-        appearance_section = Section(
-            title="Bar Appearance",
-            children=[opacity_row],
+        current_widget_opacity = getattr(user_options.settings, "widget_opacity", 1.0)
+        self._widget_opacity_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            value=current_widget_opacity,
+            value_formatter=lambda val: f"{round(val * 100)}%",
+            h_expand=True,
+        )
+        self._widget_opacity_slider.connect("value-changed", self._on_widget_opacity_changed)
+
+        widget_opacity_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Bar Widgets Opacity", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Adjust widget pill container opacity (100% solid, 0% transparent)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", style="min-width: 224px;", children=[self._widget_opacity_slider]),
+            ],
         )
 
-        # --- Section 3: Position & Layout ---
+        bar_appearance_section = Section(
+            title="Bar Appearance",
+            children=[bar_opacity_row, widget_opacity_row],
+        )
+
+        # =====================================================================
+        # Section 3: Bar Position
+        # =====================================================================
         current_pos = self._get_current_bar_alignment()
 
         self._top_btn = Button(
@@ -205,14 +243,141 @@ class DashSettingsPage(Box):
             children=[pos_row],
         )
 
+        # =====================================================================
+        # Section 4: Dash Customization & Effects
+        # =====================================================================
+        self._blur_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_dash_blur_toggled,
+            width=48,
+        )
+        self._blur_switch.set_active(getattr(user_options.settings, "dash_blur", True))
+
+        blur_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Dash Background Blur", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Enable or disable backdrop blur when Dash is open", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._blur_switch]),
+            ],
+        )
+
+        current_dim = getattr(user_options.settings, "dash_dim_opacity", 0.6)
+        self._dim_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            value=current_dim,
+            value_formatter=lambda val: f"{round(val * 100)}%",
+            h_expand=True,
+        )
+        self._dim_slider.connect("value-changed", self._on_dim_changed)
+
+        dim_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Dash Backdrop Dim Opacity", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Adjust background darkness/transparency when Dash is opened", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", style="min-width: 224px;", children=[self._dim_slider]),
+            ],
+        )
+
+        current_card_opacity = getattr(user_options.settings, "dash_card_opacity", 1.0)
+        self._card_opacity_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            value=current_card_opacity,
+            value_formatter=lambda val: f"{round(val * 100)}%",
+            h_expand=True,
+        )
+        self._card_opacity_slider.connect("value-changed", self._on_card_opacity_changed)
+
+        card_opacity_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Dash App Tiles Opacity", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Adjust background tile transparency for application launcher cards", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", style="min-width: 224px;", children=[self._card_opacity_slider]),
+            ],
+        )
+
+        self._instant_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_instant_toggled,
+            width=48,
+        )
+        self._instant_switch.set_active(getattr(user_options.settings, "instant_dash", True))
+
+        instant_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Ultra-Fast Instant Dash Opening", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Zero-latency instant display when pressing Super or clicking Dash button", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._instant_switch]),
+            ],
+        )
+
+        dash_section = Section(
+            title="Dash Appearance & Responsiveness",
+            children=[blur_row, dim_row, card_opacity_row, instant_row],
+        )
+
         container = Box(
             orientation="v",
             spacing=32,
             h_align="center",
             children=[
                 behavior_section,
-                appearance_section,
+                bar_appearance_section,
                 position_section,
+                dash_section,
             ],
         )
         return container
@@ -238,7 +403,7 @@ class DashSettingsPage(Box):
         user_options.settings.hover_delay = int(val)
         user_options.save()
 
-    def _on_opacity_changed(self, _scale, val: float):
+    def _on_bar_opacity_changed(self, _scale, val: float):
         opacity = max(0.0, min(1.0, float(val)))
         user_options.settings.bar_opacity = opacity
         user_options.save()
@@ -246,6 +411,41 @@ class DashSettingsPage(Box):
         bm = self._bar_manager or singletons.bar_manager
         if bm and hasattr(bm, "apply_bar_opacity"):
             bm.apply_bar_opacity(opacity)
+
+    def _on_widget_opacity_changed(self, _scale, val: float):
+        opacity = max(0.0, min(1.0, float(val)))
+        user_options.settings.widget_opacity = opacity
+        user_options.save()
+
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "apply_widget_opacity"):
+            bm.apply_widget_opacity(opacity)
+
+    def _on_dash_blur_toggled(self, state: bool):
+        user_options.settings.dash_blur = state
+        user_options.save()
+
+    def _on_dim_changed(self, _scale, val: float):
+        opacity = max(0.0, min(1.0, float(val)))
+        user_options.settings.dash_dim_opacity = opacity
+        user_options.save()
+
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and getattr(bm, "_dash", None) and hasattr(bm._dash, "dismiss_layer"):
+            bm._dash.dismiss_layer.set_dim_opacity(opacity)
+
+    def _on_card_opacity_changed(self, _scale, val: float):
+        opacity = max(0.0, min(1.0, float(val)))
+        user_options.settings.dash_card_opacity = opacity
+        user_options.save()
+
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and getattr(bm, "_dash", None) and hasattr(bm._dash, "launcher"):
+            bm._dash.launcher.set_card_opacity(opacity)
+
+    def _on_instant_toggled(self, state: bool):
+        user_options.settings.instant_dash = state
+        user_options.save()
 
     def _set_position(self, alignment: str):
         self._update_position_buttons(alignment)

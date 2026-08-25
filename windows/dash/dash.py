@@ -70,17 +70,25 @@ class DashDismissLayer(Window):
         )
         self._dismiss_eb.set_hexpand(True)
 
+        dim = getattr(user_options.settings, "dash_dim_opacity", 0.6)
+        style = f"background-color: rgba(0, 0, 0, {dim * 0.5:.2f});"
+
         super().__init__(
             anchor="left right top bottom",
             layer="top",
             title="agility-shell-dash",
             keyboard_mode="none",
             style_classes=["dash"],
+            style=style,
             visible=False,
             child=zone_box,
         )
         GtkLayerShell.set_exclusive_zone(self, -1)
         self.add_keybinding("escape", lambda: self._dash.toggle())
+
+    def set_dim_opacity(self, opacity: float):
+        opacity = max(0.0, min(1.0, float(opacity)))
+        self.set_style(f"background-color: rgba(0, 0, 0, {opacity * 0.5:.2f});")
 
 
     def _on_button_press(self, widget, event: Gdk.EventButton):
@@ -394,8 +402,15 @@ class Dash(Window):
             self.applets.set_monitor(active_monitor)
 
             self.dismiss_layer.show()
-            if not self.dismiss_layer._blur_ctx:
-                self.dismiss_layer._blur_ctx = enable_blur(self.dismiss_layer)
+            if getattr(user_options.settings, "dash_blur", True) and user_options.theme.blur:
+                if not self.dismiss_layer._blur_ctx:
+                    self.dismiss_layer._blur_ctx = enable_blur(self.dismiss_layer)
+            else:
+                if self.dismiss_layer._blur_ctx:
+                    disable_blur(self.dismiss_layer._blur_ctx)
+                    free_blur(self.dismiss_layer._blur_ctx)
+                    self.dismiss_layer._blur_ctx = None
+
             self.show()
             self.revealer.open()
 

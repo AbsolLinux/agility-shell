@@ -194,6 +194,30 @@
     background-color: var(--error);
 }
 
+.bar-widget.caffeine-on,
+.bar-button.caffeine-on {
+    color: var(--primary);
+}
+
+.bar-widget.nightlight-on,
+.bar-button.nightlight-on {
+    color: var(--tertiary);
+}
+
+.clipboard-item {
+    border-radius: apply(radius-m);
+    padding: 8px 12px;
+    transition: 0.2s ease;
+}
+
+.clipboard-item:hover {
+    background-color: var(--surface_container_high);
+}
+
+.clipboard-item.active {
+    background-color: var(--primary_container);
+}
+
 .draggable-section {
     transition: 0.3s ease;
     min-height: 36px;

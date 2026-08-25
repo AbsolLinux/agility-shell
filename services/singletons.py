@@ -18,6 +18,9 @@ from .night_mode import NightModeService
 from .recorder import RecorderService
 from .bluetooth import BluetoothClient
 from .system_tray import SystemTray
+from .clipboard import ClipboardService
+from .caffeine import CaffeineService
+from .sysmon import SysMonService
 from user_options import user_options
 
 bar_manager = None
@@ -41,4 +44,7 @@ process_monitor = ProcessMonitorService()
 night_mode = NightModeService()
 recorder = RecorderService()
 watcher = SystemTray()
+clipboard = ClipboardService()
+caffeine = CaffeineService()
+sysmon = SysMonService()
 idle.start()

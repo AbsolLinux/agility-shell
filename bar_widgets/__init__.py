@@ -19,6 +19,10 @@ from .keyboard import KeyboardButton
 from .apps import LauncherButton
 from .dock import Dock
 from .dash import DashButton
+from .clipboard import ClipboardButton
+from .caffeine import CaffeineButton
+from .sysmon import SysMonButton
+from .nightlight import NightLightButton
 from .base import BaseButton, StatButton, ProgressButton
 
 __all__ = [
@@ -43,6 +47,10 @@ __all__ = [
     "LauncherButton",
     "Dock",
     "DashButton",
+    "ClipboardButton",
+    "CaffeineButton",
+    "SysMonButton",
+    "NightLightButton",
     "BaseButton",
     "StatButton",
     "ProgressButton",
