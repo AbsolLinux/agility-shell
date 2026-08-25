@@ -1,9 +1,5 @@
 spawn-at-startup "bash" "-c" "~/.config/agility-shell/start.sh"
 
-layout {
-    background-color "transparent"
-}
-
 layer-rule {
     match namespace="^awww-daemon$"
     place-within-backdrop true
@@ -15,7 +11,7 @@ layer-rule {
         blur true
         xray false
         saturation 1.0
-      	noise 0
+        noise 0
     }
 }
 
@@ -25,7 +21,7 @@ layer-rule {
         blur true
         xray false
         saturation 1.0
-      	noise 0
+        noise 0
     }
 }
 
@@ -35,7 +31,7 @@ layer-rule {
         blur true
         xray false
         saturation 1.0
-      	noise 0
+        noise 0
     }
 }
 
@@ -45,7 +41,7 @@ layer-rule {
         blur true
         xray false
         saturation 1.0
-      	noise 0
+        noise 0
     }
 }
 
@@ -54,7 +50,7 @@ layer-rule {
     background-effect {
         blur true
         saturation 1.0
-      	noise 0
+        noise 0
     }
 }
 
@@ -63,7 +59,7 @@ layer-rule {
     background-effect {
         blur true
         saturation 1.0
-      	noise 0
+        noise 0
     }
 }
 
@@ -72,23 +68,14 @@ layer-rule {
     background-effect {
         blur true
         saturation 1.0
-      	noise 0
-    }
-}
-
-overview {
-    workspace-shadow {
-        off
+        noise 0
     }
 }
 
 binds {
-    Mod+Space { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
-    Mod+D     { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
-    Mod+W     { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperPicker')"; }
-    Mod+Alt+X { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
-    Alt+X     { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
+    Mod+Space hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+D     hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+W     hotkey-overlay-title="Wallpaper Gallery" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperPicker')"; }
+    Mod+Alt+X hotkey-overlay-title="Random Wallpaper" { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
+    Alt+X     hotkey-overlay-title="Random Wallpaper" { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
 }
-
-
-
