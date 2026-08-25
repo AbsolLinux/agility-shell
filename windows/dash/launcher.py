@@ -25,7 +25,7 @@ class DashLauncherAppItem(Button):
         self._app_id = app._app.get_id() if hasattr(app, "_app") and app._app else (app.name or "")
 
         card_opacity = getattr(user_options.settings, "dash_card_opacity", 1.0)
-        style = f"background-color: alpha(var(--background), {card_opacity:.2f});" if card_opacity < 1.0 else None
+        style = f"background-color: alpha(var(--background), {card_opacity:.2f});" if card_opacity < 1.0 else ""
 
         pinned = getattr(user_options.settings, "pinned_apps", [])
         is_pinned = self._app_id in pinned
@@ -59,7 +59,7 @@ class DashLauncherAppItem(Button):
 
     def set_card_opacity(self, opacity: float):
         opacity = max(0.0, min(1.0, float(opacity)))
-        self.set_style(f"background-color: alpha(var(--background), {opacity:.2f});")
+        self.set_style(f"background-color: alpha(var(--background), {opacity:.2f});" if opacity < 1.0 else "")
 
     def _on_button_press(self, widget, event: Gdk.EventButton):
         if event.button == 3:
