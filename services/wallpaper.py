@@ -5,7 +5,9 @@ import threading
 import gc
 import gi
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("GtkLayerShell", "0.1")
 
 from PIL import Image as PILImage, ImageFilter
 from gi.repository import GLib, Gdk, Gtk, GtkLayerShell, GdkPixbuf
@@ -14,7 +16,6 @@ from fabric.widgets.eventbox import EventBox
 from fabric.widgets.wayland import WaylandWindow
 from loguru import logger
 from user_options import user_options
-from utils.helpers import popup_with_blur
 CACHE_WALLPAPER_PATH = os.path.expanduser("~/.cache/agility-shell/wallpaper")
 CACHE_BLURRED_PATH   = os.path.expanduser("~/.cache/agility-shell/wallpaper_blurred")
 
@@ -342,7 +343,33 @@ class WallpaperService(Service):
         logger.info("WallpaperService: monitor added, resyncing...")
         self._sync_monitors()
 
+    def get_all_wallpapers(self) -> list[str]:
+        candidates = [
+            os.path.expanduser("~/.config/agility-shell/wallpapers"),
+            os.path.join(os.path.dirname(__file__), "../wallpapers"),
+        ]
+        wallpapers_dir = next((d for d in candidates if os.path.isdir(d)), "")
+        valid_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+        files = []
+        if wallpapers_dir:
+            for f in sorted(os.listdir(wallpapers_dir)):
+                ext = os.path.splitext(f)[1].lower()
+                if ext in valid_exts:
+                    files.append(os.path.join(wallpapers_dir, f))
+        return files
+
+    def random_wallpaper(self) -> str | None:
+        import random
+        all_walls = self.get_all_wallpapers()
+        if not all_walls:
+            return None
+        choices = [w for w in all_walls if w != self._wallpaper_path] or all_walls
+        chosen = random.choice(choices)
+        self.set_wallpaper(chosen)
+        return chosen
+
     def _on_monitor_removed(self, _display, _monitor) -> None:
         logger.info("WallpaperService: monitor removed, resyncing...")
         self._sync_monitors()
+
     

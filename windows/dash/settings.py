@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from fabric.widgets.box import Box
 from fabric.widgets.button import Button
 from fabric.widgets.label import Label
@@ -8,18 +9,79 @@ from user_options import user_options
 import services.singletons as singletons
 from .themes import Section
 
+WIDGET_ICONS: dict[str, str] = {
+    "Dash":          "diamonds-four-duotone",
+    "Launcher":      "squares-four-duotone",
+    "Processes":     "cpu-duotone",
+    "SysMon":        "chart-line-up-duotone",
+    "Weather":       "cloud-sun-duotone",
+    "Media":         "play-circle-duotone",
+    "Dock":          "app-window-duotone",
+    "Tray":          "caret-up-duotone",
+    "Calendar":      "calendar-blank-duotone",
+    "Clock":         "clock-duotone",
+    "Settings":      "gear-six-duotone",
+    "Notifications": "bell-duotone",
+    "Energy":        "battery-charging-duotone",
+    "Bluetooth":     "bluetooth-duotone",
+    "Volume":        "speaker-high-duotone",
+    "Wifi":          "wifi-high-duotone",
+    "Session":       "power-duotone",
+    "Calculator":    "calculator-duotone",
+    "Keyboard":      "keyboard-duotone",
+    "Brightness":    "sun-dim-duotone",
+    "Clipboard":     "clipboard-text-duotone",
+    "Caffeine":      "coffee-duotone",
+    "NightLight":    "moon-stars-duotone",
+    "Workspaces":    "stack-duotone",
+    "Focused":       "text-t-duotone",
+}
+
+ALL_AVAILABLE_WIDGETS: list[str] = [
+    "Dash", "Launcher", "SysMon", "Processes", "Clipboard", "Caffeine", "NightLight",
+    "Media", "Weather", "Volume", "Brightness", "Energy", "Wifi", "Bluetooth",
+    "Clock", "Calendar", "Notifications", "Settings", "Tray", "Dock", "Workspaces",
+    "Calculator", "Keyboard", "Session", "Focused"
+]
+
+
+class BarWidgetChip(Box):
+    def __init__(self, section_name: str, widget_entry: str | dict, on_remove):
+        key = widget_entry["widget"] if isinstance(widget_entry, dict) else widget_entry
+        variant = widget_entry.get("variant") if isinstance(widget_entry, dict) else None
+        icon_name = WIDGET_ICONS.get(key, "app-window-duotone")
+
+        icon = Icon(icon_name=icon_name, icon_size=16)
+        label_text = f"{key} ({variant})" if variant else key
+        label = Label(label=label_text, style="font-size: 12px; font-weight: 500;")
+
+        remove_btn = Button(
+            child=Icon(icon_name="x", icon_size=12),
+            style_classes=["bar-chip-remove-btn"],
+            on_clicked=lambda *_: on_remove(section_name, widget_entry),
+        )
+
+        super().__init__(
+            orientation="h",
+            spacing=6,
+            style_classes=["bar-widget-chip"],
+            children=[icon, label, remove_btn],
+        )
+
 
 class DashSettingsPage(Box):
     """
     Dash settings page for configuring:
       - Bar Behavior (Hover-to-Open & Delay)
-      - Bar Appearance (Bar background opacity & Widget container opacity)
+      - Bar Appearance (Bar background opacity, Widget container opacity, Desktop widget opacity)
+      - Bar Widgets Manager (View and remove / add active widgets in Left, Center, Right)
       - Bar Position (Top / Bottom alignment)
       - Dash Appearance & Performance (Blur toggle, Dim opacity, Card opacity, Instant opening)
     """
 
     def __init__(self, bar_manager=None, **kwargs):
         self._bar_manager = bar_manager
+        self._section_boxes: dict[str, Box] = {}
         content = self._build_content()
 
         self.scroll = ClippingScrolledWindow(
@@ -175,13 +237,94 @@ class DashSettingsPage(Box):
             ],
         )
 
+        current_desktop_opacity = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
+        self._desktop_opacity_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            value=current_desktop_opacity,
+            value_formatter=lambda val: f"{round(val * 100)}%",
+            h_expand=True,
+        )
+        self._desktop_opacity_slider.connect("value-changed", self._on_desktop_opacity_changed)
+
+        desktop_opacity_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Desktop Canvas Widgets Opacity", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Adjust card opacity for widgets placed directly on the desktop", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", style="min-width: 224px;", children=[self._desktop_opacity_slider]),
+            ],
+        )
+
         bar_appearance_section = Section(
-            title="Bar Appearance",
-            children=[bar_opacity_row, widget_opacity_row],
+            title="Appearance & Opacity",
+            children=[bar_opacity_row, widget_opacity_row, desktop_opacity_row],
         )
 
         # =====================================================================
-        # Section 3: Bar Position
+        # Section 3: Bar Widgets Layout & Management
+        # =====================================================================
+        bar_widgets_container = Box(
+            orientation="v",
+            spacing=14,
+            h_align="fill",
+        )
+
+        for sec in ("left", "center", "right"):
+            sec_box = Box(orientation="h", spacing=8, h_align="start")
+            self._section_boxes[sec] = sec_box
+
+            add_btn = Button(
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[Icon(icon_name="plus-circle-duotone", icon_size=14), Label(label="Add Widget")],
+                ),
+                style_classes=["bar-chip-add-btn"],
+                on_clicked=lambda _btn, s=sec: self._show_add_widget_menu(_btn, s),
+            )
+
+            sec_row = Box(
+                orientation="v",
+                spacing=6,
+                h_align="fill",
+                children=[
+                    Box(
+                        orientation="h",
+                        spacing=8,
+                        h_align="fill",
+                        children=[
+                            Label(label=f"{sec.capitalize()} Section", style="font-size: 13px; font-weight: 600;", h_align="start"),
+                            Box(h_expand=True),
+                            add_btn,
+                        ],
+                    ),
+                    sec_box,
+                ],
+            )
+            bar_widgets_container.add(sec_row)
+
+        self._refresh_bar_widgets_ui()
+
+        bar_layout_section = Section(
+            title="Active Bar Widgets",
+            children=[bar_widgets_container],
+        )
+
+        # =====================================================================
+        # Section 4: Bar Position
         # =====================================================================
         current_pos = self._get_current_bar_alignment()
 
@@ -244,7 +387,7 @@ class DashSettingsPage(Box):
         )
 
         # =====================================================================
-        # Section 4: Dash Customization & Effects
+        # Section 5: Dash Customization & Effects
         # =====================================================================
         self._blur_switch = SmoothSwitch(
             style_classes=["dash-switch"],
@@ -376,11 +519,74 @@ class DashSettingsPage(Box):
             children=[
                 behavior_section,
                 bar_appearance_section,
+                bar_layout_section,
                 position_section,
                 dash_section,
             ],
         )
         return container
+
+    def _refresh_bar_widgets_ui(self):
+        cfg = user_options.bars.configs[0]["bars"][0] if (user_options.bars.configs and user_options.bars.configs[0].get("bars")) else {}
+
+        for sec in ("left", "center", "right"):
+            box = self._section_boxes.get(sec)
+            if not box:
+                continue
+            for child in box.get_children():
+                box.remove(child)
+
+            entries = cfg.get(sec, [])
+            if not entries:
+                box.add(Label(label="No widgets placed", style="font-size: 12px; opacity: 0.5;"))
+            else:
+                for entry in entries:
+                    chip = BarWidgetChip(sec, entry, on_remove=self._remove_widget_from_bar)
+                    box.add(chip)
+            box.show_all()
+
+    def _remove_widget_from_bar(self, section_name: str, widget_entry: str | dict):
+        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+            return
+
+        bar_cfg = user_options.bars.configs[0]["bars"][0]
+        entries = bar_cfg.get(section_name, [])
+
+        if widget_entry in entries:
+            entries.remove(widget_entry)
+            user_options.save()
+
+            bm = self._bar_manager or singletons.bar_manager
+            if bm and hasattr(bm, "reload_bars"):
+                bm.reload_bars()
+
+            self._refresh_bar_widgets_ui()
+
+    def _show_add_widget_menu(self, widget: Gtk.Widget, section_name: str):
+        menu = Gtk.Menu()
+        for w_name in ALL_AVAILABLE_WIDGETS:
+            item = Gtk.MenuItem(label=w_name)
+            item.connect("activate", lambda _, name=w_name, s=section_name: self._add_widget_to_bar(s, name))
+            menu.append(item)
+        menu.show_all()
+        menu.popup_at_widget(widget, Gdk.Gravity.SOUTH, Gdk.Gravity.NORTH, None)
+
+    def _add_widget_to_bar(self, section_name: str, widget_name: str):
+        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+            return
+
+        bar_cfg = user_options.bars.configs[0]["bars"][0]
+        if section_name not in bar_cfg:
+            bar_cfg[section_name] = []
+
+        bar_cfg[section_name].append(widget_name)
+        user_options.save()
+
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "reload_bars"):
+            bm.reload_bars()
+
+        self._refresh_bar_widgets_ui()
 
     def _get_current_bar_alignment(self) -> str:
         if user_options.bars.configs and user_options.bars.configs[0].get("bars"):
@@ -421,6 +627,16 @@ class DashSettingsPage(Box):
         if bm and hasattr(bm, "apply_widget_opacity"):
             bm.apply_widget_opacity(opacity)
 
+    def _on_desktop_opacity_changed(self, _scale, val: float):
+        opacity = max(0.0, min(1.0, float(val)))
+        user_options.settings.desktop_widget_opacity = opacity
+        user_options.save()
+
+        from services.desktop_applets import DesktopAppletService
+        das = DesktopAppletService.get_instance()
+        if hasattr(das, "apply_desktop_widget_opacity"):
+            das.apply_desktop_widget_opacity(opacity)
+
     def _on_dash_blur_toggled(self, state: bool):
         user_options.settings.dash_blur = state
         user_options.save()
@@ -435,7 +651,7 @@ class DashSettingsPage(Box):
             bm._dash.dismiss_layer.set_dim_opacity(opacity)
 
     def _on_card_opacity_changed(self, _scale, val: float):
-        opacity = max(0.0, min(1.0, float(val)))
+        opacity = max(0.0, min(1.0, float(opacity)))
         user_options.settings.dash_card_opacity = opacity
         user_options.save()
 

@@ -299,3 +299,122 @@ tooltip label {
     background-color: alpha(var(--error), 0.2);
     border-color: alpha(var(--error), 0.6);
 }
+
+/* ----- Wallpaper Picker Modal ----- */
+.wallpaper-picker-window {
+    background-color: transparent;
+}
+
+.wallpaper-picker-backdrop {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+.wallpaper-picker-modal {
+    background-color: var(--background);
+    border-radius: apply(radius-xl);
+    padding: 24px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--outline_variant);
+    min-width: 780px;
+}
+
+.wallpaper-picker-btn {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-m);
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: 0.2s ease;
+}
+
+.wallpaper-picker-btn:hover {
+    background-color: var(--surface_container_high);
+}
+
+.wallpaper-picker-btn.apply-btn {
+    background-color: var(--primary);
+    color: var(--on_primary);
+}
+
+.wallpaper-picker-btn.close-btn {
+    padding: 8px 10px;
+}
+
+.wallpaper-picker-nav-btn {
+    background-color: var(--surface_container);
+    border-radius: 9999px;
+    padding: 12px;
+    transition: 0.2s ease;
+}
+
+.wallpaper-picker-nav-btn:hover {
+    background-color: var(--surface_container_high);
+}
+
+.wallpaper-picker-preview-img {
+    border-radius: apply(radius-l);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.wallpaper-picker-thumb-wrapper {
+    padding: 4px;
+}
+
+.wallpaper-picker-thumb {
+    border-radius: apply(radius-m);
+    padding: 3px;
+    background-color: var(--surface_container);
+    transition: 0.2s ease;
+}
+
+.wallpaper-picker-thumb:hover {
+    background-color: var(--surface_container_high);
+}
+
+.wallpaper-picker-thumb.active {
+    box-shadow: 0 0 0 2.5px var(--primary);
+}
+
+.wallpaper-picker-thumb-img {
+    border-radius: apply(radius-s);
+}
+
+/* ----- Bar Widget Chips in Settings ----- */
+.bar-widget-chip {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-m);
+    padding: 6px 10px;
+    border: 1px solid var(--outline_variant);
+    transition: 0.2s ease;
+}
+
+.bar-widget-chip:hover {
+    background-color: var(--surface_container_high);
+}
+
+.bar-chip-remove-btn {
+    background-color: alpha(var(--error), 0.15);
+    color: var(--error);
+    border-radius: 9999px;
+    padding: 3px 5px;
+    transition: 0.2s ease;
+}
+
+.bar-chip-remove-btn:hover {
+    background-color: var(--error);
+    color: var(--on_error);
+}
+
+.bar-chip-add-btn {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-m);
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: 0.2s ease;
+}
+
+.bar-chip-add-btn:hover {
+    background-color: var(--surface_container_high);
+}
+

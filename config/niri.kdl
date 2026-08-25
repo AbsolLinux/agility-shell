@@ -12,6 +12,7 @@ layer-rule {
 layer-rule {
     match namespace="^agility-shell-applet$"
     background-effect {
+        blur true
         xray false
         saturation 1.0
       	noise 0
@@ -21,6 +22,7 @@ layer-rule {
 layer-rule {
     match namespace="^agility-shell-notifications$"
     background-effect {
+        blur true
         xray false
         saturation 1.0
       	noise 0
@@ -30,6 +32,7 @@ layer-rule {
 layer-rule {
     match namespace="^agility-shell-bar$"
     background-effect {
+        blur true
         xray false
         saturation 1.0
       	noise 0
@@ -39,6 +42,7 @@ layer-rule {
 layer-rule {
     match namespace="^agility-shell-osd$"
     background-effect {
+        blur true
         xray false
         saturation 1.0
       	noise 0
@@ -48,6 +52,25 @@ layer-rule {
 layer-rule {
     match namespace="^agility-shell-dash$"
     background-effect {
+        blur true
+        saturation 1.0
+      	noise 0
+    }
+}
+
+layer-rule {
+    match namespace="^agility-shell-wallpaper-picker$"
+    background-effect {
+        blur true
+        saturation 1.0
+      	noise 0
+    }
+}
+
+layer-rule {
+    match namespace="^agility-shell-desktop-applets$"
+    background-effect {
+        blur true
         saturation 1.0
       	noise 0
     }
@@ -62,6 +85,10 @@ overview {
 binds {
     Mod+Space { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
     Mod+D     { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+W     { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperPicker')"; }
+    Mod+Alt+X { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
+    Alt+X     { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
 }
+
 
 
