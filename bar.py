@@ -18,12 +18,22 @@ from bar_widgets import (
 )
 from user_options import user_options
 from services.singletons import edit_mode, wm, toggleable_windows
-from windows import (
-    CalculatorApplet, CalendarApplet, ClockApplet, NotificationHistoryApplet,
-    WeatherApplet, MediaApplet, QuickSettings, LauncherApplet, ProcessMonitorApplet, WifiApplet, 
-    LogoutApplet, NotificationWindow, Dash, OSD, AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet,
-    ClipboardApplet
+from windows.calculator import CalculatorApplet
+from windows.calendar import CalendarApplet
+from windows.clock import ClockApplet
+from windows.notificationhistory import NotificationHistoryApplet
+from windows.weather_popup import WeatherApplet
+from windows.media import MediaApplet
+from windows.quick_settings import QuickSettings
+from windows.launcher import LauncherApplet
+from windows.process_monitor import ProcessMonitorApplet
+from windows.standalone_menus import (
+    WifiApplet, LogoutApplet, AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet
 )
+from windows.notifications import NotificationWindow
+from windows.osd import OSD
+from windows.clipboard import ClipboardApplet
+from windows.wallpaper_picker import WallpaperPicker
 from snippets.popupwindow import PopupWindow
 from utils.helpers import popup_with_blur
 from utils.monitors import get_connector_from_monitor_id
@@ -86,7 +96,34 @@ INCOMPATIBLE_GROUPS: set[frozenset] = {
     frozenset({"Processes", "Launcher"}),
 }
 from plugin_loader import load_plugins
-from windows.dash.applets import ALL_BEAN_DATA
+
+ALL_BEAN_DATA: list[tuple[str, str]] = [
+    ("agility-duotone",                 "Dash"),
+    ("magnifying-glass-duotone",        "Launcher"),
+    ("dock-duotone",                    "Dock"),
+    ("cards-three-duotone",             "Workspaces"),
+    ("app-window-duotone",              "Focused"),
+    ("dots-three-circle-duotone",       "Tray"),
+    ("cpu-duotone",                     "Processes"),
+    ("chart-line-up-duotone",           "SysMon"),
+    ("clipboard-text-duotone",          "Clipboard"),
+    ("coffee-duotone",                  "Caffeine"),
+    ("moon-stars-duotone",              "NightLight"),
+    ("clock-duotone",                   "Clock"),
+    ("calendar-blank-duotone",          "Calendar"),
+    ("cloud-sun-duotone",               "Weather"),
+    ("music-notes-duotone",             "Media"),
+    ("calculator-duotone",              "Calculator"),
+    ("bell-simple-duotone",             "Notifications"),
+    ("sliders-horizontal-duotone",      "Settings"),
+    ("power-duotone",                   "Session"),
+    ("lightning-duotone",               "Energy"),
+    ("keyboard-duotone",                "Keyboard"),
+    ("wifi-high-duotone",               "Wifi"),
+    ("bluetooth-duotone",               "Bluetooth"),
+    ("speaker-simple-high-duotone",     "Volume"),
+    ("seal-duotone",                    "Brightness"),
+]
 
 load_plugins(BAR_WIDGETS, APPLET_WIDGETS, INCOMPATIBLE_GROUPS, ALL_BEAN_DATA)
 
@@ -1818,6 +1855,7 @@ class BarManager:
         self._bars: dict[tuple[Gdk.Monitor, int], Bar] = {}
         self._notifications: dict[Gdk.Monitor, NotificationWindow] = {}
         self._dash: Dash | None = None
+        self._wallpaper_picker: WallpaperPicker | None = None
         self._osds: dict[Gdk.Monitor, OSD] = {}
         self._fallback_popups: dict[str, AppletWindow] = {}
         self._display = Gdk.Display.get_default()
@@ -1837,7 +1875,11 @@ class BarManager:
             self._notifications[monitor] = NotificationWindow(monitor_id)
 
         if self._dash is None:
+            from windows.dash.dash import Dash
             self._dash = Dash(self)
+
+        if self._wallpaper_picker is None:
+            self._wallpaper_picker = WallpaperPicker()
 
         if monitor not in self._osds:
             self._osds[monitor] = OSD(monitor_id)
@@ -1919,6 +1961,12 @@ class BarManager:
                 self._dash.toggle(active_monitor)
             return
 
+        if key == "WallpaperPicker":
+            if self._wallpaper_picker is None:
+                self._wallpaper_picker = WallpaperPicker()
+            self._wallpaper_picker.toggle(active_monitor)
+            return
+
         if key == "Wallpapers":
             if self._dash:
                 self._dash.toggle_wallpapers(active_monitor)
@@ -1990,6 +2038,16 @@ class BarManager:
     def set_bar_alignment(self, alignment: str) -> None:
         for bar in self._bars.values():
             bar._set_alignment(alignment)
+
+    def reload_bars(self) -> None:
+        for bar in list(self._bars.values()):
+            bar.destroy()
+        self._bars.clear()
+        for i in range(self._display.get_n_monitors()):
+            monitor = self._display.get_monitor(i)
+            self._add_bar(monitor, i)
+        if self._dash:
+            self._dash.applets.refresh_bar_state()
 
     def apply_blur(self, enabled: bool) -> None:
         for bar in self._bars.values():
