@@ -22,6 +22,14 @@ class DashLauncherAppItem(Button):
     def __init__(self, app: DesktopApp, launcher):
         self._app = app
         self._launcher = launcher
+        self._app_id = app._app.get_id() if hasattr(app, "_app") and app._app else (app.name or "")
+
+        card_opacity = getattr(user_options.settings, "dash_card_opacity", 1.0)
+        style = f"background-color: alpha(var(--background), {card_opacity:.2f});" if card_opacity < 1.0 else None
+
+        pinned = getattr(user_options.settings, "pinned_apps", [])
+        is_pinned = self._app_id in pinned
+
         self.box = Box(
             orientation="v",
             spacing=18,
@@ -42,35 +50,52 @@ class DashLauncherAppItem(Button):
             ],
         )
         super().__init__(
-            style_classes=["dash-launcher-app"],
+            style_classes=["dash-launcher-app"] + (["pinned-app"] if is_pinned else []),
             on_clicked=lambda *_: self.launch(),
             child=self.box,
+            style=style,
         )
-    #     self.connect("enter-notify-event", self._on_enter)
-    #     self.connect("leave-notify-event", self._on_leave)
-    #     self.connect("button-press-event", self._on_press)
-    #     self.connect("button-release-event", self._on_release)
-    #     self.connect("focus-in-event", self._on_focus_in)
-    #     self.connect("focus-out-event", self._on_focus_out)
+        self.connect("button-press-event", self._on_button_press)
 
-    # def _on_enter(self, *_):
-    #     self.box.add_style_class("hover")
+    def set_card_opacity(self, opacity: float):
+        opacity = max(0.0, min(1.0, float(opacity)))
+        self.set_style(f"background-color: alpha(var(--background), {opacity:.2f});")
 
-    # def _on_leave(self, *_):
-    #     self.box.remove_style_class("hover")
-    #     self.box.remove_style_class("active")
+    def _on_button_press(self, widget, event: Gdk.EventButton):
+        if event.button == 3:
+            self._show_context_menu(event)
+            return True
+        return False
 
-    # def _on_press(self, *_):
-    #     self.box.add_style_class("active")
+    def _show_context_menu(self, event: Gdk.EventButton):
+        menu = Gtk.Menu()
+        pinned = list(getattr(user_options.settings, "pinned_apps", []))
+        is_pinned = self._app_id in pinned
 
-    # def _on_release(self, *_):
-    #     self.box.remove_style_class("active")
+        pin_item = Gtk.MenuItem(label="Unpin from Favorites" if is_pinned else "Pin to Favorites")
+        pin_item.connect("activate", lambda _: self._toggle_pin())
+        menu.append(pin_item)
 
-    # def _on_focus_in(self, *_):
-    #     self.box.add_style_class("focus")
+        launch_item = Gtk.MenuItem(label="Launch")
+        launch_item.connect("activate", lambda _: self.launch())
+        menu.append(launch_item)
 
-    # def _on_focus_out(self, *_):
-    #     self.box.remove_style_class("focus")
+        menu.show_all()
+        menu.popup_at_pointer(event)
+
+    def _toggle_pin(self):
+        pinned = list(getattr(user_options.settings, "pinned_apps", []))
+        if self._app_id in pinned:
+            pinned.remove(self._app_id)
+        else:
+            pinned.append(self._app_id)
+        user_options.settings.pinned_apps = pinned
+        user_options.save()
+
+        if hasattr(self._launcher, "launcher") and hasattr(self._launcher.launcher, "_rebuild"):
+            self._launcher.launcher._rebuild()
+        elif hasattr(self._launcher, "_rebuild"):
+            self._launcher._rebuild()
 
     def launch(self):
         increment_usage(self._app)
@@ -729,9 +754,23 @@ class DashLauncherPage(DashPage):
             adj = self.scroll.get_vadjustment()
             adj.set_value(adj.get_lower())
 
+    def set_card_opacity(self, opacity: float):
+        for widget in self._app_widget_cache.values():
+            if hasattr(widget, "set_card_opacity"):
+                widget.set_card_opacity(opacity)
+
     def _sorted_by_usage(self, apps: list) -> list:
         usage = load_usage()
-        return sorted(apps, key=lambda a: get_usage_count(a, usage), reverse=True)
+        pinned = list(getattr(user_options.settings, "pinned_apps", []))
+
+        def sort_key(app):
+            app_id = app._app.get_id() if hasattr(app, "_app") and app._app else (app.name or "")
+            is_pinned = 0 if app_id in pinned else 1
+            pinned_idx = pinned.index(app_id) if app_id in pinned else 0
+            count = get_usage_count(app, usage)
+            return (is_pinned, pinned_idx, -count)
+
+        return sorted(apps, key=sort_key)
 
     def _search(self, entry):
         query = entry.get_text()

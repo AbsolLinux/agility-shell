@@ -41,6 +41,10 @@
     transition: 0.3s ease;
 }
 
+.dash-launcher-app.pinned-app {
+    box-shadow: inset 0 0 0 1.5px var(--primary);
+}
+
 .dash-applet-item {
     background-color: var(--background);
     padding: 18px;

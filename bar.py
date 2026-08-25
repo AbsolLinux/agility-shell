@@ -13,14 +13,16 @@ from bar_widgets import (
     LauncherButton, BluetoothButton, BatteryButton, CalendarButton, ClockButton,
     CPUIndicatorButton, NetworkButton, NotificationButton, Workspaces,
     NiriClientTitle, Media, QuickSettingsButton, WeatherButton, VolumeButton,
-    CalculatorButton, SessionButton, KeyboardButton, SystemTray, Dock, BrightnessButton, DashButton
+    CalculatorButton, SessionButton, KeyboardButton, SystemTray, Dock, BrightnessButton, DashButton,
+    ClipboardButton, CaffeineButton, SysMonButton, NightLightButton
 )
 from user_options import user_options
 from services.singletons import edit_mode, wm, toggleable_windows
 from windows import (
     CalculatorApplet, CalendarApplet, ClockApplet, NotificationHistoryApplet,
     WeatherApplet, MediaApplet, QuickSettings, LauncherApplet, ProcessMonitorApplet, WifiApplet, 
-    LogoutApplet, NotificationWindow, Dash, OSD, AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet
+    LogoutApplet, NotificationWindow, Dash, OSD, AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet,
+    ClipboardApplet
 )
 from snippets.popupwindow import PopupWindow
 from utils.helpers import popup_with_blur
@@ -49,6 +51,10 @@ BAR_WIDGETS: dict[str, type] = {
     "Dock":          Dock,
     "Brightness":    BrightnessButton,
     "Dash":          DashButton,
+    "Clipboard":     ClipboardButton,
+    "Caffeine":      CaffeineButton,
+    "SysMon":        SysMonButton,
+    "NightLight":    NightLightButton,
 }
 
 APPLET_WIDGETS: dict[str, type] = {
@@ -67,6 +73,7 @@ APPLET_WIDGETS: dict[str, type] = {
     "Keyboard":      KeyboardApplet,
     "Launcher":      LauncherApplet,
     "Processes":     ProcessMonitorApplet,
+    "Clipboard":     ClipboardApplet,
 }
 
 INCOMPATIBLE_GROUPS: set[frozenset] = {
@@ -418,6 +425,7 @@ class WidgetWrapper(Box):
         self.event_box.connect("button-release-event", self._on_click)
         if key not in ["Workspaces", "Dock"]:
             self.event_box.add_style_class("bar-widget")
+            self.set_widget_opacity(getattr(user_options.settings, "widget_opacity", 1.0))
             
         if self.widget_key in APPLET_WIDGETS or self.widget_key == "Dash":
             self.event_box.connect("enter-notify-event", self._on_enter)
@@ -425,6 +433,14 @@ class WidgetWrapper(Box):
             self.event_box.connect("button-press-event", lambda w, e: w.add_style_class("active") if e.button == 1 and not edit_mode.edit_mode else None)
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self._apply_drag_state()
+
+    def set_widget_opacity(self, opacity: float):
+        opacity = max(0.0, min(1.0, float(opacity)))
+        if self.widget_key not in ["Workspaces", "Dock"]:
+            if opacity < 1.0:
+                self.event_box.set_style(f"background-color: alpha(var(--surface_container), {opacity:.2f});")
+            else:
+                self.event_box.set_style(None)
 
     def _on_enter(self, widget, event):
         widget.add_style_class("hovered")
@@ -816,6 +832,7 @@ class GroupWrapper(Box):
         self.add(outer_eb)
         self._outer_eb = outer_eb
         self._outer_eb.add_style_class("bar-widget")
+        self.set_widget_opacity(getattr(user_options.settings, "widget_opacity", 1.0))
         self._outer_eb.connect("enter-notify-event", self._on_enter)
         self._outer_eb.connect("leave-notify-event", self.on_leave)
         self._outer_eb.connect("button-press-event", lambda w, e: w.add_style_class("active") if e.button == 1 and not edit_mode.edit_mode else None)
@@ -829,6 +846,13 @@ class GroupWrapper(Box):
 
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self._apply_drag_state()
+
+    def set_widget_opacity(self, opacity: float):
+        opacity = max(0.0, min(1.0, float(opacity)))
+        if opacity < 1.0:
+            self._outer_eb.set_style(f"background-color: alpha(var(--surface_container), {opacity:.2f});")
+        else:
+            self._outer_eb.set_style(None)
 
     def _on_enter(self, widget, event):
         widget.add_style_class("hovered")
@@ -1955,6 +1979,13 @@ class BarManager:
     def apply_bar_opacity(self, opacity: float) -> None:
         for bar in self._bars.values():
             bar.set_opacity(opacity)
+
+    def apply_widget_opacity(self, opacity: float) -> None:
+        for bar in self._bars.values():
+            for section in bar.sections.values():
+                for child in section.get_children():
+                    if hasattr(child, "set_widget_opacity"):
+                        child.set_widget_opacity(opacity)
 
     def set_bar_alignment(self, alignment: str) -> None:
         for bar in self._bars.values():

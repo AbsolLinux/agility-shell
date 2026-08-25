@@ -4,6 +4,9 @@ from fabric.widgets.box import Box
 from snippets.animator import Animator
 
 
+from user_options import user_options
+
+
 class DashReveal(Box):
 
     SCALE_START = 0.8
@@ -57,6 +60,12 @@ class DashReveal(Box):
             self.active_animator.pause()
             self.active_animator = None
 
+        if getattr(user_options.settings, "instant_dash", False):
+            self._set_progress(1.0)
+            self._clear_cache()
+            self.queue_draw()
+            return
+
         self._update_cache()
 
         start_val = self._progress
@@ -103,6 +112,11 @@ class DashReveal(Box):
         if self.active_animator:
             self.active_animator.pause()
             self.active_animator = None
+
+        if getattr(user_options.settings, "instant_dash", False):
+            self._set_progress(0.0)
+            self._on_close_finished()
+            return
 
         self._update_cache()
 

@@ -10,6 +10,7 @@ from .media import MediaApplet
 from .quick_settings import QuickSettings
 from .dash.dash import Dash
 from .osd import OSD
+from .clipboard import ClipboardApplet
 from .standalone_menus import AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet, WifiApplet, LogoutApplet
 __all__ = [
     "CalculatorApplet",
@@ -19,7 +20,6 @@ __all__ = [
     "ClockApplet",
     "WeatherApplet",
     "NotificationWindow",
-    "CalendarWidget",
     "NotificationHistoryApplet",
     "ProcessMonitorApplet",
     "QuickSettings",
@@ -27,6 +27,7 @@ __all__ = [
     "LogoutApplet",
     "Dash",
     "OSD",
+    "ClipboardApplet",
     "AudioApplet",
     "PowerApplet",
     "KeyboardApplet",
