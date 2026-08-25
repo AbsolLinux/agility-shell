@@ -440,7 +440,7 @@ class WidgetWrapper(Box):
             if opacity < 1.0:
                 self.event_box.set_style(f"background-color: alpha(var(--surface_container), {opacity:.2f});")
             else:
-                self.event_box.set_style(None)
+                self.event_box.set_style("")
 
     def _on_enter(self, widget, event):
         widget.add_style_class("hovered")
@@ -852,7 +852,7 @@ class GroupWrapper(Box):
         if opacity < 1.0:
             self._outer_eb.set_style(f"background-color: alpha(var(--surface_container), {opacity:.2f});")
         else:
-            self._outer_eb.set_style(None)
+            self._outer_eb.set_style("")
 
     def _on_enter(self, widget, event):
         widget.add_style_class("hovered")

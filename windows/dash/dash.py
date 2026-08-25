@@ -12,6 +12,7 @@ from .wallpapers import DashWallpaperPage
 from .themes import DashThemePage
 from snippets import DashReveal, enable_blur, disable_blur, free_blur
 import bar
+from user_options import user_options
 from services.desktop_applets import DesktopAppletService
 
 DesktopAppletService.get_instance()
