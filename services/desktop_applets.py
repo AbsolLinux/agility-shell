@@ -643,10 +643,6 @@ class DesktopAppletWindow(WaylandWindow):
             w_px, h_px = _applet_pixel_size(key)
             widget.set_size_request(w_px, h_px)
 
-            op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
-            if op < 1.0 and hasattr(widget, "set_style"):
-                widget.set_style(f"background-color: alpha(var(--background), {op:.2f});")
-
             eb = Gtk.EventBox()
             eb.set_size_request(w_px, h_px)
             eb.add(widget)
@@ -948,11 +944,3 @@ class DesktopAppletService(Service):
 
     def get_window(self, monitor_id: int) -> "DesktopAppletWindow | None":
         return self._windows.get(monitor_id)
-
-    def apply_desktop_widget_opacity(self, opacity: float) -> None:
-        opacity = max(0.0, min(1.0, float(opacity)))
-        for win in self._windows.values():
-            for eb in win._children.values():
-                child = eb.get_child()
-                if child and hasattr(child, "set_style"):
-                    child.set_style(f"background-color: alpha(var(--background), {opacity:.2f});" if opacity < 1.0 else "")

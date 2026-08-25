@@ -4,7 +4,6 @@ from .date import DesktopDate
 from .media import DesktopMediaApplet
 from .system import DesktopSystem
 from .weather import DesktopWeather
-from .sysmon import DesktopSysMon
 
 __all__ = [
     "DesktopBattery",
@@ -13,7 +12,6 @@ __all__ = [
     "DesktopMediaApplet",
     "DesktopSystem",
     "DesktopWeather",
-    "DesktopSysMon",
     "DESKTOP_APPLET_WIDGETS",
     "DESKTOP_APPLET_SIZES",
 ]
@@ -25,7 +23,6 @@ DESKTOP_APPLET_SIZES: dict[str, int] = {
     "Media":     2,
     "Processes": 1,
     "Weather":   2,
-    "SysMon":    1,
 }
 DESKTOP_CANVAS_SIZES: dict[str, tuple[int, int]] = {
     "Energy":    (1, 1),
@@ -34,7 +31,6 @@ DESKTOP_CANVAS_SIZES: dict[str, tuple[int, int]] = {
     "Media":     (2, 1),
     "Processes": (1, 1),
     "Weather":   (2, 1),
-    "SysMon":    (1, 1),
 }
 DESKTOP_APPLET_WIDGETS: dict[str, type] = {
     "Energy":    DesktopBattery,
@@ -43,5 +39,4 @@ DESKTOP_APPLET_WIDGETS: dict[str, type] = {
     "Media":     DesktopMediaApplet,
     "Processes": DesktopSystem,
     "Weather":   DesktopWeather,
-    "SysMon":    DesktopSysMon,
 }

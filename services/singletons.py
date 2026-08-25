@@ -21,7 +21,6 @@ from .system_tray import SystemTray
 from .clipboard import ClipboardService
 from .caffeine import CaffeineService
 from .sysmon import SysMonService
-from .wallpaper import WallpaperService
 from user_options import user_options
 
 bar_manager = None
@@ -48,5 +47,4 @@ watcher = SystemTray()
 clipboard = ClipboardService()
 caffeine = CaffeineService()
 sysmon = SysMonService()
-wallpaper_service = WallpaperService.get_instance()
 idle.start()
