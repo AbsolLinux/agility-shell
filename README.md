@@ -29,7 +29,7 @@ While agility shell does not manage window configurations itself, it connects na
 For a rapid deployment on Arch Linux, stream the setup script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Absol/agility-shell/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/install.sh | bash
 ```
 >[!NOTE]
 >A system `reboot` is recommended after installation to ensure all background services, environment variables, and compositor configs load cleanly.
@@ -42,7 +42,7 @@ To update an existing installation to the latest version while preserving your w
 ```
 Or stream the updater directly:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Absol/agility-shell/main/update.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/update.sh | bash
 ```
 
 ---
