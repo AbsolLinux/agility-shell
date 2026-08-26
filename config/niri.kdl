@@ -1,5 +1,15 @@
 spawn-at-startup "bash" "-c" "~/.config/agility-shell/start.sh"
 
+layout {
+    background-color "transparent"
+}
+
+overview {
+    workspace-shadow {
+        off
+    }
+}
+
 layer-rule {
     match namespace="^awww-daemon$"
     place-within-backdrop true
