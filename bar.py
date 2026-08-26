@@ -1643,9 +1643,18 @@ class Bar(Window):
             self._blur_ctx = enable_blur(self)
             GLib.timeout_add(1500, self._update_blur_region)
 
+        if hasattr(wm, "connect"):
+            try:
+                wm.connect("notify::windows", lambda *_: self._update_smart_autohide())
+                wm.connect("notify::workspaces", lambda *_: self._update_smart_autohide())
+                wm.connect("notify::active-window", lambda *_: self._update_smart_autohide())
+            except Exception:
+                pass
+
         if not self.auto_hide:
             GLib.idle_add(self._revealer.set_reveal_child, True)
-            # GLib.timeout_add(750, lambda: setattr(self, "exclusivity", "auto"))
+        else:
+            GLib.idle_add(self._update_smart_autohide)
 
     def set_opacity(self, opacity: float):
         opacity = max(0.0, min(1.0, float(opacity)))
@@ -1828,8 +1837,7 @@ class Bar(Window):
                 self._update_blur_region()
             self._centerbox.add_style_class("auto-hide")
             self.exclusivity = "none"
-            self._revealer.set_reveal_child(False)
-            self._centerbox.remove_style_class("revealed")
+            self._update_smart_autohide()
         else:
             self._centerbox.remove_style_class("auto-hide")
             self._revealer.set_reveal_child(True)
@@ -1837,6 +1845,55 @@ class Bar(Window):
             if self._blur_ctx:
                 GLib.timeout_add(320, self._update_blur_region)
         user_options.save()
+
+    def _has_open_windows(self) -> bool:
+        try:
+            connector = get_connector_from_monitor_id(self.monitor_id)
+            active_ws_ids = {
+                ws.id for ws in getattr(wm, "workspaces", [])
+                if ws.is_active and (not connector or ws.output == connector)
+            }
+            if not active_ws_ids:
+                active_ws_ids = {ws.id for ws in getattr(wm, "workspaces", []) if ws.is_active}
+
+            windows = getattr(wm, "windows", [])
+            if not windows:
+                return False
+            
+            if active_ws_ids:
+                matching = [w for w in windows if w.workspace_id in active_ws_ids]
+                return len(matching) > 0
+            return len(windows) > 0
+        except Exception:
+            return False
+
+    def _update_smart_autohide(self):
+        if not self.auto_hide or edit_mode.edit_mode:
+            return
+        if is_applet_open():
+            return
+        
+        ptr = self.get_display().get_default_seat().get_pointer()
+        gdk_win = self.get_window()
+        pointer_in_bar = False
+        if gdk_win:
+            try:
+                _, px, py, _ = gdk_win.get_device_position(ptr)
+                alloc = self.get_allocation()
+                pointer_in_bar = (0 <= px <= alloc.width and 0 <= py <= alloc.height)
+            except Exception:
+                pass
+
+        if pointer_in_bar:
+            self._revealer.set_reveal_child(True)
+            self._centerbox.add_style_class("revealed")
+            return
+
+        if self._has_open_windows():
+            self._do_hide()
+        else:
+            self._revealer.set_reveal_child(True)
+            self._centerbox.add_style_class("revealed")
 
     def _swap_bars(self):
         if self._bar_manager is None:
@@ -1879,6 +1936,10 @@ class Bar(Window):
         if open_applet is not None and open_applet.is_visible():
             return False
         if edit_mode.edit_mode:
+            return False
+        if not self._has_open_windows():
+            self._revealer.set_reveal_child(True)
+            self._centerbox.add_style_class("revealed")
             return False
         self._do_hide()
         return False

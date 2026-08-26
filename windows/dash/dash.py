@@ -260,9 +260,7 @@ class Dash(Window):
         if key is None:
             return
 
-        mid = self._active_monitor_id
-        if mid is None:
-            return
+        mid = self._active_monitor_id if self._active_monitor_id is not None else 0
 
         self.dismiss_layer.hide_drop_zones()
 
@@ -272,16 +270,13 @@ class Dash(Window):
         self._in_canvas_mode = True
 
     def _exit_canvas_mode(self) -> None:
-        mid = self._active_monitor_id
-        if mid is not None:
-            DesktopAppletService.get_instance().exit_canvas_mode(mid, restore=False)
+        mid = self._active_monitor_id if self._active_monitor_id is not None else 0
+        DesktopAppletService.get_instance().exit_canvas_mode(mid, restore=False)
         self._in_canvas_mode = False
         self.revealer.open()
         # self.dismiss_layer.switch()
 
     def _on_service_canvas_drop_complete(self, service, monitor_id: int) -> None:
-        if monitor_id != self._active_monitor_id:
-            return
         self._in_canvas_mode = False
         self.revealer.open()
         # self.dismiss_layer.switch()
@@ -393,7 +388,7 @@ class Dash(Window):
                 bar.set_open_applet(None)
             self._active_monitor = active_monitor
 
-            self._active_monitor_id = None
+            self._active_monitor_id = 0
             if active_monitor is not None:
                 for i in range(display.get_n_monitors()):
                     if display.get_monitor(i) == active_monitor:

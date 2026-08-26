@@ -136,12 +136,61 @@ class DashAppletItem(Button):
         self.connect("drag-data-get", self._on_drag_data_get)
         self.connect("drag-end", self._on_drag_end)
         self.connect("drag-failed", self._on_drag_failed)
-        # self.connect("enter-notify-event", self._on_enter)
-        # self.connect("leave-notify-event", self._on_leave)
-        # self.connect("button-press-event", self._on_press)
-        # self.connect("button-release-event", self._on_release)
-        # self.connect("focus-in-event", self._on_focus_in)
-        # self.connect("focus-out-event", self._on_focus_out)
+        self.connect("button-release-event", self._on_item_clicked)
+
+    def _on_item_clicked(self, widget, event: Gdk.EventButton):
+        if event.button not in (1, 3):
+            return False
+        page = getattr(self, "_page", None)
+        if not page:
+            return False
+
+        menu = Gtk.Menu()
+        menu.set_reserve_toggle_size(False)
+
+        has_desktop = self.key in DESKTOP_APPLET_SIZES
+        in_desktop = self.key in page._get_desktop_keys()
+        in_launcher = self.key in page._get_launcher_keys()
+        mid = page._monitor_id if page._monitor_id is not None else 0
+
+        if has_desktop:
+            if not in_desktop:
+                item = Gtk.MenuItem(label="Add to Desktop")
+                item.connect("activate", lambda _: page._place_on_desktop(self.key, mid))
+                menu.append(item)
+            else:
+                item = Gtk.MenuItem(label="Remove from Desktop")
+                item.connect("activate", lambda _: page._remove_from_desktop(self.key, mid))
+                menu.append(item)
+
+        bar_sub = Gtk.MenuItem(label="Add to Bar")
+        bar_menu = Gtk.Menu()
+        bar_menu.set_reserve_toggle_size(False)
+
+        for sec in ("Left", "Center", "Right"):
+            it = Gtk.MenuItem(label=f"Add to {sec} Section")
+            it.connect("activate", lambda _, s=sec.lower(): page._add_to_bar(self.key, s))
+            bar_menu.append(it)
+
+        bar_sub.set_submenu(bar_menu)
+        menu.append(bar_sub)
+
+        if has_desktop:
+            if not in_launcher:
+                l_item = Gtk.MenuItem(label="Add to Launcher")
+                l_item.connect("activate", lambda _: page._add_to_launcher(self.key))
+                menu.append(l_item)
+            else:
+                l_item = Gtk.MenuItem(label="Remove from Launcher")
+                l_item.connect("activate", lambda _: page._remove_from_launcher(self.key))
+                menu.append(l_item)
+
+        if user_options.theme.blur:
+            popup_with_blur(menu, event)
+        else:
+            menu.show_all()
+            menu.popup_at_pointer(event)
+        return True
 
 
     # def _on_enter(self, *_):
@@ -291,6 +340,7 @@ class DashAppletPage(DashPage):
         self._item_map: dict[str, DashAppletItem] = {}
         for icon, key in self._all_items:
             item = DashAppletItem(icon, key, on_drag_end=self._handle_drag_end)
+            item._page = self
             item._page_drag_begin_cb = self._handle_drag_begin
             self._item_map[key] = item
 
@@ -548,4 +598,54 @@ class DashAppletPage(DashPage):
 
 
     def on_launcher_applet_changed(self) -> None:
+        self.refresh_bar_state()
+
+    def _place_on_desktop(self, key: str, monitor_id: int):
+        from services.desktop_applets import DesktopAppletService, _fits, _conflicts
+        service = DesktopAppletService.get_instance()
+        win = service.get_window(monitor_id)
+        cols = win.cols if win else 12
+        rows = win.rows if win else 6
+        placed = user_options.desktop_canvas.get_applets(monitor_id)
+        
+        target_gx, target_gy = 0, 0
+        found = False
+        for gy in range(rows):
+            for gx in range(cols):
+                if _fits(gx, gy, key, cols, rows) and not _conflicts(gx, gy, key, placed, cols, rows):
+                    target_gx, target_gy = gx, gy
+                    found = True
+                    break
+            if found:
+                break
+        
+        service.place(monitor_id, key, target_gx, target_gy)
+        play_sound("widget-placed")
+        self.refresh_bar_state()
+
+    def _remove_from_desktop(self, key: str, monitor_id: int):
+        from services.desktop_applets import DesktopAppletService
+        DesktopAppletService.get_instance().remove(monitor_id, key)
+        self.refresh_bar_state()
+
+    def _add_to_bar(self, key: str, section_name: str):
+        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+            return
+        bar_cfg = user_options.bars.configs[0]["bars"][0]
+        if section_name not in bar_cfg:
+            bar_cfg[section_name] = []
+        bar_cfg[section_name].append(key)
+        user_options.save()
+        if self._bar_manager and hasattr(self._bar_manager, "reload_bars"):
+            self._bar_manager.reload_bars()
+        self.refresh_bar_state()
+
+    def _add_to_launcher(self, key: str):
+        user_options.desktop_applets.add_applet(key)
+        user_options.save()
+        self.refresh_bar_state()
+
+    def _remove_from_launcher(self, key: str):
+        user_options.desktop_applets.remove_applet(key)
+        user_options.save()
         self.refresh_bar_state()

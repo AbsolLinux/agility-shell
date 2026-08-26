@@ -625,7 +625,11 @@ class DesktopAppletWindow(WaylandWindow):
             span_y = entry.get("span_y")
             w_px, h_px = _applet_pixel_size(key, span_x, span_y)
 
-            widget = cls()
+            variant = entry.get("variant")
+            if key == "Clock" and variant:
+                widget = cls(variant=variant)
+            else:
+                widget = cls()
             widget.set_size_request(w_px, h_px)
 
             op = entry.get("opacity")
@@ -863,6 +867,20 @@ class DesktopAppletWindow(WaylandWindow):
             return False
         menu = Gtk.Menu()
 
+        # Clock Style Submenu
+        if key == "Clock":
+            from desktop_applets.clock import DESKTOP_CLOCK_VARIANTS
+            style_item = Gtk.MenuItem(label="Clock Style")
+            style_sub = Gtk.Menu()
+            current_var = entry.get("variant", "circular") if entry else "circular"
+            for v_key, v_label in DESKTOP_CLOCK_VARIANTS:
+                lbl = f"✓ {v_label}" if current_var == v_key else f"    {v_label}"
+                it = Gtk.MenuItem(label=lbl)
+                it.connect("activate", lambda _, vk=v_key, k=key: self._set_desktop_applet_variant(k, vk))
+                style_sub.append(it)
+            style_item.set_submenu(style_sub)
+            menu.append(style_item)
+
         # Opacity Submenu
         opacity_menu_item = Gtk.MenuItem(label="Opacity")
         opacity_sub = Gtk.Menu()
@@ -937,14 +955,80 @@ class DesktopAppletWindow(WaylandWindow):
             menu.popup_at_pointer(event)
         return True
 
+    def _set_desktop_applet_variant(self, key: str, variant: str):
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
+        if entry:
+            entry["variant"] = variant
+            user_options.save()
+            eb = self._children.get(key)
+            if eb:
+                overlay = eb.get_child()
+                if overlay:
+                    widget = overlay.get_child()
+                    if widget and hasattr(widget, "set_variant"):
+                        widget.set_variant(variant)
+            GLib.idle_add(self._retrace_blur)
+
 
     def _on_button_press(self, widget, event: Gdk.EventButton) -> bool:
         if event.button != 3:
             return False
 
         from services.singletons import bar_manager
+        from windows.dash.settings import WIDGET_ICONS
 
         menu = Gtk.Menu()
+        menu.set_reserve_toggle_size(False)
+
+        # Add Applet Submenu
+        applet_item = Gtk.MenuItem(label="Add Applet")
+        applet_sub = Gtk.Menu()
+        applet_sub.set_reserve_toggle_size(False)
+
+        gx, gy = self._xy_to_grid(event.x, event.y)
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        placed_keys = {e["key"] for e in placed}
+
+        for key in DESKTOP_APPLET_WIDGETS.keys():
+            item = Gtk.MenuItem()
+            box = Box(orientation="h", spacing=8)
+            icon_name = WIDGET_ICONS.get(key, "app-window-duotone")
+            icon = Icon(icon_name=icon_name, icon_size=16)
+            lbl = Label(label=key)
+            box.add(icon)
+            box.add(lbl)
+            item.add(box)
+
+            if key in placed_keys:
+                item.set_sensitive(False)
+                lbl.set_text(f"{key} (Placed)")
+
+            def _on_add_applet(_, applet_key=key, target_gx=gx, target_gy=gy):
+                cur_placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+                if not _fits(target_gx, target_gy, applet_key, self._cols, self._rows) or _conflicts(target_gx, target_gy, applet_key, cur_placed, self._cols, self._rows):
+                    found = False
+                    for try_y in range(self._rows):
+                        for try_x in range(self._cols):
+                            if _fits(try_x, try_y, applet_key, self._cols, self._rows) and not _conflicts(try_x, try_y, applet_key, cur_placed, self._cols, self._rows):
+                                target_gx, target_gy = try_x, try_y
+                                found = True
+                                break
+                        if found:
+                            break
+                DesktopAppletService.get_instance().place(self._monitor_id, applet_key, target_gx, target_gy)
+                from utils.sounds import play_sound
+                play_sound("widget-placed")
+
+            item.connect("activate", _on_add_applet)
+            applet_sub.append(item)
+
+        applet_item.set_submenu(applet_sub)
+        menu.append(applet_item)
+
+        sep = Gtk.SeparatorMenuItem()
+        menu.append(sep)
+
         bar_count = sum(
             1 for bar in bar_manager._bars.values()
             if bar.monitor_id == self._monitor_id

@@ -120,6 +120,7 @@ class DashSettingsPage(Box):
 
     def __init__(self, bar_manager=None, **kwargs):
         self._bar_manager = bar_manager
+        self._selected_bar_index = 0
         self._section_boxes: dict[str, Box] = {}
         content = self._build_content()
 
@@ -389,10 +390,14 @@ class DashSettingsPage(Box):
         # =====================================================================
         # Section 3: Bar Widgets Layout & Management
         # =====================================================================
+        self._bar_selector_container = Box(orientation="h", spacing=8, h_align="fill")
+        self._refresh_bar_selector_ui()
+
         bar_widgets_container = Box(
             orientation="v",
             spacing=14,
             h_align="fill",
+            children=[self._bar_selector_container],
         )
 
         for sec in ("left", "center", "right"):
@@ -437,7 +442,7 @@ class DashSettingsPage(Box):
         )
 
         # =====================================================================
-        # Section 4: Bar Position
+        # Section 4: Bar Position & Smart Auto-Hide
         # =====================================================================
         current_pos = self._get_current_bar_alignment()
 
@@ -481,7 +486,7 @@ class DashSettingsPage(Box):
                     h_expand=True,
                     children=[
                         Label(label="Bar Position", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Attach the bar to the top or bottom screen edge", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                        Label(label="Attach the selected bar to the top or bottom screen edge", style="font-size: 11px; opacity: 0.6;", h_align="start"),
                     ],
                 ),
                 Box(
@@ -494,9 +499,38 @@ class DashSettingsPage(Box):
             ],
         )
 
+        current_autohide = self._get_current_bar_cfg().get("auto_hide", False)
+        self._bar_autohide_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_bar_autohide_toggled,
+            width=48,
+        )
+        self._bar_autohide_switch.set_active(current_autohide)
+
+        autohide_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Smart Auto-Hide (Intellihide)", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Keep the bar visible when screen is empty; auto-hide when windows are open", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._bar_autohide_switch]),
+            ],
+        )
+
         position_section = Section(
-            title="Bar Position",
-            children=[pos_row],
+            title="Bar Position & Auto-Hide",
+            children=[pos_row, autohide_row],
         )
 
         # =====================================================================
@@ -639,8 +673,116 @@ class DashSettingsPage(Box):
         )
         return container
 
+    def _get_current_bar_cfg(self) -> dict:
+        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+            return {}
+        bars = user_options.bars.configs[0]["bars"]
+        if self._selected_bar_index >= len(bars):
+            self._selected_bar_index = max(0, len(bars) - 1)
+        return bars[self._selected_bar_index]
+
+    def _refresh_bar_selector_ui(self):
+        for child in self._bar_selector_container.get_children():
+            self._bar_selector_container.remove(child)
+
+        bars = user_options.bars.configs[0].get("bars", []) if user_options.bars.configs else []
+        
+        pills_box = Box(orientation="h", spacing=6, h_align="start")
+
+        for idx, b_cfg in enumerate(bars):
+            align = b_cfg.get("alignment", "bottom").capitalize()
+            is_active = (idx == self._selected_bar_index)
+            btn = Button(
+                child=Box(
+                    orientation="h",
+                    spacing=6,
+                    children=[
+                        Icon(icon_name="bar-duotone" if is_active else "app-window-duotone", icon_size=14),
+                        Label(label=f"Bar {idx + 1} ({align})", style="font-size: 12px; font-weight: 500;"),
+                    ],
+                ),
+                style_classes=["option-selection-button"] + (["active"] if is_active else []),
+                on_clicked=lambda _b, i=idx: self._select_bar(i),
+            )
+            pills_box.add(btn)
+
+        self._bar_selector_container.add(pills_box)
+
+        # Action buttons: Add Bar (if < 2) & Delete Bar (if > 1)
+        actions_box = Box(orientation="h", spacing=6, h_align="end", h_expand=True)
+
+        if len(bars) < 2:
+            add_bar_btn = Button(
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[Icon(icon_name="plus-circle-duotone", icon_size=14), Label(label="Add Bar", style="font-size: 11px; font-weight: 500;")],
+                ),
+                style_classes=["bar-chip-add-btn"],
+                on_clicked=lambda *_: self._add_new_bar(),
+            )
+            actions_box.add(add_bar_btn)
+
+        if len(bars) > 1:
+            delete_bar_btn = Button(
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[Icon(icon_name="trash-duotone", icon_size=14), Label(label="Delete Bar", style="font-size: 11px; font-weight: 500;")],
+                ),
+                style_classes=["bar-chip-remove-btn"],
+                on_clicked=lambda *_: self._delete_selected_bar(),
+            )
+            actions_box.add(delete_bar_btn)
+
+        self._bar_selector_container.add(actions_box)
+        self._bar_selector_container.show_all()
+
+    def _select_bar(self, index: int):
+        self._selected_bar_index = index
+        self._refresh_bar_selector_ui()
+        self._refresh_bar_widgets_ui()
+        cur_align = self._get_current_bar_alignment()
+        self._update_position_buttons(cur_align)
+        if hasattr(self, "_bar_autohide_switch"):
+            cfg = self._get_current_bar_cfg()
+            self._bar_autohide_switch.set_active(cfg.get("auto_hide", False))
+
+    def _add_new_bar(self):
+        bm = self._bar_manager or singletons.bar_manager
+        if bm:
+            display = Gdk.Display.get_default()
+            mon = display.get_monitor(0)
+            bm.add_bar_for_monitor(mon)
+            bars = user_options.bars.configs[0].get("bars", [])
+            self._selected_bar_index = max(0, len(bars) - 1)
+            self._refresh_bar_selector_ui()
+            self._refresh_bar_widgets_ui()
+            self._update_position_buttons(self._get_current_bar_alignment())
+            if hasattr(self, "_bar_autohide_switch"):
+                self._bar_autohide_switch.set_active(self._get_current_bar_cfg().get("auto_hide", False))
+
+    def _delete_selected_bar(self):
+        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+            return
+        bars = user_options.bars.configs[0]["bars"]
+        if len(bars) <= 1:
+            return
+        if self._selected_bar_index < len(bars):
+            bars.pop(self._selected_bar_index)
+            user_options.save()
+            self._selected_bar_index = 0
+            bm = self._bar_manager or singletons.bar_manager
+            if bm and hasattr(bm, "reload_bars"):
+                bm.reload_bars()
+            self._refresh_bar_selector_ui()
+            self._refresh_bar_widgets_ui()
+            self._update_position_buttons(self._get_current_bar_alignment())
+            if hasattr(self, "_bar_autohide_switch"):
+                self._bar_autohide_switch.set_active(self._get_current_bar_cfg().get("auto_hide", False))
+
     def _refresh_bar_widgets_ui(self):
-        cfg = user_options.bars.configs[0]["bars"][0] if (user_options.bars.configs and user_options.bars.configs[0].get("bars")) else {}
+        cfg = self._get_current_bar_cfg()
 
         for sec in ("left", "center", "right"):
             box = self._section_boxes.get(sec)
@@ -659,10 +801,10 @@ class DashSettingsPage(Box):
             box.show_all()
 
     def _remove_widget_from_bar(self, section_name: str, widget_entry: str | dict):
-        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+        bar_cfg = self._get_current_bar_cfg()
+        if not bar_cfg:
             return
 
-        bar_cfg = user_options.bars.configs[0]["bars"][0]
         entries = bar_cfg.get(section_name, [])
 
         if widget_entry in entries:
@@ -748,10 +890,10 @@ class DashSettingsPage(Box):
             chip.set_active_state(enable_all)
 
     def _add_widget_to_bar(self, section_name: str, widget_name: str):
-        if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
+        bar_cfg = self._get_current_bar_cfg()
+        if not bar_cfg:
             return
 
-        bar_cfg = user_options.bars.configs[0]["bars"][0]
         if section_name not in bar_cfg:
             bar_cfg[section_name] = []
 
@@ -765,9 +907,8 @@ class DashSettingsPage(Box):
         self._refresh_bar_widgets_ui()
 
     def _get_current_bar_alignment(self) -> str:
-        if user_options.bars.configs and user_options.bars.configs[0].get("bars"):
-            return user_options.bars.configs[0]["bars"][0].get("alignment", "bottom")
-        return "bottom"
+        cfg = self._get_current_bar_cfg()
+        return cfg.get("alignment", "bottom") if cfg else "bottom"
 
     def _update_position_buttons(self, alignment: str):
         if alignment == "top":
@@ -776,6 +917,28 @@ class DashSettingsPage(Box):
         else:
             self._bottom_btn.add_style_class("active")
             self._top_btn.remove_style_class("active")
+
+    def _set_position(self, alignment: str):
+        cfg = self._get_current_bar_cfg()
+        if not cfg:
+            return
+        cfg["alignment"] = alignment
+        user_options.save()
+        self._update_position_buttons(alignment)
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "reload_bars"):
+            bm.reload_bars()
+        self._refresh_bar_selector_ui()
+
+    def _on_bar_autohide_toggled(self, state: bool):
+        cfg = self._get_current_bar_cfg()
+        if not cfg:
+            return
+        cfg["auto_hide"] = state
+        user_options.save()
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "reload_bars"):
+            bm.reload_bars()
 
     def _on_hover_toggled(self, state: bool):
         user_options.settings.hover_open = state
@@ -838,14 +1001,3 @@ class DashSettingsPage(Box):
     def _on_instant_toggled(self, state: bool):
         user_options.settings.instant_dash = state
         user_options.save()
-
-    def _set_position(self, alignment: str):
-        self._update_position_buttons(alignment)
-        bm = self._bar_manager or singletons.bar_manager
-        if bm and hasattr(bm, "set_bar_alignment"):
-            bm.set_bar_alignment(alignment)
-        else:
-            for cfg in user_options.bars.configs:
-                for b in cfg.get("bars", []):
-                    b["alignment"] = alignment
-            user_options.save()
