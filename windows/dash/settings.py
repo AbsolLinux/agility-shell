@@ -704,9 +704,59 @@ class DashSettingsPage(Box):
             ],
         )
 
+        # Random Animation Pool multi-select chips
+        pool_options = [
+            ("grow", "Grow"),
+            ("fade", "Fade"),
+            ("wipe", "Wipe"),
+            ("wave", "Wave"),
+            ("left", "Slide L"),
+            ("right", "Slide R"),
+            ("top", "Slide Up"),
+            ("bottom", "Slide Down"),
+            ("outer", "Shrink"),
+        ]
+        self._pool_chips: dict[str, Button] = {}
+        enabled_pool = set(getattr(user_options.wallpaper, "enabled_transitions", ["grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer"]))
+
+        pool_box = Box(
+            style_classes=["option-selection-container"],
+            orientation="h",
+            spacing=4,
+            h_align="end",
+        )
+        for p_key, p_name in pool_options:
+            is_on = p_key in enabled_pool
+            b = Button(
+                child=Label(label=f"✓ {p_name}" if is_on else f"✗ {p_name}", style="font-size: 11px; font-weight: 500;"),
+                style_classes=["option-selection-button"] + (["active"] if is_on else []),
+                on_clicked=lambda _, k=p_key, n=p_name: self._on_wallpaper_pool_toggled(k, n),
+            )
+            self._pool_chips[p_key] = b
+            pool_box.add(b)
+
+        wallpaper_pool_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Random Animation Pool (Included Transitions)", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Click to toggle animations used by system during random wallpaper switches", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                pool_box,
+            ],
+        )
+
         dash_section = Section(
             title="Dash Appearance & Wallpaper Effects",
-            children=[blur_row, dim_row, card_opacity_row, instant_row, wallpaper_trans_row],
+            children=[blur_row, dim_row, card_opacity_row, instant_row, wallpaper_trans_row, wallpaper_pool_row],
         )
 
         container = Box(
@@ -1057,6 +1107,30 @@ class DashSettingsPage(Box):
         user_options.save()
         for k, btn in getattr(self, "_setting_trans_buttons", {}).items():
             if k == transition_type:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+
+    def _on_wallpaper_pool_toggled(self, pool_key: str, pool_name: str):
+        pool = list(getattr(user_options.wallpaper, "enabled_transitions", []))
+        if pool_key in pool:
+            pool.remove(pool_key)
+            is_on = False
+        else:
+            pool.append(pool_key)
+            is_on = True
+        if not pool:
+            pool = ["grow"]
+            is_on = True
+        user_options.wallpaper.enabled_transitions = pool
+        user_options.save()
+
+        btn = getattr(self, "_pool_chips", {}).get(pool_key)
+        if btn:
+            child = btn.get_child()
+            if child and hasattr(child, "set_label"):
+                child.set_label(f"✓ {pool_name}" if is_on else f"✗ {pool_name}")
+            if is_on:
                 btn.add_style_class("active")
             else:
                 btn.remove_style_class("active")

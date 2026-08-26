@@ -882,6 +882,8 @@ class DesktopAppletWindow(WaylandWindow):
         if event.button != 3:
             return False
         menu = Gtk.Menu()
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
 
         # Clock Style Submenu
         if key == "Clock":
@@ -923,8 +925,6 @@ class DesktopAppletWindow(WaylandWindow):
         # Size Submenu
         size_menu_item = Gtk.MenuItem(label="Size")
         size_sub = Gtk.Menu()
-        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
-        entry = next((e for e in placed if e["key"] == key), None)
         base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
         cur_sx = entry.get("span_x", base_cols) if entry else base_cols
         cur_sy = entry.get("span_y", base_rows) if entry else base_rows

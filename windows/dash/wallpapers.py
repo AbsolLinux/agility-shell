@@ -266,30 +266,25 @@ class DashWallpaperPage(DashSelectorPage):
 
         # Transition Selector Bar
         self._transition_buttons: dict[str, Button] = {}
-        current_trans = getattr(user_options.wallpaper, "transition_type", "grow")
-
-        trans_row = Box(
+        self._trans_row = Box(
             orientation="h",
             spacing=4,
             style_classes=["option-selection-container"],
             h_align="center",
         )
 
-        for t_key, t_label, t_icon in WALLPAPER_TRANSITIONS:
-            btn = Button(
-                style_classes=["option-selection-button"] + (["active"] if t_key == current_trans else []),
-                child=Box(
-                    orientation="h",
-                    spacing=4,
-                    children=[
-                        Icon(icon_name=t_icon, icon_size=13),
-                        Label(label=t_label, style="font-size: 11px; font-weight: 500;"),
-                    ],
-                ),
-                on_clicked=lambda _, k=t_key: self._on_transition_selected(k),
-            )
-            self._transition_buttons[t_key] = btn
-            trans_row.add(btn)
+        self._add_trans_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=2,
+                children=[
+                    Icon(icon_name="plus-duotone", icon_size=13),
+                    Label(label="Add", style="font-size: 11px; font-weight: 500;"),
+                ],
+            ),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._toggle_custom_creator(),
+        )
 
         self._controls_box = Box(
             orientation="h",
@@ -298,10 +293,20 @@ class DashWallpaperPage(DashSelectorPage):
             v_align="center",
             children=[
                 Label(label="Transition:", style="font-size: 12px; opacity: 0.7; font-weight: 600;"),
-                trans_row,
+                self._trans_row,
+                self._add_trans_btn,
             ],
         )
+
+        # Custom Animation Creator Card
+        self._creator_card = self._build_custom_creator()
+        self._creator_card.set_no_show_all(True)
+        self._creator_card.hide()
+
         self._preview_column.add(self._controls_box)
+        self._preview_column.add(self._creator_card)
+
+        self._rebuild_transition_buttons()
 
         self.connect("realize", self._on_realize)
         self._load_wallpapers()
@@ -310,6 +315,226 @@ class DashWallpaperPage(DashSelectorPage):
             self._restore_active(wallpaper.wallpaper_path)
 
         wallpaper.connect("wallpaper-changed", self._on_wallpaper_changed)
+
+    def _build_custom_creator(self) -> Box:
+        from fabric.widgets.entry import Entry
+        from snippets import FlatScale
+
+        self._custom_name_entry = Entry(
+            placeholder="e.g. 90-Deg-Wipe",
+            style_classes=["dash-search-entry"],
+            style="min-width: 140px; font-size: 11px; padding: 4px 8px;",
+        )
+
+        self._custom_base_type = "wipe"
+        self._custom_angle = "90"
+        self._custom_duration = 1.5
+
+        types = ["wipe", "wave", "fade", "grow", "outer", "left", "right", "top", "bottom"]
+        self._type_btns = {}
+        types_box = Box(orientation="h", spacing=2, style_classes=["option-selection-container"])
+        for t in types:
+            btn = Button(
+                child=Label(label=t.capitalize(), style="font-size: 10px; font-weight: 500;"),
+                style_classes=["option-selection-button"] + (["active"] if t == self._custom_base_type else []),
+                on_clicked=lambda _, k=t: self._set_creator_base_type(k),
+            )
+            self._type_btns[t] = btn
+            types_box.add(btn)
+
+        angles = [("45°", "45"), ("90°", "90"), ("135°", "135"), ("180°", "180")]
+        self._angle_btns = {}
+        angles_box = Box(orientation="h", spacing=2, style_classes=["option-selection-container"])
+        for a_label, a_val in angles:
+            btn = Button(
+                child=Label(label=a_label, style="font-size: 10px; font-weight: 500;"),
+                style_classes=["option-selection-button"] + (["active"] if a_val == self._custom_angle else []),
+                on_clicked=lambda _, k=a_val: self._set_creator_angle(k),
+            )
+            self._angle_btns[a_val] = btn
+            angles_box.add(btn)
+
+        save_btn = Button(
+            child=Label(label="Save Animation", style="font-size: 11px; font-weight: 600;"),
+            style_classes=["option-selection-button", "active"],
+            on_clicked=lambda *_: self._save_custom_animation(),
+        )
+        cancel_btn = Button(
+            child=Label(label="Cancel", style="font-size: 11px; font-weight: 500;"),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._toggle_custom_creator(force_close=True),
+        )
+
+        row1 = Box(
+            orientation="h",
+            spacing=8,
+            h_align="center",
+            children=[
+                Label(label="Name:", style="font-size: 11px; font-weight: 600; opacity: 0.8;"),
+                self._custom_name_entry,
+                Label(label="Effect:", style="font-size: 11px; font-weight: 600; opacity: 0.8;"),
+                types_box,
+            ],
+        )
+
+        row2 = Box(
+            orientation="h",
+            spacing=8,
+            h_align="center",
+            children=[
+                Label(label="Angle:", style="font-size: 11px; font-weight: 600; opacity: 0.8;"),
+                angles_box,
+                save_btn,
+                cancel_btn,
+            ],
+        )
+
+        card = Box(
+            orientation="v",
+            spacing=8,
+            style_classes=["desktop-system-module"],
+            style="padding: 8px 12px; border-radius: 12px;",
+            h_align="center",
+            children=[row1, row2],
+        )
+        return card
+
+    def _set_creator_base_type(self, t: str):
+        self._custom_base_type = t
+        for k, btn in self._type_btns.items():
+            if k == t:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+
+    def _set_creator_angle(self, a: str):
+        self._custom_angle = a
+        for k, btn in self._angle_btns.items():
+            if k == a:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+
+    def _toggle_custom_creator(self, force_close: bool = False):
+        if force_close or self._creator_card.get_visible():
+            self._creator_card.hide()
+        else:
+            self._creator_card.show_all()
+
+    def _save_custom_animation(self):
+        name = self._custom_name_entry.get_text().strip()
+        if not name:
+            name = f"Custom {self._custom_base_type.capitalize()}"
+
+        cust = {
+            "name": name,
+            "type": self._custom_base_type,
+            "angle": self._custom_angle,
+            "duration": 1.5,
+            "bezier": ".43,1.19,1,.4",
+        }
+
+        custom_list = list(getattr(user_options.wallpaper, "custom_transitions", []))
+        custom_list = [c for c in custom_list if c.get("name") != name]
+        custom_list.append(cust)
+        user_options.wallpaper.custom_transitions = custom_list
+
+        pool = list(getattr(user_options.wallpaper, "enabled_transitions", []))
+        if name not in pool:
+            pool.append(name)
+        user_options.wallpaper.enabled_transitions = pool
+        user_options.wallpaper.transition_type = name
+        user_options.save()
+
+        self._toggle_custom_creator(force_close=True)
+        self._rebuild_transition_buttons()
+        self._on_transition_selected(name)
+
+    def _rebuild_transition_buttons(self):
+        for child in self._trans_row.get_children():
+            self._trans_row.remove(child)
+        self._transition_buttons.clear()
+
+        current_trans = getattr(user_options.wallpaper, "transition_type", "grow")
+        enabled_pool = set(getattr(user_options.wallpaper, "enabled_transitions", []))
+        customs = getattr(user_options.wallpaper, "custom_transitions", [])
+
+        all_items = list(WALLPAPER_TRANSITIONS)
+        for c in customs:
+            cname = c.get("name", "Custom")
+            all_items.append((cname, cname, "magic-wand-duotone"))
+
+        for t_key, t_label, t_icon in all_items:
+            in_pool = t_key in enabled_pool or t_key == "random"
+            btn = Button(
+                style_classes=["option-selection-button"]
+                + (["active"] if t_key == current_trans else [])
+                + ([] if in_pool else ["dimmed"]),
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[
+                        Icon(icon_name=t_icon, icon_size=13),
+                        Label(label=t_label, style="font-size: 11px; font-weight: 500;"),
+                    ],
+                ),
+            )
+            btn.connect("clicked", lambda _, k=t_key: self._on_transition_selected(k))
+            btn.connect("button-press-event", lambda _, ev, k=t_key, l=t_label: self._on_trans_btn_press(ev, k, l))
+            self._transition_buttons[t_key] = btn
+            self._trans_row.add(btn)
+        self._trans_row.show_all()
+
+    def _on_trans_btn_press(self, event, t_key: str, t_label: str):
+        if event.button == 3:  # Right Click -> Context Menu for inclusion/exclusion
+            menu = Gtk.Menu()
+
+            enabled_pool = list(getattr(user_options.wallpaper, "enabled_transitions", []))
+            is_enabled = t_key in enabled_pool
+
+            if t_key != "random":
+                toggle_lbl = f"✓ Included in Random Pool" if is_enabled else f"✗ Excluded from Random Pool"
+                toggle_item = Gtk.MenuItem(label=toggle_lbl)
+                toggle_item.connect("activate", lambda *_: self._toggle_trans_in_pool(t_key))
+                menu.append(toggle_item)
+
+            select_item = Gtk.MenuItem(label=f"Use '{t_label}' Now")
+            select_item.connect("activate", lambda *_: self._on_transition_selected(t_key))
+            menu.append(select_item)
+
+            custom_names = [c.get("name") for c in getattr(user_options.wallpaper, "custom_transitions", [])]
+            if t_key in custom_names:
+                menu.append(Gtk.SeparatorMenuItem())
+                del_item = Gtk.MenuItem(label="Delete Custom Animation")
+                del_item.connect("activate", lambda *_: self._delete_custom_transition(t_key))
+                menu.append(del_item)
+
+            menu.show_all()
+            menu.popup_at_pointer(event)
+            return True
+        return False
+
+    def _toggle_trans_in_pool(self, t_key: str):
+        pool = list(getattr(user_options.wallpaper, "enabled_transitions", []))
+        if t_key in pool:
+            pool.remove(t_key)
+        else:
+            pool.append(t_key)
+        if not pool:
+            pool = ["grow"]
+        user_options.wallpaper.enabled_transitions = pool
+        user_options.save()
+        self._rebuild_transition_buttons()
+
+    def _delete_custom_transition(self, t_key: str):
+        customs = [c for c in getattr(user_options.wallpaper, "custom_transitions", []) if c.get("name") != t_key]
+        user_options.wallpaper.custom_transitions = customs
+        pool = [k for k in getattr(user_options.wallpaper, "enabled_transitions", []) if k != t_key]
+        user_options.wallpaper.enabled_transitions = pool
+        if user_options.wallpaper.transition_type == t_key:
+            user_options.wallpaper.transition_type = "random"
+        user_options.save()
+        self._rebuild_transition_buttons()
 
     def _on_transition_selected(self, transition_type: str) -> None:
         user_options.wallpaper.transition_type = transition_type
