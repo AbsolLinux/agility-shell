@@ -119,6 +119,119 @@ restore_preserved_files() {
     done
 }
 
+inject_niri_include() {
+    local niri_config_dir="$HOME/.config/niri"
+    local niri_config="$niri_config_dir/config.kdl"
+    local include_line='include "~/.config/agility-shell/config/niri.kdl"'
+
+    mkdir -p "$niri_config_dir"
+
+    if [[ ! -f "$niri_config" ]]; then
+        info "No Niri config found at $niri_config -- creating one with default configuration template..."
+        local candidate_defaults=(
+            "/usr/share/doc/niri/default-config.kdl"
+            "/etc/xdg/niri/config.kdl"
+            "/etc/niri/config.kdl"
+        )
+        local copied=false
+        for cand in "${candidate_defaults[@]}"; do
+            if [[ -f "$cand" ]]; then
+                cp "$cand" "$niri_config"
+                copied=true
+                info "Copied default Niri template from $cand"
+                break
+            fi
+        done
+
+        if [[ "$copied" == "false" ]]; then
+            info "Creating clean base Niri config..."
+            cat << 'BASE_NIRI_EOF' > "$niri_config"
+// Niri Base Configuration
+prefer-no-csd
+
+input {
+    keyboard {
+        xkb {
+        }
+        numlock
+    }
+    touchpad {
+        tap
+        natural-scroll
+    }
+}
+
+binds {
+    Mod+T { spawn "alacritty"; }
+    Mod+Q { close-window; }
+    Mod+Shift+E { quit; }
+}
+BASE_NIRI_EOF
+        fi
+
+        echo "" >> "$niri_config"
+        echo "$include_line" >> "$niri_config"
+        success "Niri config initialized with default settings and Agility Shell include."
+        return
+    fi
+
+    # Clean old caffyne includes if any
+    if grep -qF 'caffyne-shell' "$niri_config"; then
+        info "Removing old caffyne-shell include from niri config..."
+        sed -i '/caffyne-shell/d' "$niri_config"
+    fi
+
+    if grep -qF "$include_line" "$niri_config"; then
+        info "Agility Shell include already present in $niri_config."
+        return
+    fi
+
+    info "Appending Agility Shell include to existing Niri config..."
+    echo "" >> "$niri_config"
+    echo "$include_line" >> "$niri_config"
+    success "Niri config updated with Agility Shell include."
+}
+
+setup_matugen() {
+    info "Configuring Matugen templates..."
+
+    local matugen_config_dir="$HOME/.config/matugen"
+    local matugen_conf="$matugen_config_dir/config.toml"
+
+    mkdir -p "$matugen_config_dir"
+
+    if [[ ! -f "$matugen_conf" ]]; then
+        info "Creating Matugen config.toml..."
+        touch "$matugen_conf"
+    fi
+
+    if ! grep -q "^\[config\]$" "$matugen_conf"; then
+        info "Adding [config] section..."
+        printf "[config]\n" >> "$matugen_conf"
+    fi
+
+    # Remove old caffyne entries if present
+    if grep -q '\[templates.caffyne\]' "$matugen_conf"; then
+        info "Removing old caffyne matugen config entries..."
+        sed -i '/\[templates.caffyne\]/,/^$/d' "$matugen_conf"
+        sed -i '/# Caffyne Shell Colors/d' "$matugen_conf"
+    fi
+
+    if grep -q "\[templates.agility\]" "$matugen_conf"; then
+        info "Matugen config entry already exists -- skipping append."
+    else
+        info "Appending Agility Shell template config to matugen/config.toml..."
+        cat <<MATUGEN_EOF >> "$matugen_conf"
+
+# Agility Shell Colors
+[templates.agility]
+input_path = '~/.config/agility-shell/style/agility-shell-colors.css'
+output_path = '~/.config/agility-shell/style/colors.css'
+MATUGEN_EOF
+    fi
+    success "Matugen configured."
+}
+
 # -- Update --------------------------------------------------------------------
 do_update() {
     info "Updating Agility Shell..."
@@ -142,6 +255,9 @@ do_update() {
     success "Python dependencies updated."
 
     compile_snippets
+    inject_niri_include
+    setup_matugen
+
     chmod +x "$INSTALL_DIR/start.sh" "$INSTALL_DIR/update.sh" "$INSTALL_DIR/install.sh" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
 
     success "Agility Shell updated successfully!"

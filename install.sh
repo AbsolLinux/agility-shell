@@ -11,8 +11,21 @@ INSTALL_DIR="$HOME/.config/agility-shell"
 CONFIG_DIR="$INSTALL_DIR/config"
 SCRIPT_URL="https://raw.githubusercontent.com/AbsolLinux/agility-shell/main/install.sh"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IS_LOCAL_REPO=false
+if [[ -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/bar.py" && -d "$SCRIPT_DIR/bar_widgets" ]]; then
+    IS_LOCAL_REPO=true
+fi
+
 # Directories to preserve during updates (relative to INSTALL_DIR)
-PRESERVE_DIRS=("wallpapers")
+PRESERVE_DIRS=("wallpapers" "config")
+
+# Individual files to preserve during updates (relative to INSTALL_DIR)
+PRESERVE_FILES=(
+    "style/colors.css"
+    "style/borders.css"
+    "style/fonts.css"
+)
 
 # -- Colours -------------------------------------------------------------------
 RED='\033[0;31m'
@@ -52,6 +65,11 @@ cat << "EOF"
 EOF
 
 self_update() {
+    if [[ "$IS_LOCAL_REPO" == "true" ]]; then
+        info "Running from local repository -- skipping remote self-update."
+        return
+    fi
+
     local script_path
     script_path="$(realpath "$0")"
 
@@ -94,14 +112,48 @@ check_not_root() {
     fi
 }
 
+# -- Dependencies definitions --------------------------------------------------
+PACMAN_DEPS=(
+    gtk3
+    cairo
+    libgirepository
+    gobject-introspection
+    gtk-layer-shell
+    libdbusmenu-gtk3
+    cinnamon-desktop
+    gnome-bluetooth-3.0
+    gtk-session-lock
+    matugen
+    playerctl
+    brightnessctl
+    wf-recorder
+    upower
+    swayidle
+    networkmanager
+    bluez
+    python
+    python-pip
+    awww
+    base-devel
+    git
+    niri
+)
+
+AUR_DEPS=(
+    fabric-cli-git
+)
+
 # -- yay bootstrap -------------------------------------------------------------
 ensure_yay() {
     if command -v yay &>/dev/null; then
         success "yay is already installed."
         return
+    elif command -v paru &>/dev/null; then
+        success "paru is already installed."
+        return
     fi
 
-    info "yay not found -- installing from AUR..."
+    info "AUR helper not found -- installing yay from AUR..."
     sudo pacman -S --needed --noconfirm git base-devel
 
     local tmp
@@ -112,68 +164,100 @@ ensure_yay() {
     success "yay installed."
 }
 
-# -- System dependencies -------------------------------------------------------
-install_pacman_deps() {
-    info "Installing pacman dependencies..."
+# -- Pre-flight dependency check & prompt ---------------------------------------
+check_and_install_deps() {
+    info "Checking system dependencies..."
+    local missing_pacman=()
+    local missing_aur=()
 
-    local pacman_pkgs=(
-        # GTK / GObject stack
-        gtk3
-        cairo
-        libgirepository
-        gobject-introspection
-        gtk-layer-shell
-        libdbusmenu-gtk3
-        cinnamon-desktop
-        gnome-bluetooth-3.0
-        gtk-session-lock
+    for pkg in "${PACMAN_DEPS[@]}"; do
+        if ! pacman -Qi "$pkg" &>/dev/null; then
+            missing_pacman+=("$pkg")
+        fi
+    done
 
-        # Theming
-        matugen
+    for pkg in "${AUR_DEPS[@]}"; do
+        if ! pacman -Qi "$pkg" &>/dev/null; then
+            missing_aur+=("$pkg")
+        fi
+    done
 
-        # Media / hardware
-        playerctl
-        brightnessctl
-        wf-recorder
-        upower
-        swayidle
+    local need_yay=false
+    if [[ ${#missing_aur[@]} -gt 0 ]] && ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
+        need_yay=true
+    fi
 
-        # Networking / Bluetooth
-        networkmanager
-        bluez
+    if [[ ${#missing_pacman[@]} -eq 0 && ${#missing_aur[@]} -eq 0 && "$need_yay" == "false" ]]; then
+        success "All required dependencies are already installed."
+        return 0
+    fi
 
-        # Python
-        python
-        python-pip
+    echo
+    warn "The following dependencies are missing and required:"
+    if [[ ${#missing_pacman[@]} -gt 0 ]]; then
+        echo -e "  ${BOLD}Pacman packages:${RESET} ${CYAN}${missing_pacman[*]}${RESET}"
+    fi
+    if [[ ${#missing_aur[@]} -gt 0 ]]; then
+        echo -e "  ${BOLD}AUR packages:${RESET}    ${CYAN}${missing_aur[*]}${RESET}"
+    fi
+    if [[ "$need_yay" == "true" ]]; then
+        echo -e "  ${BOLD}AUR Helper:${RESET}      ${CYAN}yay (will be bootstrapped)${RESET}"
+    fi
+    echo
 
-        # Wayland wallpaper daemon
-        awww
+    read -rp "  Would you like to install the missing dependencies now? [Y/n]: " dep_choice
+    case "$dep_choice" in
+        [nN]|[nN][oO])
+            warn "Dependency installation skipped by user."
+            ;;
+        *)
+            if [[ ${#missing_pacman[@]} -gt 0 ]]; then
+                info "Installing missing pacman packages..."
+                sudo pacman -S --needed --noconfirm "${missing_pacman[@]}"
+                success "Pacman dependencies installed."
+            fi
 
-        # Build tools (needed for compiling snippets)
-        base-devel
-        git
-    )
+            if [[ "$need_yay" == "true" ]]; then
+                ensure_yay
+            fi
 
-    sudo pacman -S --needed --noconfirm "${pacman_pkgs[@]}"
-    success "pacman dependencies installed."
+            if [[ ${#missing_aur[@]} -gt 0 ]]; then
+                local aur_helper="yay"
+                if command -v paru &>/dev/null; then
+                    aur_helper="paru"
+                fi
+                info "Installing missing AUR packages using $aur_helper..."
+                "$aur_helper" -S --needed --noconfirm "${missing_aur[@]}"
+                success "AUR dependencies installed."
+            fi
+            ;;
+    esac
 }
 
-install_aur_deps() {
-    info "Installing AUR dependencies..."
+# -- Deploy files to INSTALL_DIR ------------------------------------------------
+deploy_source() {
+    if [[ "$IS_LOCAL_REPO" == "true" ]]; then
+        if [[ "$(realpath "$SCRIPT_DIR")" == "$(realpath "$INSTALL_DIR" 2>/dev/null || true)" ]]; then
+            info "Already located in $INSTALL_DIR."
+            return
+        fi
 
-    local aur_pkgs=(
-        fabric-cli-git
-    )
-
-    yay -S --needed --noconfirm "${aur_pkgs[@]}"
-    success "AUR dependencies installed."
-}
-
-# -- Clone ---------------------------------------------------------------------
-clone_repo() {
-    info "Cloning Agility Shell to $INSTALL_DIR..."
-    git clone "$REPO_URL" "$INSTALL_DIR"
-    success "Repository cloned."
+        info "Deploying Agility Shell from local source ($SCRIPT_DIR) to $INSTALL_DIR..."
+        mkdir -p "$INSTALL_DIR"
+        if command -v rsync &>/dev/null; then
+            rsync -a --delete --exclude='.git' --exclude='venv' --exclude='__pycache__' "$SCRIPT_DIR/" "$INSTALL_DIR/"
+        else
+            cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/"
+        fi
+        success "Local files deployed."
+    else
+        if [[ -d "$INSTALL_DIR" ]]; then
+            rm -rf "$INSTALL_DIR"
+        fi
+        info "Cloning Agility Shell from $REPO_URL to $INSTALL_DIR..."
+        git clone "$REPO_URL" "$INSTALL_DIR"
+        success "Repository cloned."
+    fi
 }
 
 # -- Python venv ---------------------------------------------------------------
@@ -207,33 +291,78 @@ compile_snippets() {
     fi
 }
 
+# -- Niri Config Integration ---------------------------------------------------
 inject_niri_include() {
-    local niri_config="$HOME/.config/niri/config.kdl"
+    local niri_config_dir="$HOME/.config/niri"
+    local niri_config="$niri_config_dir/config.kdl"
     local include_line='include "~/.config/agility-shell/config/niri.kdl"'
 
+    mkdir -p "$niri_config_dir"
+
     if [[ ! -f "$niri_config" ]]; then
-        info "No niri config found at $niri_config -- creating one with agility-shell include."
-        mkdir -p "$HOME/.config/niri"
-        echo "$include_line" > "$niri_config"
-        success "Niri config created with agility-shell include."
+        info "No Niri config found at $niri_config -- creating one with default configuration template..."
+        local candidate_defaults=(
+            "/usr/share/doc/niri/default-config.kdl"
+            "/etc/xdg/niri/config.kdl"
+            "/etc/niri/config.kdl"
+        )
+        local copied=false
+        for cand in "${candidate_defaults[@]}"; do
+            if [[ -f "$cand" ]]; then
+                cp "$cand" "$niri_config"
+                copied=true
+                info "Copied default Niri template from $cand"
+                break
+            fi
+        done
+
+        if [[ "$copied" == "false" ]]; then
+            info "Creating clean base Niri config..."
+            cat << 'BASE_NIRI_EOF' > "$niri_config"
+// Niri Base Configuration
+prefer-no-csd
+
+input {
+    keyboard {
+        xkb {
+        }
+        numlock
+    }
+    touchpad {
+        tap
+        natural-scroll
+    }
+}
+
+binds {
+    Mod+T { spawn "alacritty"; }
+    Mod+Q { close-window; }
+    Mod+Shift+E { quit; }
+}
+BASE_NIRI_EOF
+        fi
+
+        echo "" >> "$niri_config"
+        echo "$include_line" >> "$niri_config"
+        success "Niri config initialized with default settings and Agility Shell include."
         return
     fi
 
-    if grep -qF "$include_line" "$niri_config"; then
-        info "Niri include already present -- skipping."
-        return
-    fi
-
-    # Remove any old caffyne-shell includes
+    # Clean old caffyne includes if any
     if grep -qF 'caffyne-shell' "$niri_config"; then
         info "Removing old caffyne-shell include from niri config..."
         sed -i '/caffyne-shell/d' "$niri_config"
     fi
 
-    info "Appending agility-shell include to niri config..."
+    if grep -qF "$include_line" "$niri_config"; then
+        info "Agility Shell include already present in $niri_config."
+        return
+    fi
+
+    info "Appending Agility Shell include to existing Niri config..."
     echo "" >> "$niri_config"
     echo "$include_line" >> "$niri_config"
-    success "Niri config updated."
+    success "Niri config updated with Agility Shell include."
 }
 
 # -- Matugen Setup -------------------------------------------------------------
@@ -274,15 +403,17 @@ input_path = '~/.config/agility-shell/style/agility-shell-colors.css'
 output_path = '~/.config/agility-shell/style/colors.css'
 MATUGEN_EOF
     fi
+    success "Matugen configured."
 }
 
-# -- Update --------------------------------------------------------------------
+# -- Backup / Preserve ---------------------------------------------------------
 backup_preserved_dirs() {
     local tmp_backup="$1"
     for dir in "${PRESERVE_DIRS[@]}"; do
         local src="$INSTALL_DIR/$dir"
         if [[ -d "$src" ]]; then
             info "Preserving $dir/..."
+            mkdir -p "$tmp_backup"
             cp -r "$src" "$tmp_backup/$dir"
         fi
     done
@@ -300,35 +431,76 @@ restore_preserved_dirs() {
     done
 }
 
+backup_preserved_files() {
+    local tmp_backup="$1"
+    for file in "${PRESERVE_FILES[@]}"; do
+        local src="$INSTALL_DIR/$file"
+        if [[ -f "$src" ]]; then
+            mkdir -p "$tmp_backup/$(dirname "$file")"
+            cp "$src" "$tmp_backup/$file"
+            info "Preserving $file..."
+        fi
+    done
+}
+
+restore_preserved_files() {
+    local tmp_backup="$1"
+    for file in "${PRESERVE_FILES[@]}"; do
+        local backed_up="$tmp_backup/$file"
+        if [[ -f "$backed_up" ]]; then
+            mkdir -p "$INSTALL_DIR/$(dirname "$file")"
+            cp "$backed_up" "$INSTALL_DIR/$file"
+            info "Restoring $file..."
+        fi
+    done
+}
+
+# -- Update --------------------------------------------------------------------
 do_update() {
     info "Updating Agility Shell..."
+
+    check_and_install_deps
 
     local tmp_backup
     tmp_backup=$(mktemp -d)
 
     backup_preserved_dirs "$tmp_backup"
+    backup_preserved_files "$tmp_backup"
 
-    git -C "$INSTALL_DIR" fetch origin
-    git -C "$INSTALL_DIR" reset --hard origin/main
+    if [[ "$IS_LOCAL_REPO" == "true" ]]; then
+        deploy_source
+    elif [[ -d "$INSTALL_DIR/.git" ]]; then
+        git -C "$INSTALL_DIR" fetch origin
+        git -C "$INSTALL_DIR" reset --hard origin/main
+    else
+        deploy_source
+    fi
 
+    restore_preserved_files "$tmp_backup"
     restore_preserved_dirs "$tmp_backup"
     rm -rf "$tmp_backup"
 
     info "Refreshing Python dependencies..."
-    "$INSTALL_DIR/venv/bin/pip" install --upgrade pip -q
-    "$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" -q
-    success "Python dependencies updated."
+    if [[ ! -d "$INSTALL_DIR/venv" ]]; then
+        setup_venv
+    else
+        "$INSTALL_DIR/venv/bin/pip" install --upgrade pip -q
+        "$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" -q
+        success "Python dependencies updated."
+    fi
 
     compile_snippets
+    inject_niri_include
+    setup_matugen
+
     chmod +x "$INSTALL_DIR/start.sh" "$INSTALL_DIR/update.sh" "$INSTALL_DIR/install.sh" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
 
     success "Agility Shell updated successfully!"
     echo
-    info "Restart the shell or reboot to apply changes."
-
     prompt_reboot
 }
 
+# -- Prompt Reboot -------------------------------------------------------------
 prompt_reboot() {
     echo
     warn "A system reboot is recommended to ensure all services, environment variables, and compositor configs take effect."
@@ -345,16 +517,13 @@ prompt_reboot() {
     esac
 }
 
-# -- Fresh install -------------------------------------------------------------
+# -- Fresh Install -------------------------------------------------------------
 do_install() {
-    info "Starting fresh install of Agility Shell..."
+    info "Starting installation of Agility Shell..."
 
-    ensure_yay
-    install_pacman_deps
-    install_aur_deps
-    clone_repo
+    check_and_install_deps
+    deploy_source
     setup_venv
-
     compile_snippets
     inject_niri_include
     setup_matugen
@@ -364,15 +533,14 @@ do_install() {
     echo
     success "Agility Shell installed successfully!"
     echo
-    echo -e "  ${BOLD}Start it:${RESET}"
+    echo -e "  ${BOLD}Start manually:${RESET}"
     echo -e "    ${CYAN}~/.config/agility-shell/start.sh${RESET}"
     echo
-    echo -e "  ${BOLD}Compositor configs live in:${RESET}"
+    echo -e "  ${BOLD}Compositor configs:${RESET}"
     echo -e "    ${CYAN}~/.config/agility-shell/config/${RESET}"
     echo
-    echo -e "  ${BOLD}Niri auto-start:${RESET}"
-    echo -e "    The shell is configured to start automatically with Niri."
-    echo -e "    Config: ${CYAN}~/.config/agility-shell/config/niri.kdl${RESET}"
+    echo -e "  ${BOLD}Niri integration:${RESET}"
+    echo -e "    Auto-start and keybindings included in: ${CYAN}~/.config/niri/config.kdl${RESET}"
     echo
 
     prompt_reboot
@@ -390,11 +558,11 @@ main() {
     check_not_root
     self_update "$@"
 
-    if [[ -d "$INSTALL_DIR/.git" ]]; then
+    if [[ -d "$INSTALL_DIR" ]]; then
         warn "Existing installation found at $INSTALL_DIR"
         echo
-        echo -e "  ${BOLD}1)${RESET} Update (preserves wallpapers/)"
-        echo -e "  ${BOLD}2)${RESET} Reinstall from scratch (wipes everything)"
+        echo -e "  ${BOLD}1)${RESET} Update (preserves wallpapers/ and configs)"
+        echo -e "  ${BOLD}2)${RESET} Reinstall from scratch (replaces installation)"
         echo -e "  ${BOLD}q)${RESET} Quit"
         echo
         read -rp "  Choice [1/2/q]: " choice
@@ -414,3 +582,4 @@ main() {
 }
 
 main "$@"
+

@@ -73,9 +73,9 @@ layer-rule {
 }
 
 binds {
-    Mod+Space hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
-    Mod+D     hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
-    Mod+W     hotkey-overlay-title="Wallpaper Gallery" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperPicker')"; }
-    Mod+Alt+X hotkey-overlay-title="Random Wallpaper" { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
-    Alt+X     hotkey-overlay-title="Random Wallpaper" { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
+    Mod+Space   hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+D       hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+Shift+W hotkey-overlay-title="Wallpaper Gallery" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperPicker')"; }
+    Mod+Alt+X   hotkey-overlay-title="Random Wallpaper" { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
+    Alt+X       hotkey-overlay-title="Random Wallpaper" { spawn "fabric-cli" "exec" "agility-shell" "wallpaper_service.random_wallpaper()"; }
 }

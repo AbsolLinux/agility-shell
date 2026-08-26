@@ -12,7 +12,9 @@ class StyleService(Service):
         self.app = app
         self._style_changed = False
 
-        self.style_monitor = monitor_file(os.path.expanduser("~/.config/agility-shell/style"))
+        style_dir = os.path.expanduser("~/.config/agility-shell/style")
+        os.makedirs(style_dir, exist_ok=True)
+        self.style_monitor = monitor_file(style_dir)
         self.style_monitor.connect("changed", lambda *_: self.reload())
 
     @Property(bool, default_value=False)
@@ -21,9 +23,14 @@ class StyleService(Service):
 
     def reload(self, *_):
         try:
-            self.app.set_stylesheet_from_file(
-                file_path=os.path.expanduser("~/.config/agility-shell/style/style.css"),
-            )
+            user_style = os.path.expanduser("~/.config/agility-shell/style/style.css")
+            fallback_style = os.path.join(os.path.dirname(__file__), "../style/style.css")
+            target_style = user_style if os.path.isfile(user_style) else fallback_style
+
+            if os.path.isfile(target_style):
+                self.app.set_stylesheet_from_file(
+                    file_path=target_style,
+                )
             
             GLib.timeout_add(100, apply_plugin_css, self.app)
 
