@@ -11,9 +11,15 @@ INSTALL_DIR="$HOME/.config/agility-shell"
 CONFIG_DIR="$INSTALL_DIR/config"
 SCRIPT_URL="https://raw.githubusercontent.com/AbsolLinux/agility-shell/main/install.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_SRC="${BASH_SOURCE[0]:-}"
+if [[ -n "$SCRIPT_SRC" && "$SCRIPT_SRC" != "bash" && "$SCRIPT_SRC" != "sh" && "$SCRIPT_SRC" != "/dev/stdin" && -f "$SCRIPT_SRC" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SRC")" 2>/dev/null && pwd || echo "")"
+else
+    SCRIPT_DIR=""
+fi
+
 IS_LOCAL_REPO=false
-if [[ -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/bar.py" && -d "$SCRIPT_DIR/bar_widgets" ]]; then
+if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/bar.py" && -d "$SCRIPT_DIR/bar_widgets" ]]; then
     IS_LOCAL_REPO=true
 fi
 
@@ -64,14 +70,37 @@ cat << "EOF"
       
 EOF
 
+# -- Interactive prompt helper (handles pipe / curl execution) -----------------
+prompt_user() {
+    local prompt_msg="$1"
+    local var_name="$2"
+    local default_val="${3:-}"
+
+    if [ -t 0 ]; then
+        read -rp "$prompt_msg" "$var_name"
+    elif [ -r /dev/tty ]; then
+        read -rp "$prompt_msg" "$var_name" < /dev/tty
+    else
+        eval "$var_name=\"$default_val\""
+    fi
+}
+
 self_update() {
     if [[ "$IS_LOCAL_REPO" == "true" ]]; then
         info "Running from local repository -- skipping remote self-update."
         return
     fi
 
+    # When piped through curl | bash or stdin, skip self-update
+    if [[ -z "$SCRIPT_DIR" || "$0" == "bash" || "$0" == "sh" || "$0" == *"stdin"* ]]; then
+        return
+    fi
+
     local script_path
-    script_path="$(realpath "$0")"
+    script_path="$(realpath "$0" 2>/dev/null || true)"
+    if [[ -z "$script_path" || ! -f "$script_path" || "$script_path" == "/usr/bin/"* || "$script_path" == "/bin/"* ]]; then
+        return
+    fi
 
     info "Checking for installer updates..."
 
@@ -205,7 +234,7 @@ check_and_install_deps() {
     fi
     echo
 
-    read -rp "  Would you like to install the missing dependencies now? [Y/n]: " dep_choice
+    prompt_user "  Would you like to install the missing dependencies now? [Y/n]: " dep_choice "y"
     case "$dep_choice" in
         [nN]|[nN][oO])
             warn "Dependency installation skipped by user."
@@ -505,7 +534,7 @@ prompt_reboot() {
     echo
     warn "A system reboot is recommended to ensure all services, environment variables, and compositor configs take effect."
     echo
-    read -rp "  Would you like to reboot now? [y/N]: " reboot_choice
+    prompt_user "  Would you like to reboot now? [y/N]: " reboot_choice "n"
     case "$reboot_choice" in
         [yY]|[yY][eE][sS])
             info "Rebooting system..."
@@ -565,7 +594,7 @@ main() {
         echo -e "  ${BOLD}2)${RESET} Reinstall from scratch (replaces installation)"
         echo -e "  ${BOLD}q)${RESET} Quit"
         echo
-        read -rp "  Choice [1/2/q]: " choice
+        prompt_user "  Choice [1/2/q]: " choice "1"
         case "$choice" in
             1) do_update ;;
             2)
