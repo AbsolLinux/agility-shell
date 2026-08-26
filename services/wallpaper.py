@@ -55,19 +55,44 @@ def _awww_set(
     If pos is None we default to center.
     """
     x, y = pos if pos is not None else (0.5, 0.5)
-    t_type = transition_type or getattr(user_options.wallpaper, "transition_type", "grow") or "grow"
+    t_type = transition_type or getattr(user_options.wallpaper, "transition_type", "random") or "random"
+    enabled_transitions = getattr(user_options.wallpaper, "enabled_transitions", None)
+    if enabled_transitions is None or not isinstance(enabled_transitions, list) or len(enabled_transitions) == 0:
+        enabled_transitions = ["grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer"]
+
+    custom_trans_map = {
+        c["name"]: c for c in getattr(user_options.wallpaper, "custom_transitions", [])
+        if isinstance(c, dict) and "name" in c
+    }
+
+    angle = "45"
+    duration = getattr(user_options.wallpaper, "transition_duration", AWWW_TRANSITION_DURATION)
+    fps = getattr(user_options.wallpaper, "transition_fps", AWWW_TRANSITION_FPS)
+    bezier = AWWW_TRANSITION_BEZIER
+
+    if t_type == "random":
+        import random
+        t_type = random.choice(enabled_transitions)
+
+    if t_type in custom_trans_map:
+        cust = custom_trans_map[t_type]
+        base_type = cust.get("type", "grow")
+        angle = str(cust.get("angle", "45"))
+        duration = float(cust.get("duration", duration))
+        bezier = str(cust.get("bezier", bezier))
+        t_type = base_type
 
     cmd = [
         "awww", "img", path,
         "--transition-type",     t_type,
-        "--transition-fps",      str(AWWW_TRANSITION_FPS),
-        "--transition-duration", str(AWWW_TRANSITION_DURATION),
-        "--transition-bezier",   AWWW_TRANSITION_BEZIER,
+        "--transition-fps",      str(fps),
+        "--transition-duration", str(duration),
+        "--transition-bezier",   bezier,
     ]
     if t_type in ("grow", "outer", "center", "any"):
         cmd.extend(["--transition-pos", f"{x:.4f},{y:.4f}"])
     elif t_type in ("wipe", "wave"):
-        cmd.extend(["--transition-angle", "45"])
+        cmd.extend(["--transition-angle", angle])
 
     try:
         subprocess.Popen(cmd)
