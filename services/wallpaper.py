@@ -44,9 +44,10 @@ def _generate_blurred_cache(path: str, blur_radius: int = 20) -> None:
 def _awww_set(
     path: str,
     pos: tuple[float, float] | None = None,
+    transition_type: str | None = None,
 ) -> None:
     """
-    Shell out to awww to set the wallpaper with a grow (circle-reveal) transition.
+    Shell out to awww to set the wallpaper with the configured transition.
 
     `pos` is a normalised coordinate within the drop monitor — awww takes it as
     "x,y" where each value is either a pixel count or a float fraction (0.0–1.0).
@@ -54,19 +55,23 @@ def _awww_set(
     If pos is None we default to center.
     """
     x, y = pos if pos is not None else (0.5, 0.5)
+    t_type = transition_type or getattr(user_options.wallpaper, "transition_type", "grow") or "grow"
 
     cmd = [
         "awww", "img", path,
-        "--transition-type",     "grow",
-        "--transition-pos",      f"{x:.4f},{y:.4f}",
+        "--transition-type",     t_type,
         "--transition-fps",      str(AWWW_TRANSITION_FPS),
         "--transition-duration", str(AWWW_TRANSITION_DURATION),
         "--transition-bezier",   AWWW_TRANSITION_BEZIER,
     ]
+    if t_type in ("grow", "outer", "center", "any"):
+        cmd.extend(["--transition-pos", f"{x:.4f},{y:.4f}"])
+    elif t_type in ("wipe", "wave"):
+        cmd.extend(["--transition-angle", "45"])
 
     try:
         subprocess.Popen(cmd)
-        logger.info(f"awww: set {path!r} with grow from ({x:.3f}, {y:.3f})")
+        logger.info(f"awww: set {path!r} with {t_type} transition from ({x:.3f}, {y:.3f})")
     except FileNotFoundError:
         logger.error("awww not found — is it installed and on your PATH?")
     except Exception as e:
@@ -268,12 +273,12 @@ class WallpaperService(Service):
         if self._blurred_pixbuf is not None:
             self._blurred_pixbuf = None
 
-    def set_wallpaper(self, path: str, pos: tuple[float, float] | None = None) -> None:
+    def set_wallpaper(self, path: str, pos: tuple[float, float] | None = None, transition_type: str | None = None) -> None:
         if not os.path.isfile(path):
             logger.warning(f"WallpaperService: path does not exist: {path}")
             return
 
-        _awww_set(path, pos)
+        _awww_set(path, pos, transition_type)
         self._clear_blurred_pixbuf()
 
         def copy_to_cache():

@@ -313,6 +313,8 @@ class DesktopAppletWindow(WaylandWindow):
     def _initial_build(self) -> bool:
         self._ready = True
         self.recalculate_grid()
+        self._overlay.set_opacity(1.0)
+        self._schedule_fade_in()
         return False
 
     def _on_fade_value(self, animator, _) -> None:
@@ -420,8 +422,12 @@ class DesktopAppletWindow(WaylandWindow):
         self._ph_grid_y     = None
         self._ph_valid      = False
 
-        self.layer = "overlay"
+        try:
+            GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        except Exception:
+            self.layer = "overlay"
 
+        self._overlay.set_opacity(1.0)
         self._show_canvas()
         self._canvas_da.queue_draw()
 
@@ -440,7 +446,10 @@ class DesktopAppletWindow(WaylandWindow):
         self._ph_grid_y     = None
         self._ph_valid      = False
 
-        self.layer = "bottom"
+        try:
+            GtkLayerShell.set_layer(self, GtkLayerShell.Layer.BOTTOM)
+        except Exception:
+            self.layer = "bottom"
         self._hide_canvas()
 
     def _xy_to_grid(self, x: float, y: float) -> tuple[int, int]:
@@ -458,9 +467,9 @@ class DesktopAppletWindow(WaylandWindow):
         placed  = user_options.desktop_canvas.get_applets(self._monitor_id)
 
         valid = (
-            _fits(gx, gy, key, self._cols, self._rows)
+            _fits(gx, gy, key, self._cols, self._rows, span_x=self._dragging_span_x, span_y=self._dragging_span_y)
             and not _conflicts(gx, gy, key, placed, self._cols, self._rows,
-                               ignore_key=key)
+                               ignore_key=key, span_x=self._dragging_span_x, span_y=self._dragging_span_y)
         )
 
         if gx != self._ph_grid_x or gy != self._ph_grid_y or valid != self._ph_valid:
@@ -493,18 +502,21 @@ class DesktopAppletWindow(WaylandWindow):
         gx, gy = self._xy_to_grid(x, y)
         placed  = user_options.desktop_canvas.get_applets(self._monitor_id)
 
-        if not _fits(gx, gy, key, self._cols, self._rows):
+        span_x = getattr(self, "_dragging_span_x", None)
+        span_y = getattr(self, "_dragging_span_y", None)
+
+        if not _fits(gx, gy, key, self._cols, self._rows, span_x=span_x, span_y=span_y):
             Gtk.drag_finish(ctx, False, False, time)
             self.exit_canvas_mode(restore=False)
             return
 
-        if _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key):
+        if _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key, span_x=span_x, span_y=span_y):
             Gtk.drag_finish(ctx, False, False, time)
             self.exit_canvas_mode(restore=False)
             return
 
         DesktopAppletService.get_instance().remove(self._monitor_id, key)
-        DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy)
+        DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy, span_x=span_x, span_y=span_y)
 
         from utils.sounds import play_sound
         play_sound("widget-placed")
@@ -772,6 +784,8 @@ class DesktopAppletWindow(WaylandWindow):
                 self._children[entry["key"]] = eb
 
         self._reposition_all()
+        self._overlay.set_opacity(1.0)
+        self._overlay.show_all()
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
@@ -785,6 +799,8 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
+            self._overlay.set_opacity(1.0)
+            self._overlay.show_all()
 
             if not self._blur_ctx and user_options.theme.blur:
                 self._apply_blur()

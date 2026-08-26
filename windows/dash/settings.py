@@ -654,9 +654,59 @@ class DashSettingsPage(Box):
             ],
         )
 
+        # Wallpaper Transition row
+        trans_options = [
+            ("grow", "Grow"),
+            ("fade", "Fade"),
+            ("wipe", "Wipe"),
+            ("wave", "Wave"),
+            ("left", "Slide L"),
+            ("right", "Slide R"),
+            ("top", "Slide Up"),
+            ("bottom", "Slide Down"),
+            ("outer", "Shrink"),
+            ("random", "Random"),
+        ]
+        self._setting_trans_buttons: dict[str, Button] = {}
+        cur_trans = getattr(user_options.wallpaper, "transition_type", "grow")
+
+        trans_buttons_box = Box(
+            style_classes=["option-selection-container"],
+            orientation="h",
+            spacing=4,
+            h_align="end",
+        )
+        for t_key, t_name in trans_options:
+            b = Button(
+                child=Label(label=t_name, style="font-size: 11px; font-weight: 500;"),
+                style_classes=["option-selection-button"] + (["active"] if t_key == cur_trans else []),
+                on_clicked=lambda _, k=t_key: self._on_wallpaper_transition_changed(k),
+            )
+            self._setting_trans_buttons[t_key] = b
+            trans_buttons_box.add(b)
+
+        wallpaper_trans_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Wallpaper Transition Effect", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Animation effect used when switching wallpapers", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                trans_buttons_box,
+            ],
+        )
+
         dash_section = Section(
-            title="Dash Appearance & Responsiveness",
-            children=[blur_row, dim_row, card_opacity_row, instant_row],
+            title="Dash Appearance & Wallpaper Effects",
+            children=[blur_row, dim_row, card_opacity_row, instant_row, wallpaper_trans_row],
         )
 
         container = Box(
@@ -1001,3 +1051,12 @@ class DashSettingsPage(Box):
     def _on_instant_toggled(self, state: bool):
         user_options.settings.instant_dash = state
         user_options.save()
+
+    def _on_wallpaper_transition_changed(self, transition_type: str):
+        user_options.wallpaper.transition_type = transition_type
+        user_options.save()
+        for k, btn in getattr(self, "_setting_trans_buttons", {}).items():
+            if k == transition_type:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")

@@ -11,10 +11,12 @@ from fabric.utils import monitor_file
 from fabric.widgets.box import Box
 from fabric.widgets.button import Button
 from fabric.widgets.image import Image
+from fabric.widgets.label import Label
 from fabric.widgets.centerbox import CenterBox
 from gi.repository import GdkPixbuf, GLib, Gio
 from snippets import Icon, ClippingScrolledWindow, ClippingBox
 from services.themes import wallpaper
+from user_options import user_options
 from PIL import Image as PilImage
 
 THUMBNAIL_SIZE = 174
@@ -22,6 +24,19 @@ SUPPORTED_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 
 PREVIEW_WIDTH  = 918
 PREVIEW_HEIGHT = 546
+
+WALLPAPER_TRANSITIONS: list[tuple[str, str, str]] = [
+    ("grow",   "Grow",   "corners-out-duotone"),
+    ("fade",   "Fade",   "sparkle-duotone"),
+    ("wipe",   "Wipe",   "line-segment-duotone"),
+    ("wave",   "Wave",   "waves-duotone"),
+    ("left",   "Left",   "arrow-left-duotone"),
+    ("right",  "Right",  "arrow-right-duotone"),
+    ("top",    "Up",     "arrow-up-duotone"),
+    ("bottom", "Down",   "arrow-down-duotone"),
+    ("outer",  "Shrink", "corners-in-duotone"),
+    ("random", "Random", "shuffle-duotone"),
+]
 
 THUMB_CACHE_DIR   = Path.home() / ".cache" / "agility-shell" / "thumbnails"
 PREVIEW_CACHE_DIR = Path.home() / ".cache" / "agility-shell" / "previews"
@@ -204,6 +219,13 @@ class DashSelectorPage(Box):
             overlay_scroll=True,
             kinetic_scroll=True,
         )
+        self._preview_column = Box(
+            orientation="v",
+            spacing=10,
+            h_align="center",
+            v_align="start",
+            children=[self._preview_box],
+        )
         super().__init__(
             orientation="v",
             v_align="start",
@@ -217,7 +239,7 @@ class DashSelectorPage(Box):
                     spacing=12,
                     h_expand=True,
                     v_expand=True,
-                    children=[self._preview_box, self._scroll],
+                    children=[self._preview_column, self._scroll],
                 ),
             ],
         )
@@ -228,7 +250,7 @@ class DashWallpaperPage(DashSelectorPage):
     - All preview and thumb loads use weakrefs + generation counters.
     - No closure ever captures self directly.
     - In-flight futures are cancelled on hide/unload so no stale pixbufs
-      can land on the main thread after the page is hidden.
+    - can land on the main thread after the page is hidden.
     """
 
     def __init__(self):
@@ -242,6 +264,45 @@ class DashWallpaperPage(DashSelectorPage):
         self._preview_image = Image()
         self._preview_box.add(self._preview_image)
 
+        # Transition Selector Bar
+        self._transition_buttons: dict[str, Button] = {}
+        current_trans = getattr(user_options.wallpaper, "transition_type", "grow")
+
+        trans_row = Box(
+            orientation="h",
+            spacing=4,
+            style_classes=["option-selection-container"],
+            h_align="center",
+        )
+
+        for t_key, t_label, t_icon in WALLPAPER_TRANSITIONS:
+            btn = Button(
+                style_classes=["option-selection-button"] + (["active"] if t_key == current_trans else []),
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[
+                        Icon(icon_name=t_icon, icon_size=13),
+                        Label(label=t_label, style="font-size: 11px; font-weight: 500;"),
+                    ],
+                ),
+                on_clicked=lambda _, k=t_key: self._on_transition_selected(k),
+            )
+            self._transition_buttons[t_key] = btn
+            trans_row.add(btn)
+
+        self._controls_box = Box(
+            orientation="h",
+            spacing=10,
+            h_align="center",
+            v_align="center",
+            children=[
+                Label(label="Transition:", style="font-size: 12px; opacity: 0.7; font-weight: 600;"),
+                trans_row,
+            ],
+        )
+        self._preview_column.add(self._controls_box)
+
         self.connect("realize", self._on_realize)
         self._load_wallpapers()
 
@@ -249,6 +310,19 @@ class DashWallpaperPage(DashSelectorPage):
             self._restore_active(wallpaper.wallpaper_path)
 
         wallpaper.connect("wallpaper-changed", self._on_wallpaper_changed)
+
+    def _on_transition_selected(self, transition_type: str) -> None:
+        user_options.wallpaper.transition_type = transition_type
+        user_options.save()
+        for k, btn in self._transition_buttons.items():
+            if k == transition_type:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+        if self._active_thumb:
+            wallpaper.set_wallpaper(self._active_thumb.path, transition_type=transition_type)
+        elif wallpaper.wallpaper_path:
+            wallpaper.set_wallpaper(wallpaper.wallpaper_path, transition_type=transition_type)
 
     def _on_wallpaper_changed(self, service, path: str) -> None:
         GLib.idle_add(self._refresh_and_select, path)
@@ -374,7 +448,7 @@ class DashWallpaperPage(DashSelectorPage):
 
     def _on_thumb_clicked(self, thumb: WallpaperThumb) -> None:
         self._set_active(thumb)
-        wallpaper.set_wallpaper(thumb.path)
+        wallpaper.set_wallpaper(thumb.path, transition_type=user_options.wallpaper.transition_type)
 
     def _set_active(self, thumb: WallpaperThumb) -> None:
         if self._active_thumb:

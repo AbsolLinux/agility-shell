@@ -137,6 +137,7 @@ class UserOptions:
     class Wallpaper:
         def __init__(self):
             self.path = f"{get_relative_path('wallpapers/wall14.jpg')}"
+            self.transition_type = "grow"
 
     class DesktopApplets:
         def __init__(self):

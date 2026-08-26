@@ -11,6 +11,7 @@ class DashHeader(CenterBox):
         self._entry_box = Box(
             style_classes=["launcher-search"],
             spacing=8,
+            style="min-width: 240px; margin-right: 4px;",
             visible=False,
             children=[
                 Icon(icon_name="magnifying-glass-duotone", icon_size=16),
@@ -27,7 +28,6 @@ class DashHeader(CenterBox):
             h_align="center",
             style="min-width: 1104px",
             start_children=self._left_box,
-            center_children=self._entry_box,
             end_children=self._right_box,
         )
     def update(
@@ -90,6 +90,9 @@ class DashHeader(CenterBox):
                 )
                 self._left_box.add(btn)
             self._left_box.show_all()
+
+            if show_search:
+                self._right_box.add(self._entry_box)
 
             v_btn = Button(
                 style_classes=["dash-header-button"],
