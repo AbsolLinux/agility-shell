@@ -443,3 +443,7 @@ tooltip label {
     background-color: alpha(var(--primary), 0.28);
 }
 
+.option-selection-button.dimmed {
+    opacity: 0.45;
+}
+
