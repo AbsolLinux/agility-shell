@@ -32,7 +32,10 @@ class DesktopClock(Box):
             overlays=self.clock_label,
         )
         super().__init__(
-            children=self.clock_circle
+            style_classes=["desktop-applet"],
+            h_expand=True,
+            v_expand=True,
+            children=self.clock_circle,
         )
         GLib.timeout_add(1000, self._update_time)
         self._update_time()

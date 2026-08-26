@@ -25,16 +25,20 @@ CELL_STEP = CELL + GAP  # 93
 _APPLET_TARGET = Gtk.TargetEntry.new("text/plain", Gtk.TargetFlags.SAME_APP, 0)
 
 
-def _applet_pixel_size(key: str) -> tuple[int, int]:
-    cols, rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+def _applet_pixel_size(key: str, span_x: int | None = None, span_y: int | None = None) -> tuple[int, int]:
+    base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+    cols = span_x if span_x is not None else base_cols
+    rows = span_y if span_y is not None else base_rows
     w = cols * 2 * CELL + (cols * 2 - 1) * GAP
     h = rows * 2 * CELL + (rows * 2 - 1) * GAP
     return w, h
 
 
-def _applet_cell_size(key: str) -> tuple[int, int]:
+def _applet_cell_size(key: str, span_x: int | None = None, span_y: int | None = None) -> tuple[int, int]:
     """Return the (cols, rows) cell footprint for a canvas applet key."""
-    cols, rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+    base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+    cols = span_x if span_x is not None else base_cols
+    rows = span_y if span_y is not None else base_rows
     return cols * 2, rows * 2
 
 
@@ -42,8 +46,8 @@ def _grid_to_pixel(grid_x: int, grid_y: int) -> tuple[int, int]:
     return grid_x * CELL_STEP, grid_y * CELL_STEP
 
 
-def _fits(grid_x: int, grid_y: int, key: str, cols: int, rows: int) -> bool:
-    cc, cr = _applet_cell_size(key)
+def _fits(grid_x: int, grid_y: int, key: str, cols: int, rows: int, span_x: int | None = None, span_y: int | None = None) -> bool:
+    cc, cr = _applet_cell_size(key, span_x, span_y)
     return grid_x + cc <= cols and grid_y + cr <= rows
 
 
@@ -51,8 +55,9 @@ def _conflicts(
     grid_x: int, grid_y: int, key: str,
     placed: list[dict], cols: int, rows: int,
     ignore_key: str | None = None,
+    span_x: int | None = None, span_y: int | None = None,
 ) -> bool:
-    cc, cr = _applet_cell_size(key)
+    cc, cr = _applet_cell_size(key, span_x, span_y)
     new_cells = {
         (grid_x + dx, grid_y + dy)
         for dx in range(cc)
@@ -61,7 +66,7 @@ def _conflicts(
     for entry in placed:
         if ignore_key and entry["key"] == ignore_key:
             continue
-        ec, er = _applet_cell_size(entry["key"])
+        ec, er = _applet_cell_size(entry["key"], entry.get("span_x"), entry.get("span_y"))
         existing = {
             (entry["grid_x"] + dx, entry["grid_y"] + dy)
             for dx in range(ec)
@@ -151,7 +156,7 @@ class _CanvasDrawingArea(Gtk.DrawingArea):
         for entry in placed:
             if entry["key"] == win._dragging_key:
                 continue
-            ec, er = _applet_cell_size(entry["key"])
+            ec, er = _applet_cell_size(entry["key"], entry.get("span_x"), entry.get("span_y"))
             for dx in range(ec):
                 for dy in range(er):
                     occupied.add((entry["grid_x"] + dx, entry["grid_y"] + dy))
@@ -178,7 +183,7 @@ class _CanvasDrawingArea(Gtk.DrawingArea):
         if win._ph_grid_x is not None and win._dragging_key is not None:
             px = win._pad_x + win._ph_grid_x * CELL_STEP
             py = win._pad_y + win._ph_grid_y * CELL_STEP
-            pw, ph = _applet_pixel_size(win._dragging_key)
+            pw, ph = _applet_pixel_size(win._dragging_key, getattr(win, "_dragging_span_x", None), getattr(win, "_dragging_span_y", None))
 
             bg_rgba, border_rgba, preview_radius = self._get_preview_styles(win._ph_valid)
 
@@ -222,6 +227,12 @@ class DesktopAppletWindow(WaylandWindow):
         self._canvas_active  = False
         self._dragging_key: str | None = None
         self._drag_origin: tuple[int, int] | None = None
+        self._dragging_span_x: int | None = None
+        self._dragging_span_y: int | None = None
+        self._resizing_key: str | None = None
+        self._resize_start_pos: tuple[float, float] | None = None
+        self._resize_start_span: tuple[int, int] | None = None
+        self._resize_start_pixels: tuple[int, int] | None = None
         self._ph_grid_x: int | None = None
         self._ph_grid_y: int | None = None
         self._ph_valid:  bool       = False
@@ -399,10 +410,12 @@ class DesktopAppletWindow(WaylandWindow):
         self._canvas_da.set_opacity(0.0)
         self._canvas_da.hide()
 
-    def enter_canvas_mode(self, key: str, origin: tuple[int, int] | None = None) -> None:
+    def enter_canvas_mode(self, key: str, origin: tuple[int, int] | None = None, span_x: int | None = None, span_y: int | None = None) -> None:
         self._canvas_active = True
         self._dragging_key  = key
         self._drag_origin   = origin
+        self._dragging_span_x = span_x
+        self._dragging_span_y = span_y
         self._ph_grid_x     = None
         self._ph_grid_y     = None
         self._ph_valid      = False
@@ -416,11 +429,13 @@ class DesktopAppletWindow(WaylandWindow):
         if restore and self._drag_origin is not None and self._dragging_key is not None:
             key = self._dragging_key
             gx, gy = self._drag_origin
-            DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy)
+            DesktopAppletService.get_instance().place(self._monitor_id, key, gx, gy, span_x=self._dragging_span_x, span_y=self._dragging_span_y)
 
         self._canvas_active = False
         self._dragging_key  = None
         self._drag_origin   = None
+        self._dragging_span_x = None
+        self._dragging_span_y = None
         self._ph_grid_x     = None
         self._ph_grid_y     = None
         self._ph_valid      = False
@@ -599,6 +614,146 @@ class DesktopAppletWindow(WaylandWindow):
         return self._rows
 
 
+    def _build_applet_entry(self, entry: dict) -> Gtk.EventBox | None:
+        key = entry["key"]
+        cls = DESKTOP_APPLET_WIDGETS.get(key)
+        if cls is None:
+            logger.warning(f"[DesktopAppletService] unknown applet key {key!r}")
+            return None
+        try:
+            span_x = entry.get("span_x")
+            span_y = entry.get("span_y")
+            w_px, h_px = _applet_pixel_size(key, span_x, span_y)
+
+            widget = cls()
+            widget.set_size_request(w_px, h_px)
+
+            op = entry.get("opacity")
+            if op is None:
+                op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
+            if op < 1.0 and hasattr(widget, "set_style"):
+                widget.set_style(f"background-color: alpha(var(--background), {op:.2f});")
+
+            overlay = Overlay(h_expand=True, v_expand=True)
+            overlay.set_size_request(w_px, h_px)
+            overlay.add(widget)
+
+            # Interactive resize grip handle in the bottom-right corner
+            handle_eb = Gtk.EventBox()
+            handle_eb.set_halign(Gtk.Align.END)
+            handle_eb.set_valign(Gtk.Align.END)
+            handle_eb.set_size_request(24, 24)
+            handle_eb.set_margin_end(4)
+            handle_eb.set_margin_bottom(4)
+            handle_icon = Icon(icon_name="dots-six-vertical", icon_size=14, style="opacity: 0.35;")
+            handle_eb.add(handle_icon)
+            handle_eb.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK)
+            handle_eb.connect("button-press-event", self._on_resize_handle_press, key)
+            handle_eb.connect("motion-notify-event", self._on_resize_handle_motion, key)
+            handle_eb.connect("button-release-event", self._on_resize_handle_release, key)
+            overlay.add_overlay(handle_eb)
+
+            eb = Gtk.EventBox()
+            eb.set_size_request(w_px, h_px)
+            eb.add(overlay)
+            eb.connect("button-press-event", self._on_applet_right_click, key)
+            eb.show_all()
+
+            self._setup_applet_drag(eb, key)
+            return eb
+        except Exception as e:
+            logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
+            return None
+
+    def _on_resize_handle_press(self, widget, event: Gdk.EventButton, key: str) -> bool:
+        if event.button != 1:
+            return False
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
+        if not entry:
+            return False
+        base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+        cur_span_x = entry.get("span_x", base_cols)
+        cur_span_y = entry.get("span_y", base_rows)
+
+        self._resizing_key = key
+        self._resize_start_pos = (event.x_root, event.y_root)
+        self._resize_start_span = (cur_span_x, cur_span_y)
+        self._resize_start_pixels = _applet_pixel_size(key, cur_span_x, cur_span_y)
+
+        self._ph_grid_x = entry["grid_x"]
+        self._ph_grid_y = entry["grid_y"]
+        self._dragging_key = key
+        self._dragging_span_x = cur_span_x
+        self._dragging_span_y = cur_span_y
+        self._ph_valid = True
+
+        self._show_canvas()
+        self._canvas_da.queue_draw()
+        return True
+
+    def _on_resize_handle_motion(self, widget, event: Gdk.EventMotion, key: str) -> bool:
+        if self._resizing_key != key or not self._resize_start_pos or not self._resize_start_pixels:
+            return False
+
+        dx = event.x_root - self._resize_start_pos[0]
+        dy = event.y_root - self._resize_start_pos[1]
+
+        init_w, init_h = self._resize_start_pixels
+        cur_w = max(100, init_w + dx)
+        cur_h = max(100, init_h + dy)
+
+        cand_span_x = max(1, min(6, round((cur_w + GAP) / (2 * CELL_STEP))))
+        cand_span_y = max(1, min(4, round((cur_h + GAP) / (2 * CELL_STEP))))
+
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
+        if not entry:
+            return False
+
+        gx = entry["grid_x"]
+        gy = entry["grid_y"]
+
+        valid = (
+            _fits(gx, gy, key, self._cols, self._rows, span_x=cand_span_x, span_y=cand_span_y)
+            and not _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key, span_x=cand_span_x, span_y=cand_span_y)
+        )
+
+        if cand_span_x != self._dragging_span_x or cand_span_y != self._dragging_span_y or valid != self._ph_valid:
+            self._dragging_span_x = cand_span_x
+            self._dragging_span_y = cand_span_y
+            self._ph_valid = valid
+            self._canvas_da.queue_draw()
+
+        return True
+
+    def _on_resize_handle_release(self, widget, event: Gdk.EventButton, key: str) -> bool:
+        if self._resizing_key != key:
+            return False
+
+        target_span_x = self._dragging_span_x
+        target_span_y = self._dragging_span_y
+        valid = self._ph_valid
+
+        self._resizing_key = None
+        self._resize_start_pos = None
+        self._resize_start_span = None
+        self._resize_start_pixels = None
+        self._dragging_span_x = None
+        self._dragging_span_y = None
+        self._ph_grid_x = None
+        self._ph_grid_y = None
+        self._dragging_key = None
+        self._ph_valid = False
+        self._hide_canvas()
+
+        if valid and target_span_x and target_span_y:
+            DesktopAppletService.get_instance().set_applet_size(self._monitor_id, key, target_span_x, target_span_y)
+            from utils.sounds import play_sound
+            play_sound("widget-placed")
+
+        return True
+
     def rebuild(self) -> None:
         for widget in self._children.values():
             self._fixed.remove(widget)
@@ -607,63 +762,28 @@ class DesktopAppletWindow(WaylandWindow):
 
         entries = user_options.desktop_canvas.get_applets(self._monitor_id)
         for entry in entries:
-            key = entry["key"]
-            cls = DESKTOP_APPLET_WIDGETS.get(key)
-            if cls is None:
-                logger.warning(f"[DesktopAppletService] unknown applet key {key!r}")
-                continue
-            try:
-                widget = cls()
-                w_px, h_px = _applet_pixel_size(key)
-                widget.set_size_request(w_px, h_px)
-
-                eb = Gtk.EventBox()
-                eb.set_size_request(w_px, h_px)
-                eb.add(widget)
-                eb.connect("button-press-event", self._on_applet_right_click, key)
-                eb.show_all()
-
-                self._setup_applet_drag(eb, key)
-
+            eb = self._build_applet_entry(entry)
+            if eb:
                 self._fixed.put(eb, 0, 0)
-                self._children[key] = eb
-            except Exception as e:
-                logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
+                self._children[entry["key"]] = eb
 
         self._reposition_all()
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
             return
-        cls = DESKTOP_APPLET_WIDGETS.get(key)
-        if cls is None:
-            return
-        try:
-            widget = cls()
-            w_px, h_px = _applet_pixel_size(key)
-            widget.set_size_request(w_px, h_px)
-
-            op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
-            if op < 1.0 and hasattr(widget, "set_style"):
-                widget.set_style(f"background-color: alpha(var(--background), {op:.2f});")
-
-            eb = Gtk.EventBox()
-            eb.set_size_request(w_px, h_px)
-            eb.add(widget)
-            eb.connect("button-press-event", self._on_applet_right_click, key)
-            eb.show_all()
-
-            self._setup_applet_drag(eb, key)
-
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
+        if not entry:
+            entry = {"key": key, "grid_x": grid_x, "grid_y": grid_y}
+        eb = self._build_applet_entry(entry)
+        if eb:
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
 
             if not self._blur_ctx and user_options.theme.blur:
                 self._apply_blur()
-                    
-        except Exception as e:
-            logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
 
     def remove_applet(self, key: str) -> None:
         widget = self._children.pop(key, None)
@@ -671,6 +791,32 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.remove(widget)
             widget.destroy()
             GLib.idle_add(self._retrace_blur)
+
+    def apply_applet_opacity(self, key: str, opacity: float) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        overlay = eb.get_child()
+        if not overlay:
+            return
+        widget = overlay.get_child()
+        if widget and hasattr(widget, "set_style"):
+            widget.set_style(f"background-color: alpha(var(--background), {opacity:.2f});" if opacity < 1.0 else "")
+
+    def resize_applet(self, key: str, span_x: int, span_y: int) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        w_px, h_px = _applet_pixel_size(key, span_x, span_y)
+        eb.set_size_request(w_px, h_px)
+        overlay = eb.get_child()
+        if overlay:
+            overlay.set_size_request(w_px, h_px)
+            widget = overlay.get_child()
+            if widget:
+                widget.set_size_request(w_px, h_px)
+        self._reposition_all()
+        GLib.idle_add(self._retrace_blur)
 
     def _setup_applet_drag(self, eb: Gtk.EventBox, key: str) -> None:
         eb.drag_source_set(
@@ -685,14 +831,13 @@ class DesktopAppletWindow(WaylandWindow):
 
     def _on_applet_drag_begin(self, eb, ctx, key: str) -> None:
         placed = user_options.desktop_canvas.get_applets(self._monitor_id)
-        origin = next(
-            ((e["grid_x"], e["grid_y"]) for e in placed if e["key"] == key),
-            None,
-        )
+        entry = next((e for e in placed if e["key"] == key), None)
+        origin = (entry["grid_x"], entry["grid_y"]) if entry else None
+        span_x = entry.get("span_x") if entry else None
+        span_y = entry.get("span_y") if entry else None
         eb.hide()
         self._drop_success = False
-        # GLib.timeout_add(1000, self._retrace_blur)
-        self.enter_canvas_mode(key, origin=origin)
+        self.enter_canvas_mode(key, origin=origin, span_x=span_x, span_y=span_y)
 
     def _on_applet_drag_data_get(self, eb, ctx, data_obj, info, time, key: str) -> None:
         data_obj.set_text(f"applet:{key}", -1)
@@ -706,7 +851,6 @@ class DesktopAppletWindow(WaylandWindow):
                 self.exit_canvas_mode(restore=False)
         GLib.idle_add(self._retrace_blur)
 
-
     def _on_applet_drag_failed(self, eb, ctx, result, key: str) -> bool:
         eb.show()
         if self._canvas_active and self._dragging_key == key:
@@ -718,14 +862,79 @@ class DesktopAppletWindow(WaylandWindow):
         if event.button != 3:
             return False
         menu = Gtk.Menu()
+
+        # Opacity Submenu
+        opacity_menu_item = Gtk.MenuItem(label="Opacity")
+        opacity_sub = Gtk.Menu()
+        current_op = user_options.desktop_canvas.get_opacity(self._monitor_id, key)
+        if current_op is None:
+            current_op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
+
+        presets = [
+            ("100% Solid", 1.0),
+            ("85% High", 0.85),
+            ("70% Medium", 0.70),
+            ("50% Translucent", 0.50),
+            ("30% Low", 0.30),
+            ("15% Dim", 0.15),
+        ]
+        for label, val in presets:
+            lbl = f"✓ {label}" if abs(current_op - val) < 0.05 else f"    {label}"
+            it = Gtk.MenuItem(label=lbl)
+            it.connect("activate", lambda _, v=val, k=key: DesktopAppletService.get_instance().set_applet_opacity(self._monitor_id, k, v))
+            opacity_sub.append(it)
+        opacity_menu_item.set_submenu(opacity_sub)
+        menu.append(opacity_menu_item)
+
+        # Size Submenu
+        size_menu_item = Gtk.MenuItem(label="Size")
+        size_sub = Gtk.Menu()
+        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
+        base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+        cur_sx = entry.get("span_x", base_cols) if entry else base_cols
+        cur_sy = entry.get("span_y", base_rows) if entry else base_rows
+
+        size_presets = [
+            ("1 × 1 Compact", 1, 1),
+            ("2 × 1 Wide", 2, 1),
+            ("1 × 2 Tall", 1, 2),
+            ("2 × 2 Large", 2, 2),
+            ("3 × 2 Extra Wide", 3, 2),
+        ]
+        gx = entry["grid_x"] if entry else 0
+        gy = entry["grid_y"] if entry else 0
+
+        for label, sx, sy in size_presets:
+            is_cur = (cur_sx == sx and cur_sy == sy)
+            lbl = f"✓ {label}" if is_cur else f"    {label}"
+            it = Gtk.MenuItem(label=lbl)
+            fits = _fits(gx, gy, key, self._cols, self._rows, span_x=sx, span_y=sy)
+            conflicts = _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key, span_x=sx, span_y=sy)
+            if not fits or conflicts:
+                if not is_cur:
+                    it.set_sensitive(False)
+            it.connect("activate", lambda _, s_x=sx, s_y=sy, k=key: DesktopAppletService.get_instance().set_applet_size(self._monitor_id, k, s_x, s_y))
+            size_sub.append(it)
+
+        size_menu_item.set_submenu(size_sub)
+        menu.append(size_menu_item)
+
+        sep = Gtk.SeparatorMenuItem()
+        menu.append(sep)
+
         remove_item = Gtk.MenuItem(label=f"Remove {key}")
         remove_item.connect(
             "activate",
             lambda _: DesktopAppletService.get_instance().remove(self._monitor_id, key),
         )
         menu.append(remove_item)
-        menu.show_all()
-        menu.popup_at_pointer(event)
+
+        if user_options.theme.blur:
+            popup_with_blur(menu, event)
+        else:
+            menu.show_all()
+            menu.popup_at_pointer(event)
         return True
 
 
@@ -899,13 +1108,13 @@ class DesktopAppletService(Service):
                     free_blur(win._blur_ctx)
                     win._blur_ctx = None
 
-    def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> bool:
+    def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, span_x: int | None = None, span_y: int | None = None, opacity: float | None = None) -> bool:
         win  = self._windows.get(monitor_id)
         cols = win.cols if win and win.cols > 0 else 1
         rows = win.rows if win and win.rows > 0 else 1
         ry   = grid_y / rows
 
-        placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, cols, ry)
+        placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, cols, ry, span_x=span_x, span_y=span_y, opacity=opacity)
         if not placed:
             return False
         user_options.save()
@@ -934,6 +1143,33 @@ class DesktopAppletService(Service):
             win.add_applet(key, grid_x, grid_y)
         self.applets_changed(monitor_id)
 
+    def set_applet_opacity(self, monitor_id: int, key: str, opacity: float) -> None:
+        user_options.desktop_canvas.set_opacity(monitor_id, key, opacity)
+        user_options.save()
+        win = self._windows.get(monitor_id)
+        if win:
+            win.apply_applet_opacity(key, opacity)
+
+    def set_applet_size(self, monitor_id: int, key: str, span_x: int, span_y: int) -> bool:
+        win = self._windows.get(monitor_id)
+        if not win:
+            return False
+        placed = user_options.desktop_canvas.get_applets(monitor_id)
+        entry = next((e for e in placed if e["key"] == key), None)
+        if not entry:
+            return False
+        gx = entry["grid_x"]
+        gy = entry["grid_y"]
+        if not _fits(gx, gy, key, win.cols, win.rows, span_x=span_x, span_y=span_y):
+            return False
+        if _conflicts(gx, gy, key, placed, win.cols, win.rows, ignore_key=key, span_x=span_x, span_y=span_y):
+            return False
+        user_options.desktop_canvas.set_span(monitor_id, key, span_x, span_y)
+        user_options.save()
+        win.resize_applet(key, span_x, span_y)
+        self.applets_changed(monitor_id)
+        return True
+
     def enter_canvas_mode(self, monitor_id: int, key: str) -> None:
         """Called from the dash to begin a new placement drag."""
         win = self._windows.get(monitor_id)
@@ -952,7 +1188,5 @@ class DesktopAppletService(Service):
     def apply_desktop_widget_opacity(self, opacity: float) -> None:
         opacity = max(0.0, min(1.0, float(opacity)))
         for win in self._windows.values():
-            for eb in win._children.values():
-                child = eb.get_child()
-                if child and hasattr(child, "set_style"):
-                    child.set_style(f"background-color: alpha(var(--background), {opacity:.2f});" if opacity < 1.0 else "")
+            for key, eb in win._children.items():
+                win.apply_applet_opacity(key, opacity)

@@ -418,3 +418,28 @@ tooltip label {
     background-color: var(--surface_container_high);
 }
 
+.hover-widget-chip {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-m);
+    padding: 6px 12px;
+    border: 1px solid var(--outline_variant);
+    opacity: 0.55;
+    transition: 0.2s ease;
+}
+
+.hover-widget-chip:hover {
+    background-color: var(--surface_container_high);
+    opacity: 0.85;
+}
+
+.hover-widget-chip.active {
+    background-color: alpha(var(--primary), 0.18);
+    border-color: var(--primary);
+    color: var(--primary);
+    opacity: 1.0;
+}
+
+.hover-widget-chip.active:hover {
+    background-color: alpha(var(--primary), 0.28);
+}
+

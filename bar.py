@@ -445,12 +445,27 @@ def _make_applet_popup(
     window._keys = key_list
     return window
 
+def _is_hover_enabled_for_key(key: str | list[str]) -> bool:
+    if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
+        return False
+    hover_list = getattr(user_options.settings, "hover_widgets", None)
+    if hover_list is None:
+        return True
+    if isinstance(key, list):
+        return any(k in hover_list for k in key)
+    return key in hover_list
+
+
 class WidgetWrapper(Box):
     def __init__(self, key: str, child: Gtk.Widget, variant: str = None):
         super().__init__()
         self.widget_key = key
         self.variant = variant
         self._hover_timer: int | None = None
+        self._leave_timer: int | None = None
+        self._opened_by_hover: bool = False
+        self._pointer_in_widget: bool = False
+        self._pointer_in_popup: bool = False
         self._variant_picker: AppletWindow | None = None 
         self._drag_signals: list[int] = []
         self._popup: PopupWindow | None = None
@@ -480,8 +495,13 @@ class WidgetWrapper(Box):
                 self.event_box.set_style("")
 
     def _on_enter(self, widget, event):
+        self._pointer_in_widget = True
         widget.add_style_class("hovered")
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+
+        if not _is_hover_enabled_for_key(self.widget_key):
             return False
         if self._hover_timer is not None:
             GLib.source_remove(self._hover_timer)
@@ -493,19 +513,66 @@ class WidgetWrapper(Box):
 
     def _trigger_hover_open(self):
         self._hover_timer = None
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
+        if not _is_hover_enabled_for_key(self.widget_key):
             return False
         if self.widget_key == "Dash":
             import services.singletons as singletons
             if singletons.bar_manager and singletons.bar_manager._dash:
                 if not singletons.bar_manager._dash.is_visible():
+                    self._opened_by_hover = True
                     bar = self._get_bar()
                     active_monitor = bar.gdk_monitor if bar and hasattr(bar, "gdk_monitor") else None
                     singletons.bar_manager._dash.toggle(active_monitor)
+                    self._hook_dash_hover_leave()
         elif self.widget_key in APPLET_WIDGETS:
             popup = self._ensure_popup()
             if popup and not popup.is_visible():
+                self._opened_by_hover = True
                 popup.toggle()
+        return False
+
+    def _hook_dash_hover_leave(self):
+        import services.singletons as singletons
+        if singletons.bar_manager and singletons.bar_manager._dash:
+            dash_win = singletons.bar_manager._dash
+            if not getattr(dash_win, "_hover_hooked", False):
+                dash_win._hover_hooked = True
+                dash_win.connect("enter-notify-event", lambda *_: self._on_popup_enter())
+                dash_win.connect("leave-notify-event", lambda _w, e: self._on_popup_leave(e))
+
+    def _on_popup_enter(self):
+        self._pointer_in_popup = True
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+
+    def _on_popup_leave(self, event):
+        if getattr(event, "detail", None) != Gdk.NotifyType.INFERIOR:
+            self._pointer_in_popup = False
+            if self._opened_by_hover:
+                self._schedule_hover_close()
+
+    def _schedule_hover_close(self):
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+        self._leave_timer = GLib.timeout_add(220, self._check_and_close_hover)
+
+    def _check_and_close_hover(self):
+        self._leave_timer = None
+        if not self._opened_by_hover:
+            return False
+        if self._pointer_in_widget or self._pointer_in_popup:
+            return False
+
+        if self.widget_key == "Dash":
+            import services.singletons as singletons
+            if singletons.bar_manager and singletons.bar_manager._dash and singletons.bar_manager._dash.is_visible():
+                singletons.bar_manager._dash.toggle(None)
+        elif self._popup and self._popup.is_visible():
+            self._popup.toggle()
+
+        self._opened_by_hover = False
         return False
 
     def _on_drag_end(self, widget, ctx):
@@ -513,16 +580,21 @@ class WidgetWrapper(Box):
         _dragging_key = None
         _dragging_widget = None
         GLib.idle_add(lambda: self.set_visible(True))
+
     def on_button_release(self, widget, event):
         if event.button == 1:
             widget.remove_style_class("active")
         return False
+
     def on_leave(self, w, event):
         if self._hover_timer is not None:
             GLib.source_remove(self._hover_timer)
             self._hover_timer = None
         if event.detail != Gdk.NotifyType.INFERIOR:
+            self._pointer_in_widget = False
             w.remove_style_class("hovered")
+            if self._opened_by_hover:
+                self._schedule_hover_close()
         return False
 
     def _ensure_popup(self) -> PopupWindow | None:
@@ -535,6 +607,8 @@ class WidgetWrapper(Box):
             return None
         self._popup = _make_applet_popup(self.widget_key, bar, self.event_box)
         self._popup.connect("notify::visible", self._on_popup_visibility_changed)
+        self._popup.connect("enter-notify-event", lambda *_: self._on_popup_enter())
+        self._popup.connect("leave-notify-event", lambda _w, e: self._on_popup_leave(e))
         return self._popup
 
     def _on_popup_visibility_changed(self, popup, _):
@@ -542,12 +616,23 @@ class WidgetWrapper(Box):
             self.event_box.add_style_class("applet-open")
         else:
             self.event_box.remove_style_class("applet-open")
+            self._opened_by_hover = False
+            self._pointer_in_popup = False
+            if self._leave_timer is not None:
+                GLib.source_remove(self._leave_timer)
+                self._leave_timer = None
 
             bar = self._get_bar()
             if bar is not None:
                 bar._on_applet_closed()
 
     def destroy_popup(self) -> None:
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+        if self._hover_timer is not None:
+            GLib.source_remove(self._hover_timer)
+            self._hover_timer = None
         if self._popup is not None:
             self._popup.destroy()
             self._popup = None
@@ -561,6 +646,10 @@ class WidgetWrapper(Box):
 
     def _on_click(self, _widget, event: Gdk.EventButton):
         _widget.remove_style_class("active")
+        self._opened_by_hover = False
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
         if event.button == 3:
             self._show_variant_menu(event)
             return True
@@ -572,7 +661,6 @@ class WidgetWrapper(Box):
         if popup is None:
             return False
         popup.toggle()
-
         return True
 
     def _on_edit_mode_changed(self, *_):
@@ -864,6 +952,11 @@ class GroupWrapper(Box):
             self._event_boxes.append(eb)
 
         self._hover_timer: int | None = None
+        self._leave_timer: int | None = None
+        self._opened_by_hover: bool = False
+        self._pointer_in_widget: bool = False
+        self._pointer_in_popup: bool = False
+
         outer_eb = EventBox()
         outer_eb.add(self._inner)
         self.add(outer_eb)
@@ -892,8 +985,13 @@ class GroupWrapper(Box):
             self._outer_eb.set_style("")
 
     def _on_enter(self, widget, event):
+        self._pointer_in_widget = True
         widget.add_style_class("hovered")
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+
+        if not _is_hover_enabled_for_key(self.widget_keys):
             return False
         if self._hover_timer is not None:
             GLib.source_remove(self._hover_timer)
@@ -905,11 +1003,43 @@ class GroupWrapper(Box):
 
     def _trigger_hover_open(self):
         self._hover_timer = None
-        if edit_mode.edit_mode or not getattr(user_options.settings, "hover_open", True):
+        if not _is_hover_enabled_for_key(self.widget_keys):
             return False
         popup = self._ensure_popup()
         if popup and not popup.is_visible():
+            self._opened_by_hover = True
             popup.toggle()
+        return False
+
+    def _on_popup_enter(self):
+        self._pointer_in_popup = True
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+
+    def _on_popup_leave(self, event):
+        if getattr(event, "detail", None) != Gdk.NotifyType.INFERIOR:
+            self._pointer_in_popup = False
+            if self._opened_by_hover:
+                self._schedule_hover_close()
+
+    def _schedule_hover_close(self):
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+        self._leave_timer = GLib.timeout_add(220, self._check_and_close_hover)
+
+    def _check_and_close_hover(self):
+        self._leave_timer = None
+        if not self._opened_by_hover:
+            return False
+        if self._pointer_in_widget or self._pointer_in_popup:
+            return False
+
+        if self._popup and self._popup.is_visible():
+            self._popup.toggle()
+
+        self._opened_by_hover = False
         return False
 
     def on_leave(self, w, event):
@@ -917,7 +1047,10 @@ class GroupWrapper(Box):
             GLib.source_remove(self._hover_timer)
             self._hover_timer = None
         if event.detail != Gdk.NotifyType.INFERIOR:
+            self._pointer_in_widget = False
             w.remove_style_class("hovered")
+            if self._opened_by_hover:
+                self._schedule_hover_close()
         return False
 
     def _ensure_popup(self) -> PopupWindow | None:
@@ -928,6 +1061,8 @@ class GroupWrapper(Box):
             return None
         self._popup = _make_applet_popup(self.widget_keys, bar, self._outer_eb)
         self._popup.connect("notify::visible", self._on_popup_visibility_changed)
+        self._popup.connect("enter-notify-event", lambda *_: self._on_popup_enter())
+        self._popup.connect("leave-notify-event", lambda _w, e: self._on_popup_leave(e))
         return self._popup
 
     def _on_popup_visibility_changed(self, popup, _):
@@ -935,12 +1070,23 @@ class GroupWrapper(Box):
             self._outer_eb.add_style_class("applet-open")
         else:
             self._outer_eb.remove_style_class("applet-open")
+            self._opened_by_hover = False
+            self._pointer_in_popup = False
+            if self._leave_timer is not None:
+                GLib.source_remove(self._leave_timer)
+                self._leave_timer = None
 
             bar = self._get_bar()
             if bar is not None:
                 bar._on_applet_closed()
 
     def destroy_popups(self) -> None:
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+        if self._hover_timer is not None:
+            GLib.source_remove(self._hover_timer)
+            self._hover_timer = None
         if self._popup is not None:
             self._popup.destroy()
             self._popup = None
@@ -951,6 +1097,10 @@ class GroupWrapper(Box):
 
     def _on_child_click(self, _widget, event: Gdk.EventButton):
         self._outer_eb.remove_style_class("active")
+        self._opened_by_hover = False
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
         if edit_mode.edit_mode:
             return False
         if event.button != 1:
@@ -963,6 +1113,10 @@ class GroupWrapper(Box):
     
     def _on_outer_click(self, widget, event: Gdk.EventButton):
         self._outer_eb.remove_style_class("active")
+        self._opened_by_hover = False
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
 
         if edit_mode.edit_mode:
             return False

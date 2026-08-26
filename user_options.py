@@ -16,6 +16,11 @@ class UserOptions:
             self.dnd = False
             self.hover_open = True
             self.hover_delay = 180
+            self.hover_widgets = [
+                "Dash", "Launcher", "SysMon", "Processes", "Clipboard", "Caffeine", "NightLight",
+                "Media", "Weather", "Volume", "Brightness", "Energy", "Wifi", "Bluetooth",
+                "Clock", "Calendar", "Notifications", "Settings", "Tray", "Calculator", "Keyboard", "Session"
+            ]
             self.bar_opacity = 1.0
             self.widget_opacity = 1.0
             self.desktop_widget_opacity = 1.0
@@ -185,17 +190,24 @@ class UserOptions:
             else:
                 return "center", grid_x - center_col
 
-        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int, ry: float) -> bool:
+        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int, ry: float, span_x: int | None = None, span_y: int | None = None, opacity: float | None = None) -> bool:
             mid = str(monitor_id)
             if any(e["key"] == key for e in self.placements.get(mid, [])):
                 return False
             from desktop_applets import DESKTOP_CANVAS_SIZES
-            base_cols, _ = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
-            cc = base_cols * 2
+            base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
+            sx = span_x if span_x is not None else base_cols
+            sy = span_y if span_y is not None else base_rows
+            cc = sx * 2
             ax, dx = self._compute_anchor(grid_x, cc, cols)
-            self.placements.setdefault(mid, []).append(
-                {"key": key, "grid_x": grid_x, "grid_y": grid_y, "ax": ax, "dx": dx, "ry": ry}
-            )
+            entry = {"key": key, "grid_x": grid_x, "grid_y": grid_y, "ax": ax, "dx": dx, "ry": ry}
+            if span_x is not None:
+                entry["span_x"] = span_x
+            if span_y is not None:
+                entry["span_y"] = span_y
+            if opacity is not None:
+                entry["opacity"] = opacity
+            self.placements.setdefault(mid, []).append(entry)
             return True
 
         def remove(self, monitor_id: int, key: str) -> bool:
@@ -212,7 +224,8 @@ class UserOptions:
             for e in self.placements.get(str(monitor_id), []):
                 if e["key"] == key:
                     base_cols, _ = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
-                    cc = base_cols * 2
+                    sx = e.get("span_x", base_cols)
+                    cc = sx * 2
                     ax, dx = self._compute_anchor(grid_x, cc, cols)
                     e["grid_x"] = grid_x
                     e["grid_y"] = grid_y
@@ -220,15 +233,45 @@ class UserOptions:
                     e["dx"]     = dx
                     break
 
+        def set_opacity(self, monitor_id: int, key: str, opacity: float) -> bool:
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key:
+                    e["opacity"] = max(0.0, min(1.0, float(opacity)))
+                    return True
+            return False
+
+        def get_opacity(self, monitor_id: int, key: str) -> float | None:
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key:
+                    return e.get("opacity")
+            return None
+
+        def set_span(self, monitor_id: int, key: str, span_x: int, span_y: int) -> bool:
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key:
+                    e["span_x"] = max(1, int(span_x))
+                    e["span_y"] = max(1, int(span_y))
+                    return True
+            return False
+
+        def get_span(self, monitor_id: int, key: str) -> tuple[int, int] | None:
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key and "span_x" in e and "span_y" in e:
+                    return (e["span_x"], e["span_y"])
+            return None
+
         def clear_monitor(self, monitor_id: int) -> None:
             self.placements.pop(str(monitor_id), None)
 
         def resolve(self, monitor_id: int, cols: int, rows: int) -> None:
             from desktop_applets import DESKTOP_CANVAS_SIZES
 
-            def _applet_cell_size(key: str) -> tuple[int, int]:
+            def _applet_cell_size(entry: dict) -> tuple[int, int]:
+                key = entry["key"]
                 base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
-                return base_cols * 2, base_rows * 2
+                sx = entry.get("span_x", base_cols)
+                sy = entry.get("span_y", base_rows)
+                return sx * 2, sy * 2
 
             def _cells(gx: int, gy: int, cc: int, cr: int) -> set[tuple[int, int]]:
                 return {(gx + dx, gy + dy) for dx in range(cc) for dy in range(cr)}
@@ -240,7 +283,7 @@ class UserOptions:
             for entry in entries:
                 key = entry["key"]
                 ry  = entry.get("ry", 0.0)
-                cc, cr = _applet_cell_size(key)
+                cc, cr = _applet_cell_size(entry)
 
                 ax = entry.get("ax")
                 if ax == "left":

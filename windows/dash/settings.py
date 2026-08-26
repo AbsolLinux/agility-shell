@@ -3,7 +3,7 @@ import os
 from fabric.widgets.box import Box
 from fabric.widgets.button import Button
 from fabric.widgets.label import Label
-from gi.repository import Gtk, GLib
+from gi.repository import Gtk, GLib, Gdk
 from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch, FlatScale
 from user_options import user_options
 import services.singletons as singletons
@@ -43,6 +43,45 @@ ALL_AVAILABLE_WIDGETS: list[str] = [
     "Clock", "Calendar", "Notifications", "Settings", "Tray", "Dock", "Workspaces",
     "Calculator", "Keyboard", "Session", "Focused"
 ]
+
+
+class HoverWidgetChip(Button):
+    def __init__(self, widget_name: str, is_active: bool, on_toggle):
+        self.widget_name = widget_name
+        self._is_active = is_active
+        self._on_toggle = on_toggle
+
+        icon_name = WIDGET_ICONS.get(widget_name, "app-window-duotone")
+        self._icon = Icon(icon_name=icon_name, icon_size=14)
+        self._label = Label(label=widget_name, style="font-size: 11px; font-weight: 500;")
+
+        box = Box(
+            orientation="h",
+            spacing=6,
+            children=[self._icon, self._label],
+        )
+
+        classes = ["hover-widget-chip"]
+        if is_active:
+            classes.append("active")
+
+        super().__init__(
+            child=box,
+            style_classes=classes,
+            on_clicked=self._clicked,
+        )
+
+    def _clicked(self, *_):
+        self._is_active = not self._is_active
+        self.set_active_state(self._is_active)
+        self._on_toggle(self.widget_name, self._is_active)
+
+    def set_active_state(self, active: bool):
+        self._is_active = active
+        if active:
+            self.add_style_class("active")
+        else:
+            self.remove_style_class("active")
 
 
 class BarWidgetChip(Box):
@@ -167,9 +206,83 @@ class DashSettingsPage(Box):
             ],
         )
 
+        # Multi-select chips for hover widgets
+        self._hover_chip_widgets: dict[str, HoverWidgetChip] = {}
+        hover_chips_container = Gtk.FlowBox()
+        hover_chips_container.set_valign(Gtk.Align.START)
+        hover_chips_container.set_max_children_per_line(8)
+        hover_chips_container.set_selection_mode(Gtk.SelectionMode.NONE)
+        hover_chips_container.set_column_spacing(6)
+        hover_chips_container.set_row_spacing(6)
+        hover_chips_container.set_homogeneous(False)
+
+        current_hover_list = getattr(user_options.settings, "hover_widgets", ALL_AVAILABLE_WIDGETS)
+
+        for w_name in ALL_AVAILABLE_WIDGETS:
+            is_active = w_name in current_hover_list
+            chip = HoverWidgetChip(
+                widget_name=w_name,
+                is_active=is_active,
+                on_toggle=self._on_hover_widget_toggled,
+            )
+            self._hover_chip_widgets[w_name] = chip
+            hover_chips_container.add(chip)
+
+        select_all_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=4,
+                children=[Icon(icon_name="check-circle-duotone", icon_size=12), Label(label="Select All", style="font-size: 11px;")],
+            ),
+            style_classes=["bar-chip-add-btn"],
+            on_clicked=lambda *_: self._set_all_hover_widgets(True),
+        )
+
+        deselect_all_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=4,
+                children=[Icon(icon_name="x-circle-duotone", icon_size=12), Label(label="Deselect All", style="font-size: 11px;")],
+            ),
+            style_classes=["bar-chip-add-btn"],
+            on_clicked=lambda *_: self._set_all_hover_widgets(False),
+        )
+
+        hover_list_row = Box(
+            orientation="v",
+            spacing=10,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="h",
+                    spacing=8,
+                    h_align="fill",
+                    children=[
+                        Box(
+                            orientation="v",
+                            spacing=2,
+                            h_align="start",
+                            h_expand=True,
+                            children=[
+                                Label(label="Hover-Enabled Widgets", style_classes=["dim-label"], h_align="start"),
+                                Label(label="Select which specific widgets automatically open their popup/menu when hovered", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                            ],
+                        ),
+                        Box(
+                            orientation="h",
+                            spacing=6,
+                            h_align="end",
+                            children=[select_all_btn, deselect_all_btn],
+                        ),
+                    ],
+                ),
+                hover_chips_container,
+            ],
+        )
+
         behavior_section = Section(
             title="Bar Behavior",
-            children=[hover_row, delay_row],
+            children=[hover_row, delay_row, hover_list_row],
         )
 
         # =====================================================================
@@ -564,12 +677,75 @@ class DashSettingsPage(Box):
 
     def _show_add_widget_menu(self, widget: Gtk.Widget, section_name: str):
         menu = Gtk.Menu()
+        menu.set_reserve_toggle_size(False)
+
+        categories = {
+            "System & Controls": ["SysMon", "Processes", "Volume", "Brightness", "Energy", "Wifi", "Bluetooth", "NightLight", "Caffeine"],
+            "Navigation & Apps": ["Dash", "Launcher", "Workspaces", "Dock", "Focused"],
+            "Tools & Utilities": ["Clock", "Calendar", "Weather", "Media", "Notifications", "Clipboard", "Calculator", "Keyboard", "Settings", "Tray", "Session"],
+        }
+
+        for cat_name, w_list in categories.items():
+            cat_item = Gtk.MenuItem(label=cat_name)
+            sub = Gtk.Menu()
+            sub.set_reserve_toggle_size(False)
+            for w_name in w_list:
+                item = Gtk.MenuItem()
+                box = Box(orientation="h", spacing=8)
+                icon = Icon(icon_name=WIDGET_ICONS.get(w_name, "app-window-duotone"), icon_size=16)
+                lbl = Label(label=w_name)
+                box.add(icon)
+                box.add(lbl)
+                item.add(box)
+                item.connect("activate", lambda _, name=w_name, s=section_name: self._add_widget_to_bar(s, name))
+                sub.append(item)
+            cat_item.set_submenu(sub)
+            menu.append(cat_item)
+
+        sep = Gtk.SeparatorMenuItem()
+        menu.append(sep)
+
+        # All widgets submenu
+        all_item = Gtk.MenuItem(label="All Widgets")
+        all_sub = Gtk.Menu()
+        all_sub.set_reserve_toggle_size(False)
         for w_name in ALL_AVAILABLE_WIDGETS:
-            item = Gtk.MenuItem(label=w_name)
+            item = Gtk.MenuItem()
+            box = Box(orientation="h", spacing=8)
+            icon = Icon(icon_name=WIDGET_ICONS.get(w_name, "app-window-duotone"), icon_size=16)
+            lbl = Label(label=w_name)
+            box.add(icon)
+            box.add(lbl)
+            item.add(box)
             item.connect("activate", lambda _, name=w_name, s=section_name: self._add_widget_to_bar(s, name))
-            menu.append(item)
+            all_sub.append(item)
+        all_item.set_submenu(all_sub)
+        menu.append(all_item)
+
         menu.show_all()
-        menu.popup_at_widget(widget, Gdk.Gravity.SOUTH, Gdk.Gravity.NORTH, None)
+        try:
+            menu.popup_at_widget(widget, Gdk.Gravity.SOUTH, Gdk.Gravity.NORTH, None)
+        except Exception:
+            menu.popup(None, None, None, None, 0, Gtk.get_current_event_time())
+
+    def _on_hover_widget_toggled(self, widget_name: str, active: bool):
+        current = list(getattr(user_options.settings, "hover_widgets", ALL_AVAILABLE_WIDGETS))
+        if active and widget_name not in current:
+            current.append(widget_name)
+        elif not active and widget_name in current:
+            current.remove(widget_name)
+        user_options.settings.hover_widgets = current
+        user_options.save()
+
+    def _set_all_hover_widgets(self, enable_all: bool):
+        if enable_all:
+            user_options.settings.hover_widgets = list(ALL_AVAILABLE_WIDGETS)
+        else:
+            user_options.settings.hover_widgets = []
+        user_options.save()
+
+        for w_name, chip in self._hover_chip_widgets.items():
+            chip.set_active_state(enable_all)
 
     def _add_widget_to_bar(self, section_name: str, widget_name: str):
         if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
