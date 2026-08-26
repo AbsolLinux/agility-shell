@@ -176,7 +176,8 @@ class DockItem(EventBox):
             if actions:
                 menu.append(Gtk.SeparatorMenuItem())
 
-        pin_label = "Unpin from dock" if self.pinned else "Pin to dock"
+        is_pinned = self._dock_state.is_pinned(self.app_id) if self._dock_state else self.pinned
+        pin_label = "Unpin from dock" if is_pinned else "Pin to dock"
         pin_item = Gtk.MenuItem(label=pin_label)
         pin_item.connect("activate", lambda *_: self._do_pin_toggle())
         menu.append(pin_item)
