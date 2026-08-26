@@ -1,75 +1,18 @@
 spawn-at-startup "bash" "-c" "~/.config/agility-shell/start.sh"
 
+layout {
+    background-color "transparent"
+}
+
+overview {
+    workspace-shadow {
+        off
+    }
+}
+
 layer-rule {
     match namespace="^awww-daemon$"
     place-within-backdrop true
-}
-
-layer-rule {
-    match namespace="^agility-shell-applet$"
-    background-effect {
-        blur true
-        xray false
-        saturation 1.0
-        noise 0
-    }
-}
-
-layer-rule {
-    match namespace="^agility-shell-notifications$"
-    background-effect {
-        blur true
-        xray false
-        saturation 1.0
-        noise 0
-    }
-}
-
-layer-rule {
-    match namespace="^agility-shell-bar$"
-    background-effect {
-        blur true
-        xray false
-        saturation 1.0
-        noise 0
-    }
-}
-
-layer-rule {
-    match namespace="^agility-shell-osd$"
-    background-effect {
-        blur true
-        xray false
-        saturation 1.0
-        noise 0
-    }
-}
-
-layer-rule {
-    match namespace="^agility-shell-dash$"
-    background-effect {
-        blur true
-        saturation 1.0
-        noise 0
-    }
-}
-
-layer-rule {
-    match namespace="^agility-shell-wallpaper-picker$"
-    background-effect {
-        blur true
-        saturation 1.0
-        noise 0
-    }
-}
-
-layer-rule {
-    match namespace="^agility-shell-desktop-applets$"
-    background-effect {
-        blur true
-        saturation 1.0
-        noise 0
-    }
 }
 
 binds {
