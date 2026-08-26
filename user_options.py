@@ -18,6 +18,7 @@ class UserOptions:
             self.hover_delay = 180
             self.bar_opacity = 1.0
             self.widget_opacity = 1.0
+            self.desktop_widget_opacity = 1.0
             self.dash_blur = True
             self.dash_dim_opacity = 0.6
             self.dash_card_opacity = 1.0

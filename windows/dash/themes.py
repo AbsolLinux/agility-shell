@@ -615,12 +615,15 @@ class ThemePreview(Box):
         values = RADIUS_MAP[key]
         css = "\n".join(f"@define {k} {v};" for k, v in values.items())
         path = os.path.expanduser("~/.config/agility-shell/style/borders.css")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(css + "\n")
+
     def _write_font_css(self, key: str) -> None:
         values = FONT_MAP[key]
         css = "\n".join(f"@define {k} {v};" for k, v in values.items())
         path = os.path.expanduser("~/.config/agility-shell/style/fonts.css")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(css + "\n")
 
