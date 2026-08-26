@@ -1,62 +1,234 @@
+import os
+import psutil
+from gi.repository import GLib, Gtk
 from fabric.widgets.box import Box
-from fabric.widgets.circularprogressbar import CircularProgressBar
 from fabric.widgets.label import Label
-from fabric.widgets.overlay import Overlay
-from snippets import Icon
-from services.singletons import sysmon
+from snippets import Icon, Graph
 
-class DesktopSysMonModule(Box):
-    def __init__(self, icon_name: str):
-        self.progress_bar = CircularProgressBar(
-            style_classes=["progress-bar"],
-            start_angle=90,
-            end_angle=450,
-            size=(48, 48),
-            line_width=3,
-            min_value=0,
-            max_value=100,
-            value=0,
+
+class MetricGraphCard(Box):
+    def __init__(
+        self,
+        icon_name: str,
+        name: str,
+        initial_val: str = "0%",
+        min_val: float = 0.0,
+        max_val: float = 100.0,
+        dynamic: bool = False,
+        overlay_class: str = "",
+        **kwargs,
+    ):
+        self.icon = Icon(icon_name=icon_name, icon_size=16)
+        self.title_label = Label(
+            label=name,
+            style="font-size: 11px; font-weight: 600;",
+            h_align="start",
         )
-        self.progress_overlay = Overlay(
-            child=self.progress_bar,
-            overlays=Icon(icon_name=icon_name, icon_size=24, h_align="center", v_align="center"),
+        self.value_label = Label(
+            label=initial_val,
+            style="font-size: 11px; font-weight: 700;",
+            h_align="end",
         )
-        self.top_label = Label(style_classes=["desktop-system-module-label", "top"], v_expand=True, v_align="end", h_align="start")
-        self.bottom_label = Label(style_classes=["desktop-system-module-label", "bottom"], v_expand=True, v_align="start", h_align="start")
-        super().__init__(
-            style_classes=["desktop-system-module"],
+        self.sub_label = Label(
+            label="",
+            style="font-size: 10px; opacity: 0.7;",
+            h_align="end",
+        )
+
+        header = Box(
+            orientation="h",
             spacing=6,
+            h_align="fill",
             children=[
-                self.progress_overlay,
-                Box(
-                    orientation="v",
-                    children=[self.top_label, self.bottom_label],
-                ),
-            ]
+                self.icon,
+                self.title_label,
+                Box(h_expand=True),
+                self.sub_label,
+                self.value_label,
+            ],
         )
+
+        graph_classes = ["graph"]
+        if overlay_class:
+            graph_classes.append(overlay_class)
+
+        self.graph = Graph(
+            data=[0.0] * 16,
+            min_value=min_val,
+            max_value=max_val,
+            line_width=2.0,
+            fill=True,
+            smooth=True,
+            dynamic=dynamic,
+            size=(60, 32),
+            style_classes=graph_classes,
+            h_expand=True,
+            v_expand=True,
+        )
+
+        super().__init__(
+            orientation="v",
+            spacing=4,
+            style_classes=["graph-container", "desktop-system-module"],
+            h_expand=True,
+            v_expand=True,
+            children=[header, self.graph],
+            **kwargs,
+        )
+
+    def update_metric(self, value_num: float, value_str: str, sub_str: str = ""):
+        self.value_label.set_label(value_str)
+        if sub_str:
+            self.sub_label.set_label(sub_str)
+            self.sub_label.show()
+        else:
+            self.sub_label.hide()
+        self.graph.push(float(value_num))
 
 
 class DesktopSysMon(Box):
-    def __init__(self):
-        self.cpu_module = DesktopSysMonModule(icon_name="cpu-duotone")
-        self.ram_module = DesktopSysMonModule(icon_name="chart-line-up-duotone")
-        super().__init__(
-            spacing=18,
-            orientation="v",
-            style_classes=["desktop-applet"],
-            children=[self.cpu_module, self.ram_module]
+    def __init__(self, **kwargs):
+        self.cpu_card = MetricGraphCard(
+            icon_name="cpu-duotone",
+            name="CPU",
+            initial_val="0%",
         )
-        sysmon.connect("changed", self._sync)
-        self._sync()
+        self.ram_card = MetricGraphCard(
+            icon_name="chart-line-up-duotone",
+            name="RAM",
+            initial_val="0%",
+            overlay_class="overlayed",
+        )
+        self.disk_card = MetricGraphCard(
+            icon_name="hard-drives-duotone",
+            name="Disk",
+            initial_val="0%",
+        )
+        self.disk_card.set_no_show_all(True)
+        self.disk_card.hide()
 
-    def _sync(self, *_):
-        cpu_val = round(sysmon.cpu_usage)
-        mem_val = round(sysmon.mem_usage)
+        self.net_card = MetricGraphCard(
+            icon_name="arrows-down-up-duotone",
+            name="Network",
+            initial_val="0 KB/s",
+            dynamic=True,
+            overlay_class="overlayed",
+        )
+        self.net_card.set_no_show_all(True)
+        self.net_card.hide()
 
-        self.cpu_module.progress_bar.value = cpu_val
-        self.cpu_module.top_label.set_label(f"{cpu_val}%")
-        self.cpu_module.bottom_label.set_label("CPU Load")
+        self.primary_box = Box(
+            orientation="v",
+            spacing=8,
+            h_expand=True,
+            v_expand=True,
+            children=[self.cpu_card, self.ram_card],
+        )
 
-        self.ram_module.progress_bar.value = mem_val
-        self.ram_module.top_label.set_label(f"{mem_val}%")
-        self.ram_module.bottom_label.set_label(f"{sysmon.mem_used_str}/{sysmon.mem_total_str}")
+        self.extra_box = Box(
+            orientation="v",
+            spacing=8,
+            h_expand=True,
+            v_expand=True,
+            children=[self.disk_card, self.net_card],
+        )
+        self.extra_box.set_no_show_all(True)
+        self.extra_box.hide()
+
+        self.container = Box(
+            orientation="v",
+            spacing=8,
+            h_expand=True,
+            v_expand=True,
+            children=[self.primary_box, self.extra_box],
+        )
+
+        super().__init__(
+            orientation="v",
+            spacing=8,
+            style_classes=["desktop-applet"],
+            h_expand=True,
+            v_expand=True,
+            children=[self.container],
+            **kwargs,
+        )
+
+        self._last_net_bytes = None
+        self._last_net_time = None
+
+        self.connect("size-allocate", self._on_size_allocate)
+
+        self._timer_id = GLib.timeout_add(1000, self._update_stats)
+        self._update_stats()
+
+    def _on_size_allocate(self, widget, alloc):
+        w = alloc.width
+        h = alloc.height
+
+        if h >= 250 or w >= 380:
+            if not self.extra_box.get_visible():
+                self.disk_card.show()
+                self.net_card.show()
+                self.extra_box.show()
+            if w >= 380:
+                self.container.set_orientation(Gtk.Orientation.HORIZONTAL)
+            else:
+                self.container.set_orientation(Gtk.Orientation.VERTICAL)
+        else:
+            if self.extra_box.get_visible():
+                self.extra_box.hide()
+                self.disk_card.hide()
+                self.net_card.hide()
+            self.container.set_orientation(Gtk.Orientation.VERTICAL)
+
+    def _update_stats(self) -> bool:
+        try:
+            # CPU
+            cpu_pct = psutil.cpu_percent(interval=None)
+            self.cpu_card.update_metric(cpu_pct, f"{round(cpu_pct)}%")
+
+            # RAM
+            ram = psutil.virtual_memory()
+            ram_pct = ram.percent
+            used_gb = ram.used / (1024 ** 3)
+            total_gb = ram.total / (1024 ** 3)
+            self.ram_card.update_metric(
+                ram_pct,
+                f"{round(ram_pct)}%",
+                sub_str=f"{used_gb:.1f}/{total_gb:.0f}GB",
+            )
+
+            # Disk
+            if self.extra_box.get_visible():
+                disk = psutil.disk_usage("/")
+                disk_pct = disk.percent
+                d_used_gb = disk.used / (1024 ** 3)
+                d_total_gb = disk.total / (1024 ** 3)
+                self.disk_card.update_metric(
+                    disk_pct,
+                    f"{round(disk_pct)}%",
+                    sub_str=f"{d_used_gb:.0f}/{d_total_gb:.0f}GB",
+                )
+
+                # Network
+                now = GLib.get_monotonic_time()
+                net_io = psutil.net_io_counters()
+                cur_bytes = net_io.bytes_sent + net_io.bytes_recv
+
+                if self._last_net_bytes is not None and self._last_net_time is not None:
+                    dt = max(0.001, (now - self._last_net_time) / 1_000_000.0)
+                    speed_bps = max(0.0, (cur_bytes - self._last_net_bytes) / dt)
+                    if speed_bps >= 1024 * 1024:
+                        speed_str = f"{speed_bps / (1024 * 1024):.1f} MB/s"
+                    elif speed_bps >= 1024:
+                        speed_str = f"{int(speed_bps / 1024)} KB/s"
+                    else:
+                        speed_str = f"{int(speed_bps)} B/s"
+                    self.net_card.update_metric(speed_bps / 1024.0, speed_str)
+
+                self._last_net_bytes = cur_bytes
+                self._last_net_time = now
+
+        except Exception:
+            pass
+        return True

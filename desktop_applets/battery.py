@@ -32,7 +32,10 @@ class DesktopBattery(Box):
             overlays=Box(style="min-width: 60px;", h_expand=True, h_align="center", v_expand=True, v_align="center", orientation="v", spacing=4, children=[BatteryIcon(size=40, percent=False, h_align="center", h_expand=True), self.battery_label]),
         )
         super().__init__(
-            children=self.battery
+            style_classes=["desktop-applet"],
+            h_expand=True,
+            v_expand=True,
+            children=self.battery,
         )
         battery.connect("changed", self._update)
         if battery.available:
