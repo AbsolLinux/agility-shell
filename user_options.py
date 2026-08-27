@@ -181,7 +181,16 @@ class UserOptions:
             self.placements: dict[str, list[dict]] = {}
 
         def get_applets(self, monitor_id: int) -> list[dict]:
-            return self.placements.get(str(monitor_id), [])
+            mid = str(monitor_id)
+            if mid not in self.placements:
+                if monitor_id == 0:
+                    self.placements[mid] = [
+                        {"key": "Clock", "grid_x": 2, "grid_y": 2, "ax": "center", "dx": -2, "ry": 0.6, "span_x": 2, "span_y": 1, "variant": "digital_clean", "opacity": 1.0, "style_mode": "glass"},
+                        {"key": "Media", "grid_x": 6, "grid_y": 2, "ax": "center", "dx": 2, "ry": 0.6, "span_x": 2, "span_y": 1, "opacity": 1.0, "style_mode": "glass"}
+                    ]
+                else:
+                    self.placements[mid] = []
+            return self.placements[mid]
 
         def is_placed(self, monitor_id: int, key: str) -> bool:
             return any(e["key"] == key for e in self.get_applets(monitor_id))
@@ -254,6 +263,19 @@ class UserOptions:
                 if e["key"] == key:
                     return e.get("opacity")
             return None
+
+        def set_style_mode(self, monitor_id: int, key: str, style_mode: str) -> bool:
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key:
+                    e["style_mode"] = style_mode
+                    return True
+            return False
+
+        def get_style_mode(self, monitor_id: int, key: str) -> str:
+            for e in self.placements.get(str(monitor_id), []):
+                if e["key"] == key:
+                    return e.get("style_mode", "glass")
+            return "glass"
 
         def set_span(self, monitor_id: int, key: str, span_x: int, span_y: int) -> bool:
             for e in self.placements.get(str(monitor_id), []):

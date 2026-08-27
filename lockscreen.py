@@ -133,74 +133,72 @@ class LockScreen(Window):
         self._idle_src = None
         self._authenticating = False
 
+        username = getpass.getuser().capitalize()
+
+        self._time_hours_label = Label(style="font-size: 88px; font-weight: 800; line-height: 0.9; letter-spacing: -2px;")
+        self._time_mins_label = Label(style="font-size: 88px; font-weight: 800; line-height: 0.9; letter-spacing: -2px; opacity: 0.85;")
+        self._date_label = Label(style="font-size: 16px; font-weight: 600; opacity: 0.75; margin-top: 12px; letter-spacing: 1px; text-transform: uppercase;")
+
+        self._clock_box = Box(
+            orientation="v",
+            spacing=0,
+            h_align="center",
+            v_align="center",
+            children=[self._time_hours_label, self._time_mins_label, self._date_label],
+        )
+
         self._entry_field = Entry(
             password=True,
             on_activate=self._on_activate,
+            placeholder="Password",
         )
         self._entry_box = Box(
-            spacing=6,
+            spacing=10,
             style_classes=["lockscreen-entry-box"],
-            children=[Icon(icon_name="key-duotone", icon_size=16), self._entry_field],
+            children=[Icon(icon_name="lock-key-duotone", icon_size=20), self._entry_field],
         )
         self._entry_row = Box(
-            spacing=6,
+            spacing=8,
             children=[
                 self._entry_box,
                 Button(
                     style_classes=["lockscreen-submit-button"],
-                    child=Icon(icon_name="caret-double-right-duotone", icon_size=16),
+                    child=Icon(icon_name="arrow-right-duotone", icon_size=18),
                     on_pressed=lambda _: self._on_activate(self._entry_field),
                 ),
             ],
         )
+
+        self._user_avatar = Icon(icon_size=56, icon_name="user-circle-duotone", style_classes=["lockscreen-avatar"])
+        self._user_name_label = Label(label=username, style="font-size: 22px; font-weight: 700; margin-top: 4px;")
+        self._status_label = Label(label="Touch key or enter password", style="opacity: 0.65; font-size: 13px; margin-top: 2px;")
+
         self._entry_group = Box(
             orientation="v",
-            spacing=18,
+            spacing=14,
             h_align="center",
+            v_align="center",
             children=[
-                Icon(icon_size=48, icon_name="lock-duotone"),
-                Label(label="Locked", style="font-size: 20px; font-weight: bold;"),
-                Label(label="Please enter your password.", style="opacity: 0.8; font-size: 14px;"),
+                self._user_avatar,
+                self._user_name_label,
+                self._status_label,
                 self._entry_row,
             ],
         )
         self._entry_group.set_opacity(0.0)
 
-        self.clock_progress = CircularProgressBar(
-            style_classes=["progress-bar"],
-            start_angle=270,
-            end_angle=630,
-            size=(138, 138),
-            line_width=6,
-            min_value=0,
-            max_value=60,
-            value=0,
-        )
-        self.clock_label = Label(style_classes="lockscreen-clock-label")
-        self.clock_label.set_xalign(0.5)
-        self.clock_label.set_justify(Gtk.Justification.CENTER)
-        self.clock_circle = Overlay(
-            child=Box(
-                style_classes=["lockscreen-clock"],
-                h_expand=False,
-                h_align="center",
-                children=self.clock_progress,
-            ),
-            overlays=self.clock_label,
-        )
-
         self.clock_revealer = Revealer(
             transition_type="crossfade",
-            transition_duration=300,
+            transition_duration=350,
             reveal_child=False,
-            child=self.clock_circle,
+            child=self._clock_box,
         )
 
         self._layout = CenterBox(
             orientation="v",
             h_expand=True,
             v_expand=True,
-            style="margin: 160px 0px;",
+            style="margin: 100px 0px;",
             center_children=[self.clock_revealer],
         )
         geo = monitor.get_geometry()
@@ -279,8 +277,9 @@ class LockScreen(Window):
 
     def _update_time(self):
         now = datetime.datetime.now()
-        self.clock_label.set_label(now.strftime("%H\n%M"))
-        self.clock_progress.value = int(now.strftime("%S"))
+        self._time_hours_label.set_label(now.strftime("%H"))
+        self._time_mins_label.set_label(now.strftime("%M"))
+        self._date_label.set_label(now.strftime("%A, %B %d"))
         return True
 
     def _on_key(self, widget, event):

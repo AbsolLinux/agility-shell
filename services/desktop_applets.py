@@ -644,11 +644,12 @@ class DesktopAppletWindow(WaylandWindow):
                 widget = cls()
             widget.set_size_request(w_px, h_px)
 
+            style_mode = entry.get("style_mode", "glass")
             op = entry.get("opacity")
             if op is None:
                 op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
-            if op < 1.0 and hasattr(widget, "set_style"):
-                widget.set_style(f"background-color: alpha(var(--background), {op:.2f});")
+
+            self._apply_style_to_widget(widget, style_mode, op)
 
             overlay = Overlay(h_expand=True, v_expand=True)
             overlay.set_size_request(w_px, h_px)
@@ -680,6 +681,32 @@ class DesktopAppletWindow(WaylandWindow):
         except Exception as e:
             logger.error(f"[DesktopAppletService] failed to build {key!r}: {e}")
             return None
+
+    def _apply_style_to_widget(self, widget: Gtk.Widget, style_mode: str, opacity: float):
+        ctx = widget.get_style_context()
+        for mode in ("widget-solid", "widget-glass", "widget-glassy", "widget-transparent", "widget-nothing"):
+            ctx.remove_class(mode)
+
+        if style_mode == "solid":
+            ctx.add_class("widget-solid")
+            if hasattr(widget, "set_style"):
+                widget.set_style(f"background-color: alpha(var(--surface), {opacity:.2f});")
+        elif style_mode == "glass":
+            ctx.add_class("widget-glass")
+            if hasattr(widget, "set_style"):
+                widget.set_style(f"background-color: alpha(var(--background), {opacity * 0.7:.2f});")
+        elif style_mode == "glassy":
+            ctx.add_class("widget-glassy")
+            if hasattr(widget, "set_style"):
+                widget.set_style(f"background-color: alpha(var(--surface_container), {opacity * 0.45:.2f});")
+        elif style_mode == "transparent":
+            ctx.add_class("widget-transparent")
+            if hasattr(widget, "set_style"):
+                widget.set_style("background-color: transparent; border: none; box-shadow: none;")
+        elif style_mode == "nothing":
+            ctx.add_class("widget-nothing")
+            if hasattr(widget, "set_style"):
+                widget.set_style(f"background-color: alpha(#121212, {opacity:.2f}); border: 1px solid rgba(255, 255, 255, 0.15);")
 
     def _on_resize_handle_press(self, widget, event: Gdk.EventButton, key: str) -> bool:
         if event.button != 1:
@@ -820,8 +847,21 @@ class DesktopAppletWindow(WaylandWindow):
         if not overlay:
             return
         widget = overlay.get_child()
-        if widget and hasattr(widget, "set_style"):
-            widget.set_style(f"background-color: alpha(var(--background), {opacity:.2f});" if opacity < 1.0 else "")
+        style_mode = user_options.desktop_canvas.get_style_mode(self._monitor_id, key)
+        self._apply_style_to_widget(widget, style_mode, opacity)
+
+    def apply_applet_style_mode(self, key: str, style_mode: str) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        overlay = eb.get_child()
+        if not overlay:
+            return
+        widget = overlay.get_child()
+        opacity = user_options.desktop_canvas.get_opacity(self._monitor_id, key)
+        if opacity is None:
+            opacity = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
+        self._apply_style_to_widget(widget, style_mode, opacity)
 
     def resize_applet(self, key: str, span_x: int, span_y: int) -> None:
         eb = self._children.get(key)
@@ -898,6 +938,25 @@ class DesktopAppletWindow(WaylandWindow):
                 style_sub.append(it)
             style_item.set_submenu(style_sub)
             menu.append(style_item)
+
+        # Style Mode Submenu (Glass, Glassy, Solid, Transparent, Nothing OS)
+        style_menu_item = Gtk.MenuItem(label="Widget Style")
+        style_sub = Gtk.Menu()
+        current_style = user_options.desktop_canvas.get_style_mode(self._monitor_id, key)
+        styles_list = [
+            ("Glass (Default)", "glass"),
+            ("Glassy / Translucent", "glassy"),
+            ("Solid Color", "solid"),
+            ("Transparent / Clean", "transparent"),
+            ("Nothing OS Dark", "nothing"),
+        ]
+        for label, s_mode in styles_list:
+            lbl = f"✓ {label}" if current_style == s_mode else f"    {label}"
+            it = Gtk.MenuItem(label=lbl)
+            it.connect("activate", lambda _, sm=s_mode, k=key: DesktopAppletService.get_instance().set_applet_style_mode(self._monitor_id, k, sm))
+            style_sub.append(it)
+        style_menu_item.set_submenu(style_sub)
+        menu.append(style_menu_item)
 
         # Opacity Submenu
         opacity_menu_item = Gtk.MenuItem(label="Opacity")
@@ -1249,6 +1308,13 @@ class DesktopAppletService(Service):
         win = self._windows.get(monitor_id)
         if win:
             win.apply_applet_opacity(key, opacity)
+
+    def set_applet_style_mode(self, monitor_id: int, key: str, style_mode: str) -> None:
+        user_options.desktop_canvas.set_style_mode(monitor_id, key, style_mode)
+        user_options.save()
+        win = self._windows.get(monitor_id)
+        if win:
+            win.apply_applet_style_mode(key, style_mode)
 
     def set_applet_size(self, monitor_id: int, key: str, span_x: int, span_y: int) -> bool:
         win = self._windows.get(monitor_id)
