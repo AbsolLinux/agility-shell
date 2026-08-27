@@ -84,9 +84,7 @@ class DesktopClipboard(Box):
         self.items_box.show_all()
 
     def _copy_item(self, text: str):
-        if hasattr(clipboard, "copy_text"):
-            clipboard.copy_text(text)
-        elif hasattr(clipboard, "copy"):
+        if hasattr(clipboard, "copy"):
             clipboard.copy(text)
         elif hasattr(clipboard, "set_text"):
             clipboard.set_text(text)
