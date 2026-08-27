@@ -1268,9 +1268,10 @@ class DesktopAppletService(Service):
         return True
 
     def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int) -> None:
-        user_options.desktop_canvas.move(monitor_id, key, grid_x, grid_y)
-        user_options.save()
         win = self._windows.get(monitor_id)
+        cols = win.cols if win and win.cols > 0 else 12
+        user_options.desktop_canvas.move(monitor_id, key, grid_x, grid_y, cols)
+        user_options.save()
         if win:
             win.remove_applet(key)
             win.add_applet(key, grid_x, grid_y)
