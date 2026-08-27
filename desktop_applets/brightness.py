@@ -6,17 +6,8 @@ from fabric.widgets.overlay import Overlay
 from snippets import Icon, FlatScale
 from services.singletons import brightness
 
-DESKTOP_BRIGHTNESS_VARIANTS: list[tuple[str, str]] = [
-    ("pixel_slider",   "Google Pixel Pill Brightness"),
-    ("nothing_glyph",  "Nothing OS Glyph Brightness"),
-]
-
-
 class DesktopBrightness(Box):
-    VARIANTS = [v[0] for v in DESKTOP_BRIGHTNESS_VARIANTS]
-
-    def __init__(self, variant: str = "pixel_slider", **kwargs):
-        self._variant = variant or "pixel_slider"
+    def __init__(self, **kwargs):
         self._updating = False
 
         self.progress_bar = CircularProgressBar(
@@ -83,16 +74,6 @@ class DesktopBrightness(Box):
         )
 
         brightness.connect("screen", self._on_brightness_changed)
-        self._sync()
-
-    def set_variant(self, variant: str):
-        self._variant = variant
-        if variant == "nothing_glyph":
-            self.title_label.set_label("BRIGHTNESS")
-            self.title_label.set_style("font-size: 11px; font-weight: 700; color: #EB0029; font-family: monospace;")
-        else:
-            self.title_label.set_label("Brightness")
-            self.title_label.set_style("font-size: 14px; font-weight: 700;")
         self._sync()
 
     def _sync(self):
