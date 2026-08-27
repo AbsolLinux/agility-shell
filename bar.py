@@ -1595,6 +1595,8 @@ class Bar(Window):
         self.alignment = self.bar_config.get("alignment", "top")
         self.min_width = self.bar_config.get("min_width", False)
         self.auto_hide = self.bar_config.get("auto_hide", False)
+        self.horizontal_alignment = self.bar_config.get("horizontal_alignment", "center")
+        self._is_hovered = False
 
         self._centerbox = CenterBox(
             style_classes=["bar", "top"] if self.alignment == "top" else ["bar", "bottom"],
@@ -1618,7 +1620,7 @@ class Bar(Window):
         super().__init__(
             title=f"agility-shell-bar",
             layer="top",
-            anchor=f"{self.alignment}" if self.min_width else f"{self.alignment} left right",
+            anchor=self._compute_anchor(),
             exclusivity="none" if self.auto_hide else "auto",
             monitor=monitor_id,
             child=Box(
@@ -1626,6 +1628,11 @@ class Bar(Window):
                 style="min-height: 4px;",
                 children=self._revealer,
             )
+        )
+        self.add_events(
+            Gdk.EventMask.ENTER_NOTIFY_MASK
+            | Gdk.EventMask.LEAVE_NOTIFY_MASK
+            | Gdk.EventMask.POINTER_MOTION_MASK
         )
 
         if self.bar_config.get("floating_bar", False):
@@ -1743,6 +1750,41 @@ class Bar(Window):
                 user_options.bars.configs[i]["floating_bar"] = floating
                 break
 
+    def _compute_anchor(self) -> str:
+        if not self.min_width:
+            return f"{self.alignment} left right"
+        h_align = self.bar_config.get("horizontal_alignment", "center")
+        if h_align == "left":
+            return f"{self.alignment} left"
+        elif h_align == "right":
+            return f"{self.alignment} right"
+        else:
+            return f"{self.alignment}"
+
+    def _apply_anchors(self):
+        h_align = self.bar_config.get("horizontal_alignment", "center")
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, self.alignment == "top")
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, self.alignment == "bottom")
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, not self.min_width or h_align == "left")
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, not self.min_width or h_align == "right")
+        self.anchor = self._compute_anchor()
+
+    def _set_horizontal_alignment(self, h_align: str):
+        self.horizontal_alignment = h_align
+        self.bar_config["horizontal_alignment"] = h_align
+        self._apply_anchors()
+        user_options.save()
+        if self._blur_ctx:
+            GLib.timeout_add(320, self._update_blur_region)
+        for i, cfg in enumerate(user_options.bars.configs):
+            if cfg.get("monitor") == self.monitor_id:
+                bars_list = cfg.get("bars")
+                if bars_list is not None and self.bar_index < len(bars_list):
+                    bars_list[self.bar_index]["horizontal_alignment"] = h_align
+                else:
+                    cfg["horizontal_alignment"] = h_align
+                break
+
     def _show_context_menu(self, event: Gdk.EventButton):
         menu = Gtk.Menu()
 
@@ -1763,6 +1805,18 @@ class Bar(Window):
         min_width_item = Gtk.MenuItem(label=min_width_label)
         min_width_item.connect("activate", lambda _: self._toggle_min_width())
         menu.append(min_width_item)
+
+        if self.min_width:
+            align_submenu = Gtk.Menu()
+            align_submenu.set_reserve_toggle_size(False)
+            current_h = self.bar_config.get("horizontal_alignment", "center")
+            for h_key, h_title in (("left", "Left Corner"), ("center", "Center"), ("right", "Right Corner")):
+                h_item = Gtk.MenuItem(label=f"✓ {h_title}" if h_key == current_h else h_title)
+                h_item.connect("activate", lambda _, k=h_key: self._set_horizontal_alignment(k))
+                align_submenu.append(h_item)
+            align_item = Gtk.MenuItem(label="Alignment")
+            align_item.set_submenu(align_submenu)
+            menu.append(align_item)
 
         monitor_bars = [
             bar for (m, _), bar in self._bar_manager._bars.items()
@@ -1800,8 +1854,7 @@ class Bar(Window):
         transition = "slide-up" if alignment == "bottom" else "slide-down"
         self._revealer.transition_type = transition
         user_options.save()
-        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, alignment == "top")
-        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, alignment == "bottom")
+        self._apply_anchors()
         if alignment == "bottom":
             self._centerbox.remove_style_class("top")
             self._centerbox.add_style_class("bottom")
@@ -1818,12 +1871,17 @@ class Bar(Window):
 
         for i, cfg in enumerate(user_options.bars.configs):
             if cfg.get("monitor") == self.monitor_id:
-                user_options.bars.configs[i]["alignment"] = alignment
+                bars_list = cfg.get("bars")
+                if bars_list is not None and self.bar_index < len(bars_list):
+                    bars_list[self.bar_index]["alignment"] = alignment
+                else:
+                    cfg["alignment"] = alignment
                 break
+
     def _toggle_min_width(self):
         self.min_width = not self.min_width
         self.bar_config["min_width"] = self.min_width
-        self.anchor = self.alignment if self.min_width else f"{self.alignment} left right"
+        self._apply_anchors()
         if self.min_width:
             self._centerbox.add_style_class("min-width")
         else:
@@ -1874,21 +1932,7 @@ class Bar(Window):
             return
         if is_applet_open():
             return
-        
-        ptr = self.get_display().get_default_seat().get_pointer()
-        gdk_win = self.get_window()
-        pointer_in_bar = False
-        if gdk_win:
-            try:
-                _, px, py, _ = gdk_win.get_device_position(ptr)
-                alloc = self.get_allocation()
-                pointer_in_bar = (0 <= px <= alloc.width and 0 <= py <= alloc.height)
-            except Exception:
-                pass
-
-        if pointer_in_bar:
-            self._revealer.set_reveal_child(True)
-            self._centerbox.add_style_class("revealed")
+        if self._is_hovered:
             return
 
         if self._has_open_windows():
@@ -1916,11 +1960,10 @@ class Bar(Window):
             return
         if event.detail == Gdk.NotifyType.INFERIOR:
             return
+        self._is_hovered = True
         if self._hide_timeout is not None:
             GLib.source_remove(self._hide_timeout)
             self._hide_timeout = None
-        if self._revealer.get_reveal_child():
-            return
         self._revealer.set_reveal_child(True)
         self._centerbox.add_style_class("revealed")
 
@@ -1929,27 +1972,19 @@ class Bar(Window):
             return
         if event.detail == Gdk.NotifyType.INFERIOR:
             return
+        self._is_hovered = False
         if self._hide_timeout is not None:
             GLib.source_remove(self._hide_timeout)
-        self._hide_timeout = GLib.timeout_add(600, self._try_hide)
+        self._hide_timeout = GLib.timeout_add(350, self._try_hide)
 
     def _try_hide(self):
         self._hide_timeout = None
+        if self._is_hovered:
+            return False
         if open_applet is not None and open_applet.is_visible():
             return False
         if edit_mode.edit_mode:
             return False
-        
-        ptr = self.get_display().get_default_seat().get_pointer()
-        gdk_win = self.get_window()
-        if gdk_win:
-            try:
-                _, px, py, _ = gdk_win.get_device_position(ptr)
-                alloc = self.get_allocation()
-                if 0 <= px <= alloc.width and 0 <= py <= alloc.height:
-                    return False
-            except Exception:
-                pass
 
         if not self._has_open_windows():
             self._revealer.set_reveal_child(True)
@@ -1982,30 +2017,28 @@ class Bar(Window):
             self._centerbox.remove_style_class("edit-mode")
             user_options.save()
             if self.auto_hide:
-                self._hide_timeout = GLib.timeout_add(600, self._try_hide)
+                self._hide_timeout = GLib.timeout_add(350, self._try_hide)
 
     def _open_edit_applets(self):
         if self._bar_manager is None or self._bar_manager._dash is None:
             return
         active_monitor = self.gdk_monitor
         self._bar_manager._dash.toggle_applets(active_monitor)
+
     def _on_menu_deactivate(self, _):
         if not self.auto_hide:
             return
         if is_applet_open():
             return
-
-        ptr = self.get_display().get_default_seat().get_pointer()
-        _, px, py, _ = self.get_window().get_device_position(ptr)
-        alloc = self.get_allocation()
-        if not (0 <= px <= alloc.width and 0 <= py <= alloc.height):
+        if not self._is_hovered and self._has_open_windows():
             self._do_hide()
+
     def _on_applet_closed(self):
         if not self.auto_hide:
             return
         if self._hide_timeout is not None:
             GLib.source_remove(self._hide_timeout)
-        self._hide_timeout = GLib.timeout_add(600, self._try_hide)
+        self._hide_timeout = GLib.timeout_add(350, self._try_hide)
     def sync_config(self):
         for section_name, section in self.sections.items():
             entries = []

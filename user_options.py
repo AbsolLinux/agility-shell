@@ -42,6 +42,7 @@ class UserOptions:
                             "floating_applets": True,
                             "rounded_edges": True,
                             "min_width": False,
+                            "horizontal_alignment": "center",
                             "auto_hide": False,
                             "left": [
                                 "Dash",
@@ -72,6 +73,7 @@ class UserOptions:
                             "floating_applets": True,
                             "rounded_edges": True,
                             "min_width": False,
+                            "horizontal_alignment": "center",
                             "auto_hide": False,
                             "left": [
                                 "Dash",
