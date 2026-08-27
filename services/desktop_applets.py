@@ -619,11 +619,11 @@ class DesktopAppletWindow(WaylandWindow):
 
     @property
     def cols(self) -> int:
-        return self._cols
+        return self._cols if self._cols > 0 else 12
 
     @property
     def rows(self) -> int:
-        return self._rows
+        return self._rows if self._rows > 0 else 6
 
 
     def _build_applet_entry(self, entry: dict) -> Gtk.EventBox | None:
@@ -1269,15 +1269,16 @@ class DesktopAppletService(Service):
 
     def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, span_x: int | None = None, span_y: int | None = None, opacity: float | None = None) -> bool:
         win  = self._windows.get(monitor_id)
-        cols = win.cols if win and win.cols > 0 else 1
-        rows = win.rows if win and win.rows > 0 else 1
-        ry   = grid_y / rows
+        cols = win.cols if win else 12
+        rows = win.rows if win else 6
+        ry   = grid_y / max(1, rows)
 
         placed = user_options.desktop_canvas.place(monitor_id, key, grid_x, grid_y, cols, ry, span_x=span_x, span_y=span_y, opacity=opacity)
         if not placed:
             return False
         user_options.save()
         if win:
+            win.remove_applet(key)
             win.add_applet(key, grid_x, grid_y)
         self.applets_changed(monitor_id)
         return True
