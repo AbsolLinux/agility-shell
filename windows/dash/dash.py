@@ -386,7 +386,7 @@ class Dash(Window):
             self.dismiss_layer.hide_drop_zones()
         else:
             self._opening = True
-            if bar.is_applet_open:
+            if bar.is_applet_open():
                 bar.set_open_applet(None)
             self._active_monitor = active_monitor
 

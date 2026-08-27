@@ -163,19 +163,26 @@ class HackedRevealer(Revealer):
     def set_reveal_child(self, reveal: bool):
         if not hasattr(self, 'animator'):
             return super().set_reveal_child(reveal)
+
+        if self._reveal_child == reveal:
+            if not self._animating:
+                return
+            return
+
         self._reveal_child = reveal
         self._animating = True
         self.animator.pause()
 
+        start_pos = self._current_pos
         if reveal:
-            self.animator.min_value = 0.0
+            self.animator.min_value = start_pos
             self.animator.max_value = 1.0
-            self.animator.value = 0.0
+            self.animator.value = start_pos
             super().set_reveal_child(True)
         else:
-            self.animator.min_value = 1.0
+            self.animator.min_value = start_pos
             self.animator.max_value = 0.0
-            self.animator.value = 1.0
+            self.animator.value = start_pos
 
         self.animator._start_time = None
         self.animator.play()

@@ -82,8 +82,11 @@ class WMWindow(Service):
         }
         for key, notify_name in mapping.items():
             if key in data:
-                setattr(self, f"_property_helper_{key}", data[key])
-                self.notify(notify_name)
+                old_val = getattr(self, f"_property_helper_{key}", None)
+                new_val = data[key]
+                if old_val != new_val:
+                    setattr(self, f"_property_helper_{key}", new_val)
+                    self.notify(notify_name)
 
     def close(self) -> None:
         raise NotImplementedError

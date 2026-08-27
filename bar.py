@@ -144,6 +144,8 @@ def set_open_applet(applet: AppletWindow | None):
 def is_applet_open(*keys: str) -> bool:
     if open_applet is None or not open_applet.is_visible():
         return False
+    if not keys:
+        return True
     return any(
         k in keys
         for k in getattr(open_applet, '_keys', [])
@@ -1752,7 +1754,7 @@ class Bar(Window):
         edit_applets_item = Gtk.MenuItem(label="Edit Applets")
         edit_applets_item.connect("activate", lambda _: self._open_edit_applets())
         menu.append(edit_applets_item)
-        floating_label = "Attach Bar" if self.bar_config.get("floating_bar", False) else "Floating (Beta)"
+        floating_label = "Attach Bar" if self.bar_config.get("floating_bar", False) else "Floating"
         floating_item = Gtk.MenuItem(label=floating_label)
         floating_item.connect("activate", lambda _: self._toggle_floating())
         menu.append(floating_item)
@@ -1777,7 +1779,7 @@ class Bar(Window):
             move_item.connect("activate", lambda _: self._set_alignment(other))
             menu.append(move_item)
 
-        auto_hide_label = "Always Show" if self.auto_hide else "Auto Hide (Beta)"
+        auto_hide_label = "Always Show" if self.auto_hide else "Auto Hide"
         auto_hide_item = Gtk.MenuItem(label=auto_hide_label)
         auto_hide_item.connect("activate", lambda _: self._toggle_auto_hide())
         menu.append(auto_hide_item)
@@ -1937,6 +1939,18 @@ class Bar(Window):
             return False
         if edit_mode.edit_mode:
             return False
+        
+        ptr = self.get_display().get_default_seat().get_pointer()
+        gdk_win = self.get_window()
+        if gdk_win:
+            try:
+                _, px, py, _ = gdk_win.get_device_position(ptr)
+                alloc = self.get_allocation()
+                if 0 <= px <= alloc.width and 0 <= py <= alloc.height:
+                    return False
+            except Exception:
+                pass
+
         if not self._has_open_windows():
             self._revealer.set_reveal_child(True)
             self._centerbox.add_style_class("revealed")
