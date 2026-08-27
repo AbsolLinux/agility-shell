@@ -442,7 +442,7 @@ class DashSettingsPage(Box):
         )
 
         # =====================================================================
-        # Section 4: Bar Position & Smart Auto-Hide
+        # Section 4: Bar Position, Alignment & Layout
         # =====================================================================
         current_pos = self._get_current_bar_alignment()
 
@@ -485,7 +485,7 @@ class DashSettingsPage(Box):
                     h_align="start",
                     h_expand=True,
                     children=[
-                        Label(label="Bar Position", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Screen Edge Position", style_classes=["dim-label"], h_align="start"),
                         Label(label="Attach the selected bar to the top or bottom screen edge", style="font-size: 11px; opacity: 0.6;", h_align="start"),
                     ],
                 ),
@@ -496,6 +496,128 @@ class DashSettingsPage(Box):
                     h_align="end",
                     children=[self._top_btn, self._bottom_btn],
                 ),
+            ],
+        )
+
+        current_h_align = self._get_current_bar_h_align()
+        self._left_align_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=4,
+                children=[
+                    Icon(icon_name="align-left-duotone", icon_size=16),
+                    Label(label="Left"),
+                ],
+            ),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._set_horizontal_alignment("left"),
+        )
+        self._center_align_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=4,
+                children=[
+                    Icon(icon_name="text-align-center-duotone", icon_size=16),
+                    Label(label="Center"),
+                ],
+            ),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._set_horizontal_alignment("center"),
+        )
+        self._right_align_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=4,
+                children=[
+                    Icon(icon_name="align-right-duotone", icon_size=16),
+                    Label(label="Right"),
+                ],
+            ),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda *_: self._set_horizontal_alignment("right"),
+        )
+        self._update_h_align_buttons(current_h_align)
+
+        h_align_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Bar Alignment & Side", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Move bar to left corner, center, or right corner (applies when Min Width is active)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(
+                    style_classes=["option-selection-container"],
+                    orientation="h",
+                    spacing=4,
+                    h_align="end",
+                    children=[self._left_align_btn, self._center_align_btn, self._right_align_btn],
+                ),
+            ],
+        )
+
+        current_minwidth = self._get_current_bar_cfg().get("min_width", False)
+        self._bar_minwidth_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_bar_minwidth_toggled,
+            width=48,
+        )
+        self._bar_minwidth_switch.set_active(current_minwidth)
+
+        minwidth_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Compact Min-Width Bar", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Shrink bar to only wrap its active widgets instead of spanning full width", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._bar_minwidth_switch]),
+            ],
+        )
+
+        current_floating = self._get_current_bar_cfg().get("floating_bar", False)
+        self._bar_floating_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_bar_floating_toggled,
+            width=48,
+        )
+        self._bar_floating_switch.set_active(current_floating)
+
+        floating_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Floating Bar", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Detach the bar from screen borders with rounded margins and shadows", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._bar_floating_switch]),
             ],
         )
 
@@ -529,8 +651,8 @@ class DashSettingsPage(Box):
         )
 
         position_section = Section(
-            title="Bar Position & Auto-Hide",
-            children=[pos_row, autohide_row],
+            title="Bar Position, Alignment & Layout",
+            children=[pos_row, h_align_row, minwidth_row, floating_row, autohide_row],
         )
 
         # =====================================================================
@@ -844,8 +966,14 @@ class DashSettingsPage(Box):
         self._refresh_bar_widgets_ui()
         cur_align = self._get_current_bar_alignment()
         self._update_position_buttons(cur_align)
+        cur_h_align = self._get_current_bar_h_align()
+        self._update_h_align_buttons(cur_h_align)
+        cfg = self._get_current_bar_cfg()
+        if hasattr(self, "_bar_minwidth_switch"):
+            self._bar_minwidth_switch.set_active(cfg.get("min_width", False))
+        if hasattr(self, "_bar_floating_switch"):
+            self._bar_floating_switch.set_active(cfg.get("floating_bar", False))
         if hasattr(self, "_bar_autohide_switch"):
-            cfg = self._get_current_bar_cfg()
             self._bar_autohide_switch.set_active(cfg.get("auto_hide", False))
 
     def _add_new_bar(self):
@@ -859,8 +987,14 @@ class DashSettingsPage(Box):
             self._refresh_bar_selector_ui()
             self._refresh_bar_widgets_ui()
             self._update_position_buttons(self._get_current_bar_alignment())
+            self._update_h_align_buttons(self._get_current_bar_h_align())
+            cfg = self._get_current_bar_cfg()
+            if hasattr(self, "_bar_minwidth_switch"):
+                self._bar_minwidth_switch.set_active(cfg.get("min_width", False))
+            if hasattr(self, "_bar_floating_switch"):
+                self._bar_floating_switch.set_active(cfg.get("floating_bar", False))
             if hasattr(self, "_bar_autohide_switch"):
-                self._bar_autohide_switch.set_active(self._get_current_bar_cfg().get("auto_hide", False))
+                self._bar_autohide_switch.set_active(cfg.get("auto_hide", False))
 
     def _delete_selected_bar(self):
         if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
@@ -878,8 +1012,14 @@ class DashSettingsPage(Box):
             self._refresh_bar_selector_ui()
             self._refresh_bar_widgets_ui()
             self._update_position_buttons(self._get_current_bar_alignment())
+            self._update_h_align_buttons(self._get_current_bar_h_align())
+            cfg = self._get_current_bar_cfg()
+            if hasattr(self, "_bar_minwidth_switch"):
+                self._bar_minwidth_switch.set_active(cfg.get("min_width", False))
+            if hasattr(self, "_bar_floating_switch"):
+                self._bar_floating_switch.set_active(cfg.get("floating_bar", False))
             if hasattr(self, "_bar_autohide_switch"):
-                self._bar_autohide_switch.set_active(self._get_current_bar_cfg().get("auto_hide", False))
+                self._bar_autohide_switch.set_active(cfg.get("auto_hide", False))
 
     def _refresh_bar_widgets_ui(self):
         cfg = self._get_current_bar_cfg()
@@ -1010,6 +1150,10 @@ class DashSettingsPage(Box):
         cfg = self._get_current_bar_cfg()
         return cfg.get("alignment", "bottom") if cfg else "bottom"
 
+    def _get_current_bar_h_align(self) -> str:
+        cfg = self._get_current_bar_cfg()
+        return cfg.get("horizontal_alignment", "center") if cfg else "center"
+
     def _update_position_buttons(self, alignment: str):
         if alignment == "top":
             self._top_btn.add_style_class("active")
@@ -1017,6 +1161,17 @@ class DashSettingsPage(Box):
         else:
             self._bottom_btn.add_style_class("active")
             self._top_btn.remove_style_class("active")
+
+    def _update_h_align_buttons(self, h_align: str):
+        self._left_align_btn.remove_style_class("active")
+        self._center_align_btn.remove_style_class("active")
+        self._right_align_btn.remove_style_class("active")
+        if h_align == "left":
+            self._left_align_btn.add_style_class("active")
+        elif h_align == "right":
+            self._right_align_btn.add_style_class("active")
+        else:
+            self._center_align_btn.add_style_class("active")
 
     def _set_position(self, alignment: str):
         cfg = self._get_current_bar_cfg()
@@ -1029,6 +1184,37 @@ class DashSettingsPage(Box):
         if bm and hasattr(bm, "reload_bars"):
             bm.reload_bars()
         self._refresh_bar_selector_ui()
+
+    def _set_horizontal_alignment(self, h_align: str):
+        cfg = self._get_current_bar_cfg()
+        if not cfg:
+            return
+        cfg["horizontal_alignment"] = h_align
+        user_options.save()
+        self._update_h_align_buttons(h_align)
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "reload_bars"):
+            bm.reload_bars()
+
+    def _on_bar_minwidth_toggled(self, state: bool):
+        cfg = self._get_current_bar_cfg()
+        if not cfg:
+            return
+        cfg["min_width"] = state
+        user_options.save()
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "reload_bars"):
+            bm.reload_bars()
+
+    def _on_bar_floating_toggled(self, state: bool):
+        cfg = self._get_current_bar_cfg()
+        if not cfg:
+            return
+        cfg["floating_bar"] = state
+        user_options.save()
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "reload_bars"):
+            bm.reload_bars()
 
     def _on_bar_autohide_toggled(self, state: bool):
         cfg = self._get_current_bar_cfg()
