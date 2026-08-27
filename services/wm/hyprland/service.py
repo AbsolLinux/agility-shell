@@ -126,14 +126,23 @@ class Hyprland(WMService):
         monitor_data = self._request_json("monitors")
         focused_monitor = next((m["name"] for m in (monitor_data or []) if m.get("focused")), None)
 
+        monitor_active_ws = {}
+        if monitor_data:
+            for m in monitor_data:
+                act = m.get("activeWorkspace")
+                if act and isinstance(act, dict) and "id" in act:
+                    monitor_active_ws[m.get("name")] = act["id"]
+
         for ws in data:
             obj = self._workspaces.get(ws["id"])
             if obj is None:
                 obj = HyprlandWorkspace(self)
             obj.sync(ws)
+            ws_mon = ws.get("monitor")
+            is_active = (ws["id"] == monitor_active_ws.get(ws_mon, active_id))
             obj.sync({
-                "is_active": ws["id"] == active_id,
-                "is_focused": ws["id"] == active_id and ws.get("monitor") == focused_monitor,
+                "is_active": is_active,
+                "is_focused": ws["id"] == active_id and ws_mon == focused_monitor,
             })
             self._workspaces[ws["id"]] = obj
 
@@ -244,7 +253,6 @@ class Hyprland(WMService):
 
     def __on_active_window(self, data: str) -> None:
         self._sync_active_window()
-        self.notify("active-window")
 
     def __on_active_window_v2(self, data: str) -> None:
         try:
