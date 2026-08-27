@@ -234,7 +234,7 @@ class UserOptions:
             self.placements[mid] = after
             return True
 
-        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int = 12) -> None:
+        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int) -> None:
             from desktop_applets import DESKTOP_CANVAS_SIZES
             for e in self.placements.get(str(monitor_id), []):
                 if e["key"] == key:
