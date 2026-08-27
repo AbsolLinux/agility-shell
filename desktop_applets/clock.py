@@ -8,10 +8,12 @@ from fabric.widgets.overlay import Overlay
 from gi.repository import Gtk, GLib
 
 DESKTOP_CLOCK_VARIANTS: list[tuple[str, str]] = [
-    ("circular",         "Circular Progress Ring"),
-    ("digital_clean",    "Modern Digital Clock"),
+    ("pixel_glance",     "Google Pixel At-a-Glance"),
+    ("nothing_dot",      "Nothing OS Dot-Matrix"),
+    ("digital_clean",    "Pixel Material You Digital"),
     ("digital_seconds",  "Digital with Seconds"),
     ("analog",           "Smooth Analog Dial"),
+    ("circular",         "Circular Progress Ring"),
     ("minimal_vertical", "Minimalist Stacked"),
 ]
 
@@ -80,7 +82,7 @@ class AnalogClockArea(Gtk.DrawingArea):
         cr.set_source_rgba(1, 1, 1, 0.85)
         cr.stroke()
 
-        # Second hand
+        # Second hand (Nothing Red accent)
         sec_angle = seconds * (math.pi / 30)
         sx = cx + (radius * 0.84) * math.sin(sec_angle)
         sy = cy - (radius * 0.84) * math.cos(sec_angle)
@@ -89,12 +91,12 @@ class AnalogClockArea(Gtk.DrawingArea):
         cr.move_to(tx, ty)
         cr.line_to(sx, sy)
         cr.set_line_width(1.5)
-        cr.set_source_rgba(0.95, 0.35, 0.35, 0.95)
+        cr.set_source_rgba(0.92, 0.0, 0.16, 0.95)
         cr.stroke()
 
         # Center cap
         cr.arc(cx, cy, 3.5, 0, 2 * math.pi)
-        cr.set_source_rgba(0.95, 0.35, 0.35, 1.0)
+        cr.set_source_rgba(0.92, 0.0, 0.16, 1.0)
         cr.fill()
 
         return False
@@ -103,14 +105,15 @@ class AnalogClockArea(Gtk.DrawingArea):
 class DesktopClock(Box):
     VARIANTS = [v[0] for v in DESKTOP_CLOCK_VARIANTS]
 
-    def __init__(self, variant: str = "circular"):
-        self._variant = variant or "circular"
+    def __init__(self, variant: str = "pixel_glance"):
+        self._variant = variant or "pixel_glance"
         self._content_box = Box(orientation="v", h_expand=True, v_expand=True, h_align="fill", v_align="fill")
         self._analog_da: AnalogClockArea | None = None
         self._clock_progress: CircularProgressBar | None = None
         self._time_label: Label | None = None
         self._date_label: Label | None = None
         self._sec_label: Label | None = None
+        self._weather_badge: Label | None = None
 
         self._build_ui()
 
@@ -141,14 +144,56 @@ class DesktopClock(Box):
         self._time_label = None
         self._date_label = None
         self._sec_label = None
+        self._weather_badge = None
 
-        if self._variant == "analog":
+        if self._variant == "pixel_glance":
+            self._time_label = Label(style="font-size: 34px; font-weight: 800;")
+            self._date_label = Label(style="font-size: 13px; font-weight: 600; opacity: 0.9;")
+            self._weather_badge = Label(style="font-size: 12px; font-weight: 600; opacity: 0.85;")
+
+            badge_box = Box(
+                orientation="h",
+                spacing=8,
+                h_align="center",
+                v_align="center",
+                style_classes=["pixel-glance-pill"],
+                children=[self._date_label, self._weather_badge],
+            )
+
+            box = Box(
+                orientation="v",
+                spacing=8,
+                h_align="center",
+                v_align="center",
+                v_expand=True,
+                h_expand=True,
+                children=[self._time_label, badge_box],
+            )
+            self._content_box.add(box)
+
+        elif self._variant == "nothing_dot":
+            header = Label(label="TIME", style_classes=["nothing-header-badge"], h_align="start")
+            self._time_label = Label(style="font-size: 38px; font-weight: 700; font-family: monospace, sans-serif;")
+            self._date_label = Label(style="font-size: 11px; font-weight: 700; opacity: 0.8;")
+
+            box = Box(
+                orientation="v",
+                spacing=6,
+                h_align="center",
+                v_align="center",
+                v_expand=True,
+                h_expand=True,
+                children=[header, self._time_label, self._date_label],
+            )
+            self._content_box.add(box)
+
+        elif self._variant == "analog":
             self._analog_da = AnalogClockArea()
             self._content_box.add(self._analog_da)
 
         elif self._variant == "digital_clean":
-            self._time_label = Label(style="font-size: 32px; font-weight: 700; letter-spacing: 1px;")
-            self._date_label = Label(style="font-size: 12px; opacity: 0.75; font-weight: 500;")
+            self._time_label = Label(style="font-size: 36px; font-weight: 700;")
+            self._date_label = Label(style="font-size: 13px; opacity: 0.8; font-weight: 600;")
             
             box = Box(
                 orientation="v",
@@ -162,9 +207,9 @@ class DesktopClock(Box):
             self._content_box.add(box)
 
         elif self._variant == "digital_seconds":
-            self._time_label = Label(style="font-size: 30px; font-weight: 700;")
-            self._sec_label = Label(style="font-size: 13px; font-weight: 600; opacity: 0.85; padding-top: 4px;")
-            self._date_label = Label(style="font-size: 11px; opacity: 0.7; font-weight: 500;")
+            self._time_label = Label(style="font-size: 32px; font-weight: 800;")
+            self._sec_label = Label(style="font-size: 14px; font-weight: 700; color: #EB0029; padding-top: 6px;")
+            self._date_label = Label(style="font-size: 11px; opacity: 0.75; font-weight: 600;")
 
             time_row = Box(
                 orientation="h",
@@ -185,9 +230,9 @@ class DesktopClock(Box):
             self._content_box.add(box)
 
         elif self._variant == "minimal_vertical":
-            self._time_label = Label(style="font-size: 26px; font-weight: 800; line-height: 1.1;")
+            self._time_label = Label(style="font-size: 28px; font-weight: 800;")
             self._time_label.set_justify(Gtk.Justification.CENTER)
-            self._date_label = Label(style="font-size: 11px; opacity: 0.7; font-weight: 600; text-transform: uppercase;")
+            self._date_label = Label(style="font-size: 11px; opacity: 0.75; font-weight: 700;")
             self._date_label.set_justify(Gtk.Justification.CENTER)
 
             box = Box(
@@ -201,7 +246,7 @@ class DesktopClock(Box):
             )
             self._content_box.add(box)
 
-        else:  # default circular
+        else:  # circular
             self._clock_progress = CircularProgressBar(
                 style_classes=["progress-bar"],
                 start_angle=270,
@@ -237,7 +282,29 @@ class DesktopClock(Box):
         if self._clock_progress:
             self._clock_progress.value = int(now.strftime("%S"))
 
-        if self._variant == "circular" and self._time_label:
+        if self._variant == "pixel_glance":
+            if self._time_label:
+                self._time_label.set_label(now.strftime("%H:%M"))
+            if self._date_label:
+                self._date_label.set_label(now.strftime("%a, %b %d"))
+            if self._weather_badge:
+                try:
+                    from services.singletons import weather
+                    if weather.temperature is not None:
+                        self._weather_badge.set_label(f"• {weather.temperature:.0f}°C")
+                        self._weather_badge.show()
+                    else:
+                        self._weather_badge.hide()
+                except Exception:
+                    self._weather_badge.hide()
+
+        elif self._variant == "nothing_dot":
+            if self._time_label:
+                self._time_label.set_label(now.strftime("%H:%M"))
+            if self._date_label:
+                self._date_label.set_label(now.strftime("%A // %d %b").upper())
+
+        elif self._variant == "circular" and self._time_label:
             self._time_label.set_label(now.strftime("%H\n%M"))
 
         elif self._variant == "digital_clean":

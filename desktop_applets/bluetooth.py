@@ -69,9 +69,12 @@ class DesktopBluetooth(Box):
             **kwargs,
         )
 
-        bluetooth.connect("changed", self._sync)
-        bluetooth.connect("notify::enabled", self._sync)
-        bluetooth.connect("notify::connected-devices", self._sync)
+        try:
+            if hasattr(bluetooth, "connect"):
+                bluetooth.connect("notify::enabled", self._sync)
+                bluetooth.connect("notify::connected-devices", self._sync)
+        except Exception:
+            pass
         self._sync()
 
     def _on_toggle(self, *_):
