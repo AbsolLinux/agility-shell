@@ -6,12 +6,6 @@ from snippets import Icon
 from services.singletons import network, bluetooth, night_mode, caffeine
 from user_options import user_options
 
-DESKTOP_QUICK_SETTINGS_VARIANTS: list[tuple[str, str]] = [
-    ("pixel_tiles",     "Google Pixel Quick Tiles"),
-    ("nothing_matrix",  "Nothing OS Glyph Grid"),
-]
-
-
 class QuickToggleTile(Button):
     def __init__(self, icon_name: str, label: str, on_toggle, is_active_getter):
         self._on_toggle = on_toggle
@@ -29,7 +23,7 @@ class QuickToggleTile(Button):
 
         super().__init__(
             child=box,
-            style_classes=["quick-toggle-tile"],
+            style_classes=["option-selection-button"],
             h_expand=True,
             v_expand=True,
             on_clicked=self._clicked,
@@ -48,12 +42,8 @@ class QuickToggleTile(Button):
             self.remove_style_class("active")
         return False
 
-
 class DesktopQuickSettings(Box):
-    VARIANTS = [v[0] for v in DESKTOP_QUICK_SETTINGS_VARIANTS]
-
-    def __init__(self, variant: str = "pixel_tiles", **kwargs):
-        self._variant = variant or "pixel_tiles"
+    def __init__(self, **kwargs):
         self.title_label = Label(
             label="Quick Controls",
             style="font-size: 13px; font-weight: 700;",
@@ -110,21 +100,9 @@ class DesktopQuickSettings(Box):
             **kwargs,
         )
 
-        try:
-            if hasattr(network, "wifi") and network.wifi:
-                network.wifi.connect("notify::enabled", lambda *_: self.wifi_tile.sync())
-            if hasattr(bluetooth, "connect"):
-                bluetooth.connect("notify::enabled", lambda *_: self.bt_tile.sync())
-            night_mode.connect("notify::enabled", lambda *_: self.night_tile.sync())
-            caffeine.connect("notify::enabled", lambda *_: self.caffeine_tile.sync())
-        except Exception:
-            pass
-
-    def set_variant(self, variant: str):
-        self._variant = variant
-        if variant == "nothing_matrix":
-            self.title_label.set_label("GLYPH CONTROLS")
-            self.title_label.set_style("font-size: 11px; font-weight: 700; color: #EB0029; font-family: monospace;")
-        else:
-            self.title_label.set_label("Quick Controls")
-            self.title_label.set_style("font-size: 13px; font-weight: 700;")
+        if hasattr(network, "connect"):
+            network.connect("changed", lambda *_: self.wifi_tile.sync())
+        if hasattr(bluetooth, "connect"):
+            bluetooth.connect("changed", lambda *_: self.bt_tile.sync())
+        night_mode.connect("notify::enabled", lambda *_: self.night_tile.sync())
+        caffeine.connect("notify::enabled", lambda *_: self.caffeine_tile.sync())

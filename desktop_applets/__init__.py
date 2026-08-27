@@ -1,41 +1,3 @@
-DESKTOP_APPLET_SIZES: dict[str, int] = {
-    "Energy":        1,
-    "Clock":         1,
-    "Calendar":      1,
-    "Media":         2,
-    "Processes":     1,
-    "Weather":       2,
-    "SysMon":        1,
-    "Wifi":          1,
-    "Volume":        1,
-    "Brightness":    1,
-    "Caffeine":      1,
-    "NightLight":    1,
-    "Bluetooth":     1,
-    "Clipboard":     1,
-    "Calculator":    1,
-    "Settings":      1,
-}
-
-DESKTOP_CANVAS_SIZES: dict[str, tuple[int, int]] = {
-    "Energy":        (1, 1),
-    "Clock":         (1, 1),
-    "Calendar":      (1, 1),
-    "Media":         (2, 1),
-    "Processes":     (1, 1),
-    "Weather":       (2, 1),
-    "SysMon":        (1, 1),
-    "Wifi":          (1, 1),
-    "Volume":        (1, 1),
-    "Brightness":    (1, 1),
-    "Caffeine":      (1, 1),
-    "NightLight":    (1, 1),
-    "Bluetooth":     (1, 1),
-    "Clipboard":     (1, 1),
-    "Calculator":    (1, 1),
-    "Settings":      (1, 1),
-}
-
 from .battery import DesktopBattery
 from .clock import DesktopClock
 from .date import DesktopDate
@@ -74,6 +36,44 @@ __all__ = [
     "DESKTOP_APPLET_SIZES",
     "DESKTOP_CANVAS_SIZES",
 ]
+
+DESKTOP_APPLET_SIZES: dict[str, int] = {
+    "Energy":        1,
+    "Clock":         1,
+    "Calendar":      1,
+    "Media":         2,
+    "Processes":     1,
+    "Weather":       2,
+    "SysMon":        1,
+    "Wifi":          1,
+    "Volume":        1,
+    "Brightness":    1,
+    "Caffeine":      1,
+    "NightLight":    1,
+    "Bluetooth":     1,
+    "Clipboard":     1,
+    "Calculator":    1,
+    "Settings":      1,
+}
+
+DESKTOP_CANVAS_SIZES: dict[str, tuple[int, int]] = {
+    "Energy":        (1, 1),
+    "Clock":         (1, 1),
+    "Calendar":      (1, 1),
+    "Media":         (2, 1),
+    "Processes":     (1, 1),
+    "Weather":       (2, 1),
+    "SysMon":        (1, 1),
+    "Wifi":          (1, 1),
+    "Volume":        (1, 1),
+    "Brightness":    (1, 1),
+    "Caffeine":      (1, 1),
+    "NightLight":    (1, 1),
+    "Bluetooth":     (1, 1),
+    "Clipboard":     (1, 1),
+    "Calculator":    (1, 1),
+    "Settings":      (1, 1),
+}
 
 DESKTOP_APPLET_WIDGETS: dict[str, type] = {
     "Energy":        DesktopBattery,

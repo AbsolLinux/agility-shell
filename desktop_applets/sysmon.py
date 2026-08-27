@@ -86,26 +86,8 @@ class MetricGraphCard(Box):
         self.graph.push(float(value_num))
 
 
-DESKTOP_SYSMON_VARIANTS: list[tuple[str, str]] = [
-    ("pixel_cards",        "Google Pixel Hardware Monitor"),
-    ("nothing_telemetry",  "Nothing OS Telemetry"),
-    ("compact",            "Compact Graphs"),
-]
-
-
 class DesktopSysMon(Box):
-    VARIANTS = [v[0] for v in DESKTOP_SYSMON_VARIANTS]
-
-    def __init__(self, variant: str = "pixel_cards", **kwargs):
-        super().__init__(
-            orientation="v",
-            spacing=8,
-            style_classes=["desktop-applet"],
-            h_expand=True,
-            v_expand=True,
-            **kwargs,
-        )
-        self._variant = variant or "pixel_cards"
+    def __init__(self, **kwargs):
         self.cpu_card = MetricGraphCard(
             icon_name="cpu-duotone",
             name="CPU",
@@ -153,14 +135,23 @@ class DesktopSysMon(Box):
         self.extra_box.set_no_show_all(True)
         self.extra_box.hide()
 
-        self._container_box = Box(
+        self.container = Box(
             orientation="v",
             spacing=8,
             h_expand=True,
             v_expand=True,
             children=[self.primary_box, self.extra_box],
         )
-        self.add(self._container_box)
+
+        super().__init__(
+            orientation="v",
+            spacing=8,
+            style_classes=["desktop-applet"],
+            h_expand=True,
+            v_expand=True,
+            children=[self.container],
+            **kwargs,
+        )
 
         self._last_net_bytes = None
         self._last_net_time = None
@@ -169,15 +160,6 @@ class DesktopSysMon(Box):
 
         self._timer_id = GLib.timeout_add(1000, self._update_stats)
         self._update_stats()
-
-    def set_variant(self, variant: str):
-        self._variant = variant
-        if variant == "nothing_telemetry":
-            self.cpu_card.title_label.set_style("font-size: 11px; font-weight: 700; color: #EB0029; font-family: monospace;")
-            self.ram_card.title_label.set_style("font-size: 11px; font-weight: 700; color: #EB0029; font-family: monospace;")
-        else:
-            self.cpu_card.title_label.set_style("font-size: 11px; font-weight: 600;")
-            self.ram_card.title_label.set_style("font-size: 11px; font-weight: 600;")
 
     def _on_size_allocate(self, widget, alloc):
         w = alloc.width

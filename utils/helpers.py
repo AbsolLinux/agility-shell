@@ -2,6 +2,7 @@ import shutil
 from gi.repository import GioUnix, Gtk, GdkPixbuf, GLib, Gio
 from PIL import Image as PILImage, ImageEnhance, ImageFilter
 import io
+from snippets import enable_blur, set_blur_regions_from_widget
 from .icon_resolver import IconResolver
 _resolver = IconResolver()
 
@@ -9,7 +10,6 @@ def get_app_icon_name(app_id: str) -> str | None:
     return _resolver.get_icon(app_id)
 
 def popup_with_blur(menu: Gtk.Menu, event, accuracy: int = 1):
-    from snippets import enable_blur, set_blur_regions_from_widget
     blur_ctx = None
 
     def do_blur():

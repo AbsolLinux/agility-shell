@@ -46,12 +46,12 @@ class DesktopNetwork(Box):
 
         self.speed_down_label = Label(
             label="↓ 0 KB/s",
-            style="font-size: 11px; font-weight: 600; font-family: monospace, sans-serif;",
+            style="font-size: 11px; font-weight: 600; font-family: apply(mixed-mono);",
             h_align="start",
         )
         self.speed_up_label = Label(
             label="↑ 0 KB/s",
-            style="font-size: 11px; opacity: 0.75; font-family: monospace, sans-serif;",
+            style="font-size: 11px; opacity: 0.75; font-family: apply(mixed-mono);",
             h_align="start",
         )
 
@@ -89,13 +89,10 @@ class DesktopNetwork(Box):
             **kwargs,
         )
 
-        try:
-            if hasattr(network, "wifi") and network.wifi:
-                network.wifi.connect("notify::enabled", self._on_network_changed)
-                network.wifi.connect("notify::ssid", self._on_network_changed)
-                network.wifi.connect("notify::strength", self._on_network_changed)
-        except Exception:
-            pass
+        if hasattr(network, "connect"):
+            network.connect("changed", self._on_network_changed)
+        if hasattr(network, "wifi") and network.wifi:
+            network.wifi.connect("changed", self._on_network_changed)
 
         self._timer = GLib.timeout_add(1000, self._update_stats)
         self._update_stats()
