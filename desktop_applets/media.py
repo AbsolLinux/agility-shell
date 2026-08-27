@@ -257,14 +257,23 @@ class DesktopMediaPlayer(Box):
             self.album_stack.set_visible_child(self.album_placeholder)
 
 
+DESKTOP_MEDIA_VARIANTS: list[tuple[str, str]] = [
+    ("pixel_pill",          "Google Pixel Media Card"),
+    ("nothing_monochrome",  "Nothing OS Glyph Player"),
+    ("compact",             "Compact Media Player"),
+]
+
+
 class DesktopMediaApplet(Box):
     """
     Desktop widget version of the media applet.
     Always visible; shows a placeholder when no players are active.
     Tracks player recency and always shows the most recently active player.
     """
+    VARIANTS = [v[0] for v in DESKTOP_MEDIA_VARIANTS]
 
-    def __init__(self, **kwargs):
+    def __init__(self, variant: str = "pixel_pill", **kwargs):
+        self._variant = variant or "pixel_pill"
         self._players: dict[str, DesktopMediaPlayer] = {}
         self._player_order: list[str] = []  # most recent last
 
@@ -273,7 +282,7 @@ class DesktopMediaApplet(Box):
         self.player_stack.add_named(self.no_media_placeholder, "__placeholder__")
 
         super().__init__(
-            style_classes=["desktop-applet", "large"],
+            style_classes=["desktop-applet", "large", "desktop-media-card"],
             orientation="v",
             children=[self.player_stack],
             **kwargs,
@@ -288,6 +297,10 @@ class DesktopMediaApplet(Box):
 
         for name, service in player_manager.get_all_services().items():
             self._add_player(name, service)
+
+    def set_variant(self, variant: str):
+        self._variant = variant
+        self._sync()
 
     def _add_player(self, name: str, service: PlayerService):
         if name in self._players:

@@ -16,7 +16,7 @@ class DesktopCalculator(Box):
             v_align="end",
             h_expand=True,
             h_align="end",
-            style="font-size: 20px; font-weight: 700; font-family: apply(mixed-mono);",
+            style="font-size: 20px; font-weight: 700; font-family: monospace, sans-serif;",
         )
         self.preview_label = Label(
             label="",
@@ -24,7 +24,7 @@ class DesktopCalculator(Box):
             v_align="start",
             h_expand=True,
             h_align="end",
-            style="font-size: 11px; opacity: 0.6; font-family: apply(mixed-mono);",
+            style="font-size: 11px; opacity: 0.6; font-family: monospace, sans-serif;",
         )
 
         display_box = Box(

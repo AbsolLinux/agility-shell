@@ -7,8 +7,17 @@ from fabric.widgets.overlay import Overlay
 from snippets import Icon, FlatScale
 from services.singletons import audio
 
+DESKTOP_VOLUME_VARIANTS: list[tuple[str, str]] = [
+    ("pixel_slider",   "Google Pixel Pill Volume"),
+    ("nothing_glyph",  "Nothing OS Glyph Volume"),
+]
+
+
 class DesktopVolume(Box):
-    def __init__(self, **kwargs):
+    VARIANTS = [v[0] for v in DESKTOP_VOLUME_VARIANTS]
+
+    def __init__(self, variant: str = "pixel_slider", **kwargs):
+        self._variant = variant or "pixel_slider"
         self._updating = False
 
         self.progress_bar = CircularProgressBar(
@@ -77,6 +86,16 @@ class DesktopVolume(Box):
         audio.connect("speaker-changed", self._on_speaker_changed)
         if audio.speaker:
             self._on_speaker_changed()
+
+    def set_variant(self, variant: str):
+        self._variant = variant
+        if variant == "nothing_glyph":
+            self.title_label.set_label("VOLUME")
+            self.title_label.set_style("font-size: 11px; font-weight: 700; color: #EB0029; font-family: monospace;")
+        else:
+            self.title_label.set_label("Audio")
+            self.title_label.set_style("font-size: 14px; font-weight: 700;")
+        self._sync()
 
     def _on_speaker_changed(self, *_):
         if not audio.speaker:

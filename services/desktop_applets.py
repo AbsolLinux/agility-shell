@@ -8,6 +8,7 @@ from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 from fabric.core.service import Service, Signal
 from fabric.widgets.wayland import WaylandWindow
 from fabric.widgets.box import Box
+from fabric.widgets.label import Label
 from fabric.widgets.overlay import Overlay
 from loguru import logger
 
@@ -15,7 +16,7 @@ from user_options import user_options
 from utils.helpers import popup_with_blur
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
 from .themes import wallpaper
-from snippets import Animator, disable_blur, free_blur, set_blur_regions_from_widget, enable_blur, trace_widget_regions
+from snippets import Animator, disable_blur, free_blur, set_blur_regions_from_widget, enable_blur, trace_widget_regions, Icon
 from snippets.blur.blur import set_blur_regions
 
 CELL      = 81
@@ -211,17 +212,15 @@ class DesktopAppletWindow(WaylandWindow):
 
         self._pad_x = 0
         self._pad_y = 0
-        self._cols  = 0
-        self._rows  = 0
+        self._cols  = 12
+        self._rows  = 6
         self._old_w = 0
         self._old_h = 0
 
         self._recalc_in_progress = False
         self._pending_recalc     = False
         self._recalc_timer: int | None = None
-        self._fade_in_timer: int | None = None
-        self._ready              = False
-        self._in_size_allocate   = False
+        self._ready              = True
         self._blur_ctx = None
 
         self._canvas_active  = False
@@ -241,57 +240,12 @@ class DesktopAppletWindow(WaylandWindow):
         self._canvas_da.set_no_show_all(True)
 
         self._overlay = Overlay(h_expand=True, v_expand=True)
-        self._overlay.add(self._canvas_da)
-        self._overlay.add_overlay(self._fixed)
-        # self._overlay.set_overlay_pass_through(self._fixed, True)
+        self._overlay.add(self._fixed)
+        self._overlay.add_overlay(self._canvas_da)
+        self._overlay.set_overlay_pass_through(self._canvas_da, True)
 
         self._root = Box(h_expand=True, v_expand=True)
         self._root.add(self._overlay)
-
-        self._fade_animator = Animator(
-            bezier_curve=(0.4, 0.0, 0.2, 1.0),
-            duration=0.4,
-            min_value=0.0,
-            max_value=1.0,
-            tick_widget=self._root,
-        )
-        self._fade_animator.connect("notify::value", self._on_fade_value)
-        self._fade_animator.connect("finished",      self._on_fade_finished)
-
-        self._fade_out_animator = Animator(
-            bezier_curve=(0.4, 0.0, 0.2, 1.0),
-            duration=0.2,
-            min_value=0.0,
-            max_value=1.0,
-            tick_widget=self._root,
-        )
-        self._fade_out_animator.connect("notify::value", self._on_fade_out_value)
-        self._fade_out_animator.connect("finished",      self._on_fade_out_finished)
-
-        self._canvas_fade_in = Animator(
-            bezier_curve=(0.4, 0.0, 0.2, 1.0),
-            duration=0.25,
-            min_value=0.0,
-            max_value=1.0,
-            tick_widget=self._root,
-        )
-        self._canvas_fade_in.connect("notify::value",
-            lambda a, _: self._canvas_da.set_opacity(a.value))
-        self._canvas_fade_in.connect("finished",
-            lambda _: self._canvas_da.set_opacity(1.0))
-
-        self._canvas_fade_out = Animator(
-            bezier_curve=(0.4, 0.0, 0.2, 1.0),
-            duration=0.2,
-            min_value=0.0,
-            max_value=1.0,
-            tick_widget=self._root,
-        )
-        self._canvas_fade_out.connect("notify::value",
-            lambda a, _: self._canvas_da.set_opacity(a.value))
-        self._canvas_fade_out.connect("finished", self._on_canvas_fade_out_done)
-
-        self._overlay.set_opacity(0.0)
 
         super().__init__(
             monitor=monitor_id,
@@ -307,54 +261,18 @@ class DesktopAppletWindow(WaylandWindow):
         self.connect("button-press-event", self._on_button_press)
         self._setup_drag_and_drop()
         self.show_all()
+        self._canvas_da.hide()
         
-        GLib.timeout_add(1000, self._initial_build)
+        GLib.timeout_add(100, self._initial_build)
 
     def _initial_build(self) -> bool:
         self._ready = True
         self.recalculate_grid()
-        self._overlay.set_opacity(1.0)
-        self._schedule_fade_in()
+        self._fixed.show_all()
+        self._overlay.show_all()
+        self._canvas_da.hide()
         return False
 
-    def _on_fade_value(self, animator, _) -> None:
-        self._overlay.set_opacity(animator.value)
-
-    def _on_fade_finished(self, _) -> None:
-        self._overlay.set_opacity(1.0)
-
-    def _fade_in(self) -> None:
-        if self._fade_animator.playing:
-            return
-        self._fade_out_animator.pause()
-        self._fade_animator.min_value = self._overlay.get_opacity()
-        self._fade_animator.value     = self._overlay.get_opacity()
-        self._fade_animator.max_value = 1.0
-        self._fade_animator.play()
-
-    def _fade_out(self) -> None:
-        self._fade_animator.pause()
-        self._fade_out_animator.min_value = 0.0
-        self._fade_out_animator.max_value = self._overlay.get_opacity()
-        self._fade_out_animator.value     = self._overlay.get_opacity()
-        self._fade_out_animator.play()
-
-    def _on_fade_out_value(self, animator, _) -> None:
-        self._overlay.set_opacity(animator.value)
-
-    def _on_fade_out_finished(self, _) -> None:
-        self._overlay.set_opacity(0.0)
-
-    def _schedule_fade_in(self) -> None:
-        if self._fade_in_timer is not None:
-            GLib.source_remove(self._fade_in_timer)
-        self._fade_in_timer = GLib.timeout_add(300, self._do_fade_in)
-
-    def _do_fade_in(self) -> bool:
-        self._fade_in_timer = None
-        self._fade_in()
-        return False
-    
     def _apply_blur(self) -> None:
         if not user_options.theme.blur:
             return
@@ -393,23 +311,12 @@ class DesktopAppletWindow(WaylandWindow):
         set_blur_regions(self._blur_ctx, rects)
 
     def _show_canvas(self) -> None:
-        self._canvas_da.set_opacity(0.0)
+        self._overlay.set_overlay_pass_through(self._canvas_da, False)
         self._canvas_da.show()
-        self._canvas_fade_out.pause()
-        self._canvas_fade_in.min_value = 0.0
-        self._canvas_fade_in.value     = 0.0
-        self._canvas_fade_in.max_value = 1.0
-        self._canvas_fade_in.play()
+        self._canvas_da.queue_draw()
 
     def _hide_canvas(self) -> None:
-        self._canvas_fade_in.pause()
-        self._canvas_fade_out.max_value = self._canvas_da.get_opacity()
-        self._canvas_fade_out.value     = self._canvas_da.get_opacity()
-        self._canvas_fade_out.min_value = 0.0
-        self._canvas_fade_out.play()
-
-    def _on_canvas_fade_out_done(self, _) -> None:
-        self._canvas_da.set_opacity(0.0)
+        self._overlay.set_overlay_pass_through(self._canvas_da, True)
         self._canvas_da.hide()
 
     def enter_canvas_mode(self, key: str, origin: tuple[int, int] | None = None, span_x: int | None = None, span_y: int | None = None) -> None:
@@ -427,9 +334,7 @@ class DesktopAppletWindow(WaylandWindow):
         except Exception:
             self.layer = "overlay"
 
-        self._overlay.set_opacity(1.0)
         self._show_canvas()
-        self._canvas_da.queue_draw()
 
     def exit_canvas_mode(self, restore: bool = False) -> None:
         if restore and self._drag_origin is not None and self._dragging_key is not None:
@@ -527,9 +432,8 @@ class DesktopAppletWindow(WaylandWindow):
 
         DesktopAppletService.get_instance().canvas_drop_complete(self._monitor_id)
 
-
     def _on_size_allocate(self, widget, alloc: Gdk.Rectangle) -> None:
-        if not self._ready or self._in_size_allocate:
+        if not self._ready:
             return
         w, h = alloc.width, alloc.height
         if w < 1 or h < 1:
@@ -537,50 +441,7 @@ class DesktopAppletWindow(WaylandWindow):
         if w != self._old_w or h != self._old_h:
             self._old_w = w
             self._old_h = h
-            if self._recalc_in_progress:
-                self._pending_recalc = True
-                return
-            if self._fade_in_timer is not None:
-                GLib.source_remove(self._fade_in_timer)
-                self._fade_in_timer = None
-            if self._recalc_timer is not None:
-                GLib.source_remove(self._recalc_timer)
-                self._recalc_timer = None
-            if self._fade_out_animator.value != 0:
-                self._fade_out()
-            self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
-
-    def _deferred_recalc(self) -> bool:
-        self._recalc_timer = None
-        self._recalc_in_progress = True
-        self._overlay.hide()
-        GLib.timeout_add(50, self._do_window_resize)
-        return False
-
-    def _do_window_resize(self) -> bool:
-        self._in_size_allocate = True
-        self.hide()
-        self.show()
-        GLib.timeout_add(50, self._do_recalc)
-        return False
-
-    def _do_recalc(self) -> bool:
-        self._in_size_allocate = False
-        self.recalculate_grid()
-        self._overlay.set_opacity(0.0)
-        self._overlay.show()
-        self._recalc_in_progress = False
-
-        if self._pending_recalc:
-            self._pending_recalc = False
-            self._old_w = 0
-            self._old_h = 0
-            self._fade_out()
-            self._recalc_timer = GLib.timeout_add(300, self._deferred_recalc)
-        else:
-            self._schedule_fade_in()
-
-        return False
+            self.recalculate_grid()
 
     def recalculate_grid(self) -> None:
         alloc = self.get_allocation()
@@ -625,7 +486,6 @@ class DesktopAppletWindow(WaylandWindow):
     def rows(self) -> int:
         return self._rows
 
-
     def _build_applet_entry(self, entry: dict) -> Gtk.EventBox | None:
         key = entry["key"]
         cls = DESKTOP_APPLET_WIDGETS.get(key)
@@ -638,36 +498,45 @@ class DesktopAppletWindow(WaylandWindow):
             w_px, h_px = _applet_pixel_size(key, span_x, span_y)
 
             variant = entry.get("variant")
-            if key == "Clock" and variant:
-                widget = cls(variant=variant)
+            if variant:
+                try:
+                    widget = cls(variant=variant)
+                except TypeError:
+                    widget = cls()
+                    if hasattr(widget, "set_variant"):
+                        widget.set_variant(variant)
             else:
                 widget = cls()
+
             widget.set_size_request(w_px, h_px)
 
+            theme = entry.get("theme") or user_options.desktop_canvas.get_theme(self._monitor_id, key) or "normal"
+            color = entry.get("color") or user_options.desktop_canvas.get_color(self._monitor_id, key) or ""
             op = entry.get("opacity")
             if op is None:
                 op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
-            if op < 1.0 and hasattr(widget, "set_style"):
-                widget.set_style(f"background-color: alpha(var(--background), {op:.2f});")
+
+            # Apply classes to widget
+            if hasattr(widget, "get_style_context"):
+                ctx = widget.get_style_context()
+                ctx.add_class("desktop-applet")
+                ctx.add_class(f"desktop-applet-surface-{theme}")
+                if (span_x and span_x > 1) or key in ("Weather", "Media"):
+                    ctx.add_class("large")
+
+            # Apply custom styles (opacity, custom color)
+            custom_css = []
+            if color:
+                custom_css.append(f"@define-color primary {color}; @define-color accent {color}; @define-color on_primary #FFFFFF; * {{ color: @primary; }}")
+            if op < 1.0:
+                custom_css.append(f"* {{ opacity: {op:.2f}; }}")
+            
+            if custom_css and hasattr(widget, "set_style"):
+                widget.set_style(" ".join(custom_css))
 
             overlay = Overlay(h_expand=True, v_expand=True)
             overlay.set_size_request(w_px, h_px)
             overlay.add(widget)
-
-            # Interactive resize grip handle in the bottom-right corner
-            handle_eb = Gtk.EventBox()
-            handle_eb.set_halign(Gtk.Align.END)
-            handle_eb.set_valign(Gtk.Align.END)
-            handle_eb.set_size_request(24, 24)
-            handle_eb.set_margin_end(4)
-            handle_eb.set_margin_bottom(4)
-            handle_icon = Icon(icon_name="dots-six-vertical", icon_size=14, style="opacity: 0.35;")
-            handle_eb.add(handle_icon)
-            handle_eb.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK)
-            handle_eb.connect("button-press-event", self._on_resize_handle_press, key)
-            handle_eb.connect("motion-notify-event", self._on_resize_handle_motion, key)
-            handle_eb.connect("button-release-event", self._on_resize_handle_release, key)
-            overlay.add_overlay(handle_eb)
 
             eb = Gtk.EventBox()
             eb.set_size_request(w_px, h_px)
@@ -771,7 +640,7 @@ class DesktopAppletWindow(WaylandWindow):
         return True
 
     def rebuild(self) -> None:
-        for widget in self._children.values():
+        for widget in list(self._children.values()):
             self._fixed.remove(widget)
             widget.destroy()
         self._children.clear()
@@ -784,8 +653,9 @@ class DesktopAppletWindow(WaylandWindow):
                 self._children[entry["key"]] = eb
 
         self._reposition_all()
-        self._overlay.set_opacity(1.0)
+        self._fixed.show_all()
         self._overlay.show_all()
+        self._canvas_da.hide()
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
@@ -799,29 +669,20 @@ class DesktopAppletWindow(WaylandWindow):
             self._fixed.put(eb, 0, 0)
             self._children[key] = eb
             self._reposition_all()
-            self._overlay.set_opacity(1.0)
-            self._overlay.show_all()
+            eb.show_all()
+            self._fixed.show_all()
+            self._canvas_da.hide()
 
             if not self._blur_ctx and user_options.theme.blur:
                 self._apply_blur()
 
     def remove_applet(self, key: str) -> None:
-        widget = self._children.pop(key, None)
-        if widget:
-            self._fixed.remove(widget)
-            widget.destroy()
+        eb = self._children.pop(key, None)
+        if eb:
+            self._fixed.remove(eb)
+            eb.destroy()
+            self._reposition_all()
             GLib.idle_add(self._retrace_blur)
-
-    def apply_applet_opacity(self, key: str, opacity: float) -> None:
-        eb = self._children.get(key)
-        if not eb:
-            return
-        overlay = eb.get_child()
-        if not overlay:
-            return
-        widget = overlay.get_child()
-        if widget and hasattr(widget, "set_style"):
-            widget.set_style(f"background-color: alpha(var(--background), {opacity:.2f});" if opacity < 1.0 else "")
 
     def resize_applet(self, key: str, span_x: int, span_y: int) -> None:
         eb = self._children.get(key)
@@ -838,12 +699,78 @@ class DesktopAppletWindow(WaylandWindow):
         self._reposition_all()
         GLib.idle_add(self._retrace_blur)
 
+    def apply_applet_opacity(self, key: str, opacity: float) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        overlay = eb.get_child()
+        if not overlay:
+            return
+        widget = overlay.get_child()
+        if widget and hasattr(widget, "set_style"):
+            color = user_options.desktop_canvas.get_color(self._monitor_id, key)
+            custom_css = []
+            if color:
+                custom_css.append(f"@define-color primary {color}; @define-color accent {color}; @define-color on_primary #FFFFFF; * {{ color: @primary; }}")
+            if opacity < 1.0:
+                custom_css.append(f"* {{ opacity: {opacity:.2f}; }}")
+            widget.set_style(" ".join(custom_css))
+
+    def apply_applet_theme(self, key: str, theme: str) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        overlay = eb.get_child()
+        if not overlay:
+            return
+        widget = overlay.get_child()
+        if widget and hasattr(widget, "get_style_context"):
+            ctx = widget.get_style_context()
+            for t in ("normal", "blur", "glassy", "transparent", "amoled", "tonal"):
+                ctx.remove_class(f"desktop-applet-surface-{t}")
+            ctx.add_class(f"desktop-applet-surface-{theme}")
+        GLib.idle_add(self._retrace_blur)
+
+    def apply_applet_color(self, key: str, color: str) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        overlay = eb.get_child()
+        if not overlay:
+            return
+        widget = overlay.get_child()
+        if widget and hasattr(widget, "set_style"):
+            op = user_options.desktop_canvas.get_opacity(self._monitor_id, key)
+            if op is None:
+                op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
+            custom_css = []
+            if color:
+                custom_css.append(f"@define-color primary {color}; @define-color accent {color}; @define-color on_primary #FFFFFF; * {{ color: @primary; }}")
+            if op < 1.0:
+                custom_css.append(f"* {{ opacity: {op:.2f}; }}")
+            widget.set_style(" ".join(custom_css))
+
+    def apply_applet_variant(self, key: str, variant: str) -> None:
+        eb = self._children.get(key)
+        if not eb:
+            return
+        overlay = eb.get_child()
+        if not overlay:
+            return
+        widget = overlay.get_child()
+        if widget and hasattr(widget, "set_variant"):
+            widget.set_variant(variant)
+
     def _setup_applet_drag(self, eb: Gtk.EventBox, key: str) -> None:
         eb.drag_source_set(
             Gdk.ModifierType.BUTTON1_MASK,
             [_APPLET_TARGET],
             Gdk.DragAction.MOVE,
         )
+        target_list = eb.drag_source_get_target_list()
+        if target_list:
+            target_list.add_text_targets(0)
+
         eb.connect("drag-begin",    self._on_applet_drag_begin,    key)
         eb.connect("drag-data-get", self._on_applet_drag_data_get, key)
         eb.connect("drag-end",      self._on_applet_drag_end,      key)
@@ -882,26 +809,131 @@ class DesktopAppletWindow(WaylandWindow):
         if event.button != 3:
             return False
         menu = Gtk.Menu()
+        menu.set_reserve_toggle_size(False)
         placed = user_options.desktop_canvas.get_applets(self._monitor_id)
         entry = next((e for e in placed if e["key"] == key), None)
 
-        # Clock Style Submenu
+        # Header Title
+        title_item = Gtk.MenuItem()
+        title_box = Box(orientation="h", spacing=6)
+        title_icon = Icon(icon_name="gear-six-duotone", icon_size=14)
+        title_lbl = Label(label=f"{key} Widget", style="font-weight: 700; font-size: 13px;")
+        title_box.add(title_icon)
+        title_box.add(title_lbl)
+        title_item.add(title_box)
+        title_item.set_sensitive(False)
+        menu.append(title_item)
+
+        sep_header = Gtk.SeparatorMenuItem()
+        menu.append(sep_header)
+
+        # 1. Widget Style / Variant Submenu
+        variants_list = None
         if key == "Clock":
             from desktop_applets.clock import DESKTOP_CLOCK_VARIANTS
-            style_item = Gtk.MenuItem(label="Clock Style")
+            variants_list = DESKTOP_CLOCK_VARIANTS
+        elif key == "Calendar":
+            from desktop_applets.date import DESKTOP_DATE_VARIANTS
+            variants_list = DESKTOP_DATE_VARIANTS
+        elif key == "Weather":
+            from desktop_applets.weather import DESKTOP_WEATHER_VARIANTS
+            variants_list = DESKTOP_WEATHER_VARIANTS
+        elif key == "Energy":
+            from desktop_applets.battery import DESKTOP_BATTERY_VARIANTS
+            variants_list = DESKTOP_BATTERY_VARIANTS
+        elif key == "Media":
+            from desktop_applets.media import DESKTOP_MEDIA_VARIANTS
+            variants_list = DESKTOP_MEDIA_VARIANTS
+        elif key == "SysMon":
+            from desktop_applets.sysmon import DESKTOP_SYSMON_VARIANTS
+            variants_list = DESKTOP_SYSMON_VARIANTS
+        elif key == "Settings":
+            from desktop_applets.quick_settings import DESKTOP_QUICK_SETTINGS_VARIANTS
+            variants_list = DESKTOP_QUICK_SETTINGS_VARIANTS
+        elif key == "Volume":
+            from desktop_applets.volume import DESKTOP_VOLUME_VARIANTS
+            variants_list = DESKTOP_VOLUME_VARIANTS
+        elif key == "Brightness":
+            from desktop_applets.brightness import DESKTOP_BRIGHTNESS_VARIANTS
+            variants_list = DESKTOP_BRIGHTNESS_VARIANTS
+
+        if variants_list:
+            style_item = Gtk.MenuItem(label="Widget Style")
             style_sub = Gtk.Menu()
-            current_var = entry.get("variant", "circular") if entry else "circular"
-            for v_key, v_label in DESKTOP_CLOCK_VARIANTS:
-                lbl = f"✓ {v_label}" if current_var == v_key else f"    {v_label}"
+            style_sub.set_reserve_toggle_size(False)
+            current_var = entry.get("variant", variants_list[0][0]) if entry else variants_list[0][0]
+            for v_key, v_label in variants_list:
+                lbl = f"✓  {v_label}" if current_var == v_key else f"    {v_label}"
                 it = Gtk.MenuItem(label=lbl)
-                it.connect("activate", lambda _, vk=v_key, k=key: self._set_desktop_applet_variant(k, vk))
+                it.connect("activate", lambda _, vk=v_key, k=key: DesktopAppletService.get_instance().set_applet_variant(self._monitor_id, k, vk))
                 style_sub.append(it)
             style_item.set_submenu(style_sub)
             menu.append(style_item)
 
-        # Opacity Submenu
+        # 2. Surface Theme Submenu
+        theme_item = Gtk.MenuItem(label="Surface Theme")
+        theme_sub = Gtk.Menu()
+        theme_sub.set_reserve_toggle_size(False)
+        current_theme = user_options.desktop_canvas.get_theme(self._monitor_id, key)
+
+        themes = [
+            ("Normal (Solid)", "normal"),
+            ("Blur (Frosted Glass)", "blur"),
+            ("Glassy (Glossy Translucent)", "glassy"),
+            ("Transparent (Outlined)", "transparent"),
+            ("AMOLED Stark (Nothing Black)", "amoled"),
+            ("Material Tonal (Pixel Soft)", "tonal"),
+        ]
+        for t_label, t_key in themes:
+            lbl = f"✓  {t_label}" if current_theme == t_key else f"    {t_label}"
+            it = Gtk.MenuItem(label=lbl)
+            it.connect("activate", lambda _, tk=t_key, k=key: DesktopAppletService.get_instance().set_applet_theme(self._monitor_id, k, tk))
+            theme_sub.append(it)
+        theme_item.set_submenu(theme_sub)
+        menu.append(theme_item)
+
+        # 3. Color & Accent Submenu
+        color_item = Gtk.MenuItem(label="Color & Accent")
+        color_sub = Gtk.Menu()
+        color_sub.set_reserve_toggle_size(False)
+        current_color = user_options.desktop_canvas.get_color(self._monitor_id, key)
+
+        colors = [
+            ("System Theme (Default)", ""),
+            ("🔴 Nothing Red (#EB0029)", "#EB0029"),
+            ("🟠 Pixel Coral (#FF6F61)", "#FF6F61"),
+            ("🟢 Mint Green (#4ECCA3)", "#4ECCA3"),
+            ("🔵 Sky Blue (#38BDF8)", "#38BDF8"),
+            ("🟣 Lavender (#A78BFA)", "#A78BFA"),
+            ("🟡 Sunflower (#FBBF24)", "#FBBF24"),
+            ("⚪ Monochrome White (#FFFFFF)", "#FFFFFF"),
+            ("🔘 Minimal Slate (#64748B)", "#64748B"),
+        ]
+        for c_label, c_val in colors:
+            is_active = (current_color.lower() == c_val.lower())
+            lbl = f"✓  {c_label}" if is_active else f"    {c_label}"
+            it = Gtk.MenuItem(label=lbl)
+            it.connect("activate", lambda _, cv=c_val, k=key: DesktopAppletService.get_instance().set_applet_color(self._monitor_id, k, cv))
+            color_sub.append(it)
+
+        sep_col = Gtk.SeparatorMenuItem()
+        color_sub.append(sep_col)
+
+        custom_col_item = Gtk.MenuItem(label="🎨 Custom Color...")
+        custom_col_item.connect("activate", lambda _, k=key: self._open_color_picker_dialog(k))
+        color_sub.append(custom_col_item)
+
+        reset_col_item = Gtk.MenuItem(label="↺ Reset Color")
+        reset_col_item.connect("activate", lambda _, k=key: DesktopAppletService.get_instance().set_applet_color(self._monitor_id, k, ""))
+        color_sub.append(reset_col_item)
+
+        color_item.set_submenu(color_sub)
+        menu.append(color_item)
+
+        # 4. Opacity Submenu
         opacity_menu_item = Gtk.MenuItem(label="Opacity")
         opacity_sub = Gtk.Menu()
+        opacity_sub.set_reserve_toggle_size(False)
         current_op = user_options.desktop_canvas.get_opacity(self._monitor_id, key)
         if current_op is None:
             current_op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
@@ -915,16 +947,17 @@ class DesktopAppletWindow(WaylandWindow):
             ("15% Dim", 0.15),
         ]
         for label, val in presets:
-            lbl = f"✓ {label}" if abs(current_op - val) < 0.05 else f"    {label}"
+            lbl = f"✓  {label}" if abs(current_op - val) < 0.05 else f"    {label}"
             it = Gtk.MenuItem(label=lbl)
             it.connect("activate", lambda _, v=val, k=key: DesktopAppletService.get_instance().set_applet_opacity(self._monitor_id, k, v))
             opacity_sub.append(it)
         opacity_menu_item.set_submenu(opacity_sub)
         menu.append(opacity_menu_item)
 
-        # Size Submenu
+        # 5. Size Submenu
         size_menu_item = Gtk.MenuItem(label="Size")
         size_sub = Gtk.Menu()
+        size_sub.set_reserve_toggle_size(False)
         base_cols, base_rows = DESKTOP_CANVAS_SIZES.get(key, (1, 1))
         cur_sx = entry.get("span_x", base_cols) if entry else base_cols
         cur_sy = entry.get("span_y", base_rows) if entry else base_rows
@@ -935,13 +968,14 @@ class DesktopAppletWindow(WaylandWindow):
             ("1 × 2 Tall", 1, 2),
             ("2 × 2 Large", 2, 2),
             ("3 × 2 Extra Wide", 3, 2),
+            ("4 × 2 Panoramic", 4, 2),
         ]
         gx = entry["grid_x"] if entry else 0
         gy = entry["grid_y"] if entry else 0
 
         for label, sx, sy in size_presets:
             is_cur = (cur_sx == sx and cur_sy == sy)
-            lbl = f"✓ {label}" if is_cur else f"    {label}"
+            lbl = f"✓  {label}" if is_cur else f"    {label}"
             it = Gtk.MenuItem(label=lbl)
             fits = _fits(gx, gy, key, self._cols, self._rows, span_x=sx, span_y=sy)
             conflicts = _conflicts(gx, gy, key, placed, self._cols, self._rows, ignore_key=key, span_x=sx, span_y=sy)
@@ -957,7 +991,7 @@ class DesktopAppletWindow(WaylandWindow):
         sep = Gtk.SeparatorMenuItem()
         menu.append(sep)
 
-        remove_item = Gtk.MenuItem(label=f"Remove {key}")
+        remove_item = Gtk.MenuItem(label=f"✕  Remove {key}")
         remove_item.connect(
             "activate",
             lambda _: DesktopAppletService.get_instance().remove(self._monitor_id, key),
@@ -971,21 +1005,20 @@ class DesktopAppletWindow(WaylandWindow):
             menu.popup_at_pointer(event)
         return True
 
-    def _set_desktop_applet_variant(self, key: str, variant: str):
-        placed = user_options.desktop_canvas.get_applets(self._monitor_id)
-        entry = next((e for e in placed if e["key"] == key), None)
-        if entry:
-            entry["variant"] = variant
-            user_options.save()
-            eb = self._children.get(key)
-            if eb:
-                overlay = eb.get_child()
-                if overlay:
-                    widget = overlay.get_child()
-                    if widget and hasattr(widget, "set_variant"):
-                        widget.set_variant(variant)
-            GLib.idle_add(self._retrace_blur)
-
+    def _open_color_picker_dialog(self, key: str):
+        dialog = Gtk.ColorChooserDialog(title=f"Choose Color for {key}", transient_for=None)
+        current_color_str = user_options.desktop_canvas.get_color(self._monitor_id, key)
+        if current_color_str:
+            rgba = Gdk.RGBA()
+            if rgba.parse(current_color_str):
+                dialog.set_rgba(rgba)
+        
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            chosen_rgba = dialog.get_rgba()
+            hex_color = f"#{int(chosen_rgba.red*255):02x}{int(chosen_rgba.green*255):02x}{int(chosen_rgba.blue*255):02x}"
+            DesktopAppletService.get_instance().set_applet_color(self._monitor_id, key, hex_color)
+        dialog.destroy()
 
     def _on_button_press(self, widget, event: Gdk.EventButton) -> bool:
         if event.button != 3:
@@ -1249,6 +1282,27 @@ class DesktopAppletService(Service):
         win = self._windows.get(monitor_id)
         if win:
             win.apply_applet_opacity(key, opacity)
+
+    def set_applet_theme(self, monitor_id: int, key: str, theme: str) -> None:
+        user_options.desktop_canvas.set_theme(monitor_id, key, theme)
+        user_options.save()
+        win = self._windows.get(monitor_id)
+        if win:
+            win.apply_applet_theme(key, theme)
+
+    def set_applet_color(self, monitor_id: int, key: str, color: str) -> None:
+        user_options.desktop_canvas.set_color(monitor_id, key, color)
+        user_options.save()
+        win = self._windows.get(monitor_id)
+        if win:
+            win.apply_applet_color(key, color)
+
+    def set_applet_variant(self, monitor_id: int, key: str, variant: str) -> None:
+        user_options.desktop_canvas.set_variant(monitor_id, key, variant)
+        user_options.save()
+        win = self._windows.get(monitor_id)
+        if win:
+            win.apply_applet_variant(key, variant)
 
     def set_applet_size(self, monitor_id: int, key: str, span_x: int, span_y: int) -> bool:
         win = self._windows.get(monitor_id)
