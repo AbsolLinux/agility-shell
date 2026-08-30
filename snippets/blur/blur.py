@@ -98,9 +98,14 @@ def set_blur_regions(ctx, rects: list[tuple[int, int, int, int]]):
 
 def set_blur_regions_from_widget(ctx, widget, accuracy: int = 10,
                                  alpha_threshold: int = 10, erode=4):
+    if not ctx or not widget:
+        return
+    if hasattr(widget, "get_realized") and not widget.get_realized():
+        return
     rects = trace_widget_regions(widget, accuracy=accuracy,
                                  alpha_threshold=alpha_threshold, erode=erode)
-    set_blur_regions(ctx, [(r.x, r.y, r.width, r.height) for r in rects])
+    if rects:
+        set_blur_regions(ctx, [(r.x, r.y, r.width, r.height) for r in rects])
 
 def disable_blur(ctx):
     libblur.blur_disable(ctx)
