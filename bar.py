@@ -1649,15 +1649,12 @@ class Bar(Window):
         self.connect("button-release-event", self._on_button_release)
         self.connect("enter-notify-event", self._on_bar_enter)
         self.connect("leave-notify-event", self._on_bar_leave)
+        self.connect("realize", self._on_realize)
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self.gdk_monitor = monitor
         self.set_opacity(getattr(user_options.settings, "bar_opacity", 1.0))
         current_theme = getattr(user_options.settings, "bar_theme", "default")
-        self.set_theme(current_theme)
-        should_blur = getattr(user_options.settings, "bar_blur", user_options.theme.blur)
-        if should_blur:
-            self._blur_ctx = enable_blur(self)
-            GLib.timeout_add(1500, self._update_blur_region)
+        self._set_theme_classes(current_theme)
 
         if hasattr(wm, "connect"):
             try:
@@ -1672,10 +1669,16 @@ class Bar(Window):
         else:
             GLib.idle_add(self._update_smart_autohide)
 
+    def _on_realize(self, *_):
+        should_blur = getattr(user_options.settings, "bar_blur", user_options.theme.blur)
+        if should_blur:
+            self._blur_ctx = enable_blur(self)
+            GLib.timeout_add(1500, self._update_blur_region)
+
     def set_opacity(self, opacity: float):
         opacity = max(0.0, min(1.0, float(opacity)))
         self._centerbox.set_style(f"background-color: alpha(var(--background), {opacity:.2f});")
-        if self._blur_ctx:
+        if self._blur_ctx and self.get_realized():
             GLib.timeout_add(100, self._update_blur_region)
 
 
@@ -1718,13 +1721,15 @@ class Bar(Window):
         return section
 
     def _update_blur_region(self) -> bool:
-        set_blur_regions_from_widget(self._blur_ctx, self, accuracy=1, erode=0)
+        if self._blur_ctx and self.get_realized():
+            set_blur_regions_from_widget(self._blur_ctx, self, accuracy=1, erode=0)
         return False
 
     def apply_blur(self, enabled: bool) -> None:
         if enabled:
-            if self._blur_ctx is None:
+            if self._blur_ctx is None and self.get_realized():
                 self._blur_ctx = enable_blur(self)
+            if self._blur_ctx and self.get_realized():
                 self._update_blur_region()
         else:
             if self._blur_ctx is not None:
@@ -1732,7 +1737,7 @@ class Bar(Window):
                 free_blur(self._blur_ctx)
                 self._blur_ctx = None
 
-    def set_theme(self, theme_name: str) -> None:
+    def _set_theme_classes(self, theme_name: str) -> None:
         ctx = self._centerbox.get_style_context()
         for cls in (
             "bar-theme-liquid-glass",
@@ -1744,9 +1749,11 @@ class Bar(Window):
             ctx.remove_class(cls)
         ctx.add_class(f"bar-theme-{theme_name}")
 
+    def set_theme(self, theme_name: str) -> None:
+        self._set_theme_classes(theme_name)
         should_blur = getattr(user_options.settings, "bar_blur", True) if theme_name in ("liquid-glass", "blurred", "tinted-glass") else getattr(user_options.settings, "bar_blur", False)
         self.apply_blur(should_blur)
-        if self._blur_ctx:
+        if self._blur_ctx and self.get_realized():
             GLib.timeout_add(150, self._update_blur_region)
 
     def _on_button_release(self, widget, event: Gdk.EventButton):

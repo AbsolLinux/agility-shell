@@ -9,17 +9,22 @@ class Rect:
     height: int
 
 def trace_widget_regions(widget, accuracy=2, alpha_threshold=20, erode=4):
+    if not hasattr(widget, "get_realized") or not widget.get_realized():
+        return []
     alloc = widget.get_allocation()
     w, h = alloc.width, alloc.height
     if w <= 0 or h <= 0:
         return []
 
-    surface = cairo.ImageSurface(cairo.Format.ARGB32, w, h)
-    cr = cairo.Context(surface)
-    cr.set_operator(cairo.OPERATOR_CLEAR)
-    cr.paint()
-    cr.set_operator(cairo.OPERATOR_OVER)
-    widget.draw(cr)
+    try:
+        surface = cairo.ImageSurface(cairo.Format.ARGB32, w, h)
+        cr = cairo.Context(surface)
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        widget.draw(cr)
+    except Exception:
+        return []
 
     data   = surface.get_data()
     stride = surface.get_stride()
