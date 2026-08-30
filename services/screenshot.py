@@ -198,7 +198,7 @@ class ScreenshotService(Service):
         except Exception:
             pass
 
-        # Send notification with action buttons
+        # Send notification
         self._send_notification(filepath)
 
     def _send_notification(self, filepath: Path):
@@ -211,16 +211,9 @@ class ScreenshotService(Service):
             "-i", str(filepath),
             "Screenshot Captured",
             f"Saved to {filepath.name}\nCopied to clipboard",
-            "-A", "open=Open",
-            "-A", "folder=Show in Folder",
         ]
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-            action = proc.stdout.strip()
-            if action == "open":
-                subprocess.Popen(["xdg-open", str(filepath)])
-            elif action == "folder":
-                subprocess.Popen(["xdg-open", str(filepath.parent)])
+            subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         except Exception as e:
-            logger.debug(f"[ScreenshotService] Notification result handling: {e}")
+            logger.debug(f"[ScreenshotService] Notification send error: {e}")
