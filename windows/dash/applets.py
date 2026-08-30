@@ -155,11 +155,11 @@ class DashAppletItem(Button):
 
         if has_desktop:
             if not in_desktop:
-                item = Gtk.MenuItem(label="Add to Desktop")
+                item = Gtk.MenuItem(label="Add to Desktop (Beta)")
                 item.connect("activate", lambda _: page._place_on_desktop(self.key, mid))
                 menu.append(item)
             else:
-                item = Gtk.MenuItem(label="Remove from Desktop")
+                item = Gtk.MenuItem(label="Remove from Desktop (Beta)")
                 item.connect("activate", lambda _: page._remove_from_desktop(self.key, mid))
                 menu.append(item)
 

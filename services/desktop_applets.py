@@ -789,7 +789,7 @@ class DesktopAppletWindow(WaylandWindow):
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
-            return
+            self.remove_applet(key)
         placed = user_options.desktop_canvas.get_applets(self._monitor_id)
         entry = next((e for e in placed if e["key"] == key), None)
         if not entry:
@@ -1283,6 +1283,8 @@ class DesktopAppletService(Service):
             win.exit_canvas_mode(restore=restore)
 
     def get_window(self, monitor_id: int) -> "DesktopAppletWindow | None":
+        if monitor_id not in self._windows:
+            self._sync_monitors()
         return self._windows.get(monitor_id)
 
     def apply_desktop_widget_opacity(self, opacity: float) -> None:
