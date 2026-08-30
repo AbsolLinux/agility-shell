@@ -1120,6 +1120,7 @@ class DashSettingsPage(Box):
 
         for idx, b_cfg in enumerate(bars):
             align = b_cfg.get("alignment", "bottom").capitalize()
+            h_align = b_cfg.get("horizontal_alignment", "center").capitalize()
             is_active = (idx == self._selected_bar_index)
             btn = Button(
                 child=Box(
@@ -1127,7 +1128,7 @@ class DashSettingsPage(Box):
                     spacing=6,
                     children=[
                         Icon(icon_name="bar-duotone" if is_active else "app-window-duotone", icon_size=14),
-                        Label(label=f"Bar {idx + 1} ({align})", style="font-size: 12px; font-weight: 500;"),
+                        Label(label=f"Bar {idx + 1} ({align} {h_align})", style="font-size: 12px; font-weight: 500;"),
                     ],
                 ),
                 style_classes=["option-selection-button"] + (["active"] if is_active else []),
@@ -1137,10 +1138,10 @@ class DashSettingsPage(Box):
 
         self._bar_selector_container.add(pills_box)
 
-        # Action buttons: Add Bar (if < 2) & Delete Bar (if > 1)
+        # Action buttons: Add Bar (if < 6) & Delete Bar (if > 1)
         actions_box = Box(orientation="h", spacing=6, h_align="end", h_expand=True)
 
-        if len(bars) < 2:
+        if len(bars) < 6:
             add_bar_btn = Button(
                 child=Box(
                     orientation="h",
@@ -1397,11 +1398,16 @@ class DashSettingsPage(Box):
         if not cfg:
             return
         cfg["horizontal_alignment"] = h_align
+        if h_align in ("left", "right") and not cfg.get("min_width", False):
+            cfg["min_width"] = True
+            if hasattr(self, "_bar_minwidth_switch"):
+                self._bar_minwidth_switch.set_active(True)
         user_options.save()
         self._update_h_align_buttons(h_align)
         bm = self._bar_manager or singletons.bar_manager
         if bm and hasattr(bm, "reload_bars"):
             bm.reload_bars()
+        self._refresh_bar_selector_ui()
 
     def _on_bar_minwidth_toggled(self, state: bool):
         cfg = self._get_current_bar_cfg()

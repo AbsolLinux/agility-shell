@@ -1803,6 +1803,10 @@ class Bar(Window):
     def _set_horizontal_alignment(self, h_align: str):
         self.horizontal_alignment = h_align
         self.bar_config["horizontal_alignment"] = h_align
+        if h_align in ("left", "right") and not self.min_width:
+            self.min_width = True
+            self.bar_config["min_width"] = True
+            self._centerbox.add_style_class("min-width")
         self._apply_anchors()
         user_options.save()
         if self._blur_ctx:
@@ -1812,8 +1816,10 @@ class Bar(Window):
                 bars_list = cfg.get("bars")
                 if bars_list is not None and self.bar_index < len(bars_list):
                     bars_list[self.bar_index]["horizontal_alignment"] = h_align
+                    bars_list[self.bar_index]["min_width"] = self.min_width
                 else:
                     cfg["horizontal_alignment"] = h_align
+                    cfg["min_width"] = self.min_width
                 break
 
     def _show_context_menu(self, event: Gdk.EventButton):
@@ -1837,42 +1843,36 @@ class Bar(Window):
         min_width_item.connect("activate", lambda _: self._toggle_min_width())
         menu.append(min_width_item)
 
-        if self.min_width:
-            align_submenu = Gtk.Menu()
-            align_submenu.set_reserve_toggle_size(False)
-            current_h = self.bar_config.get("horizontal_alignment", "center")
-            for h_key, h_title in (("left", "Left Corner"), ("center", "Center"), ("right", "Right Corner")):
-                h_item = Gtk.MenuItem(label=f"✓ {h_title}" if h_key == current_h else h_title)
-                h_item.connect("activate", lambda _, k=h_key: self._set_horizontal_alignment(k))
-                align_submenu.append(h_item)
-            align_item = Gtk.MenuItem(label="Alignment")
-            align_item.set_submenu(align_submenu)
-            menu.append(align_item)
+        align_submenu = Gtk.Menu()
+        align_submenu.set_reserve_toggle_size(False)
+        current_h = self.bar_config.get("horizontal_alignment", "center")
+        for h_key, h_title in (("left", "Left Side"), ("center", "Center"), ("right", "Right Side")):
+            h_item = Gtk.MenuItem(label=f"✓ {h_title}" if h_key == current_h else h_title)
+            h_item.connect("activate", lambda _, k=h_key: self._set_horizontal_alignment(k))
+            align_submenu.append(h_item)
+        align_item = Gtk.MenuItem(label="Alignment")
+        align_item.set_submenu(align_submenu)
+        menu.append(align_item)
 
-        monitor_bars = [
-            bar for (m, _), bar in self._bar_manager._bars.items()
-            if bar.monitor_id == self.monitor_id
-        ] if self._bar_manager else []
-
-        if len(monitor_bars) == 2:
-            swap_item = Gtk.MenuItem(label="Swap Bars")
-            swap_item.connect("activate", lambda _: self._swap_bars())
-            menu.append(swap_item)
-        else:
-            other = "bottom" if self.alignment == "top" else "top"
-            move_item = Gtk.MenuItem(label=f"Move to {other.capitalize()}")
-            move_item.connect("activate", lambda _: self._set_alignment(other))
-            menu.append(move_item)
+        other = "bottom" if self.alignment == "top" else "top"
+        move_item = Gtk.MenuItem(label=f"Move to {other.capitalize()}")
+        move_item.connect("activate", lambda _: self._set_alignment(other))
+        menu.append(move_item)
 
         auto_hide_label = "Always Show" if self.auto_hide else "Auto Hide"
         auto_hide_item = Gtk.MenuItem(label=auto_hide_label)
         auto_hide_item.connect("activate", lambda _: self._toggle_auto_hide())
         menu.append(auto_hide_item)
 
-        remove_item = Gtk.MenuItem(label="Remove Bar")
-        remove_item.connect("activate", lambda _: self._request_remove())
+        monitor_bars = [
+            bar for (m, _), bar in self._bar_manager._bars.items()
+            if bar.monitor_id == self.monitor_id
+        ] if self._bar_manager else []
+
+        if len(monitor_bars) > 1:
+            remove_item = Gtk.MenuItem(label="Remove Bar")
+            remove_item.connect("activate", lambda _: self._request_remove())
         menu.connect("deactivate", self._on_menu_deactivate)
-        menu.append(remove_item)
         if user_options.theme.blur:
             popup_with_blur(menu, event)
         else:
@@ -2203,19 +2203,10 @@ class BarManager:
         self._dash.applets.refresh_bar_state()
 
     def _remove_bar(self, monitor: Gdk.Monitor, bar_index: int = None) -> None:
-        if bar_index is not None:
-            bar = self._bars.pop((monitor, bar_index), None)
-            if bar:
-                bar.destroy()
-        else:
-            for key in [k for k in self._bars if k[0] == monitor]:
-                self._bars.pop(key).destroy()
-
-        if self._dash:
-            self._dash.applets.refresh_bar_state()
+        self.reload_bars()
 
     def _cleanup_monitor(self, monitor: Gdk.Monitor) -> None:
-        for collection in (self._notifications):
+        for collection in (self._notifications, self._osds):
             widget = collection.pop(monitor, None)
             if widget:
                 widget.destroy()
@@ -2227,14 +2218,15 @@ class BarManager:
                 break
         return False
     
-    def _on_monitor_removed(self, display, monitor):
+    def _on_monitor_removed(self, display: Gdk.Display, monitor: Gdk.Monitor) -> None:
         for key in [k for k in self._bars if k[0] == monitor]:
-            self._bars.pop(key).destroy()
+            bar = self._bars.pop(key, None)
+            if bar:
+                bar.destroy()
 
         self._cleanup_monitor(monitor)
-
-    def _on_monitor_removed(self, display: Gdk.Display, monitor: Gdk.Monitor) -> None:
-        self._remove_bar(monitor)
+        if self._dash:
+            self._dash.applets.refresh_bar_state()
 
 
     def toggle(self, key: str):
@@ -2365,22 +2357,41 @@ class BarManager:
             None,
         )
 
-        existing_alignment = "top"
-        if monitor_cfg and monitor_cfg.get("bars"):
-            existing_alignment = monitor_cfg["bars"][0].get("alignment", "top")
+        existing_bars = monitor_cfg.get("bars", []) if monitor_cfg else []
+        if len(existing_bars) >= 6:
+            return
 
-        new_alignment = "bottom" if existing_alignment == "top" else "top"
+        slots_order = [
+            ("top", "center"),
+            ("bottom", "center"),
+            ("top", "left"),
+            ("top", "right"),
+            ("bottom", "left"),
+            ("bottom", "right"),
+        ]
+
+        used_slots = {
+            (b.get("alignment", "top"), b.get("horizontal_alignment", "center"))
+            for b in existing_bars
+        }
+
+        new_alignment, new_h_align = ("bottom", "center")
+        for align, h_align in slots_order:
+            if (align, h_align) not in used_slots:
+                new_alignment, new_h_align = align, h_align
+                break
 
         new_bar_cfg = {
             "alignment": new_alignment,
+            "horizontal_alignment": new_h_align,
             "floating_bar": False,
             "floating_applets": True,
             "rounded_edges": True,
-            "min_width": False,
+            "min_width": True,
             "auto_hide": False,
-            "left": [],
+            "left": ["Dash"],
             "center": [],
-            "right": [],
+            "right": [{"widget": "Clock", "variant": "icon+label"}],
         }
 
         if monitor_cfg is not None:
@@ -2392,8 +2403,7 @@ class BarManager:
             })
 
         user_options.save()
-
-        self._add_bar(monitor, monitor_id)
+        self.reload_bars()
     def set_bars_overlay(self, monitor):
         for (m, _), bar in self._bars.items():
             if m != monitor:

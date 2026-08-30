@@ -53,7 +53,7 @@ class UserOptions:
                                 "Weather",
                                 "Media"
                             ],
-                            "center": ["Dock"],
+                            "center": [],
                             "right": [
                                 "Tray",
                                 "Calendar",
@@ -84,7 +84,7 @@ class UserOptions:
                                 "Weather",
                                 "Media"
                             ],
-                            "center": ["Dock"],
+                            "center": [],
                             "right": [
                                 "Tray",
                                 "Calendar",
