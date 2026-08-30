@@ -16,6 +16,7 @@ from .workspaces import Workspaces
 from .calculator import CalculatorButton
 from .session import SessionButton
 from .keyboard import KeyboardButton
+from .screenshot import ScreenshotButton
 from .apps import LauncherButton
 from .dock import Dock
 from .dash import DashButton
@@ -44,6 +45,7 @@ __all__ = [
     "CalculatorButton",
     "SessionButton",
     "KeyboardButton",
+    "ScreenshotButton",
     "LauncherButton",
     "Dock",
     "DashButton",

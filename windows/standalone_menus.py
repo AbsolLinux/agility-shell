@@ -1,5 +1,5 @@
 from snippets.applet import Applet
-from .quick_settings.menus import AudioMenu, BluetoothMenu, PowerMenu, KeyboardMenu, LogoutMenu, WifiMenu
+from .quick_settings.menus import AudioMenu, BluetoothMenu, PowerMenu, KeyboardMenu, ScreenshotMenu, LogoutMenu, WifiMenu
 
 class AudioApplet(Applet):
     def __init__(self, *args, **kwargs):
@@ -16,6 +16,10 @@ class PowerApplet(Applet):
 class KeyboardApplet(Applet):
     def __init__(self, *args, **kwargs):
         super().__init__(main_menu=KeyboardMenu(stack=None), **kwargs)
+
+class ScreenshotApplet(Applet):
+    def __init__(self, *args, **kwargs):
+        super().__init__(main_menu=ScreenshotMenu(stack=None), **kwargs)
 
 class LogoutApplet(Applet):
     def __init__(self, parent,**kwargs):

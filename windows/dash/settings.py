@@ -29,6 +29,7 @@ WIDGET_ICONS: dict[str, str] = {
     "Session":       "power-duotone",
     "Calculator":    "calculator-duotone",
     "Keyboard":      "keyboard-duotone",
+    "Screenshot":    "camera-duotone",
     "Brightness":    "sun-dim-duotone",
     "Clipboard":     "clipboard-text-duotone",
     "Caffeine":      "coffee-duotone",
@@ -41,7 +42,7 @@ ALL_AVAILABLE_WIDGETS: list[str] = [
     "Dash", "Launcher", "SysMon", "Processes", "Clipboard", "Caffeine", "NightLight",
     "Media", "Weather", "Volume", "Brightness", "Energy", "Wifi", "Bluetooth",
     "Clock", "Calendar", "Notifications", "Settings", "Tray", "Dock", "Workspaces",
-    "Calculator", "Keyboard", "Session", "Focused"
+    "Calculator", "Keyboard", "Screenshot", "Session", "Focused"
 ]
 
 
@@ -1064,7 +1065,7 @@ class DashSettingsPage(Box):
         categories = {
             "System & Controls": ["SysMon", "Processes", "Volume", "Brightness", "Energy", "Wifi", "Bluetooth", "NightLight", "Caffeine"],
             "Navigation & Apps": ["Dash", "Launcher", "Workspaces", "Dock", "Focused"],
-            "Tools & Utilities": ["Clock", "Calendar", "Weather", "Media", "Notifications", "Clipboard", "Calculator", "Keyboard", "Settings", "Tray", "Session"],
+            "Tools & Utilities": ["Clock", "Calendar", "Weather", "Media", "Notifications", "Clipboard", "Calculator", "Keyboard", "Screenshot", "Settings", "Tray", "Session"],
         }
 
         for cat_name, w_list in categories.items():

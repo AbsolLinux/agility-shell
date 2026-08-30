@@ -3,9 +3,9 @@ from fabric.widgets.button import Button
 from snippets import Applet, AppletPage, Icon
 from icons import BatteryIcon
 from services.singletons import brightness, battery
-from .buttons import WifiButton, BluetoothButton, AirplaneModeButton, RecordButton, DarkModeButton, KeyboardButton, NightModeButton, CaffieneButton, PowerModes
+from .buttons import WifiButton, BluetoothButton, AirplaneModeButton, RecordButton, DarkModeButton, KeyboardButton, ScreenshotButton, NightModeButton, CaffieneButton, PowerModes
 from .sliders import BrightnessSlider, VolumeSlider, MicrophoneSlider
-from .menus import WifiMenu, BluetoothMenu, AudioMenu, KeyboardMenu, LogoutMenu, PowerMenu
+from .menus import WifiMenu, BluetoothMenu, AudioMenu, KeyboardMenu, ScreenshotMenu, LogoutMenu, PowerMenu
 
 
 class QuickSettingsMenu(AppletPage):
@@ -58,7 +58,7 @@ class QuickSettingsMenu(AppletPage):
                                 spacing=12,
                                 children=[
                                     BluetoothButton(stack=stack),
-                                    KeyboardButton(stack=stack),
+                                    ScreenshotButton(stack=stack),
                                     RecordButton(),
                                     PowerModes(),
                                 ],
@@ -80,6 +80,7 @@ class QuickSettings(Applet):
         self.add_menu("wifi", WifiMenu)
         self.add_menu("bt", BluetoothMenu)
         self.add_menu("audio", AudioMenu)
+        self.add_menu("screenshot", ScreenshotMenu)
         self.add_menu("kb", KeyboardMenu)
         self.add_named(LogoutMenu(self, parent), "logout")
         self.add_menu("power", PowerMenu)
