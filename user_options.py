@@ -199,7 +199,7 @@ class UserOptions:
             else:
                 return "center", grid_x - center_col
 
-        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int, ry: float, span_x: int | None = None, span_y: int | None = None, opacity: float | None = None, theme: str | None = None, color: str | None = None, variant: str | None = None) -> bool:
+        def place(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int, ry: float, span_x: int | None = None, span_y: int | None = None, opacity: float | None = None) -> bool:
             mid = str(monitor_id)
             if any(e["key"] == key for e in self.placements.get(mid, [])):
                 return False
@@ -216,12 +216,6 @@ class UserOptions:
                 entry["span_y"] = span_y
             if opacity is not None:
                 entry["opacity"] = opacity
-            if theme is not None:
-                entry["theme"] = theme
-            if color is not None:
-                entry["color"] = color
-            if variant is not None:
-                entry["variant"] = variant
             self.placements.setdefault(mid, []).append(entry)
             return True
 
@@ -234,7 +228,7 @@ class UserOptions:
             self.placements[mid] = after
             return True
 
-        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int = 12) -> None:
+        def move(self, monitor_id: int, key: str, grid_x: int, grid_y: int, cols: int) -> None:
             from desktop_applets import DESKTOP_CANVAS_SIZES
             for e in self.placements.get(str(monitor_id), []):
                 if e["key"] == key:
@@ -260,45 +254,6 @@ class UserOptions:
                 if e["key"] == key:
                     return e.get("opacity")
             return None
-
-        def set_theme(self, monitor_id: int, key: str, theme: str) -> bool:
-            for e in self.placements.get(str(monitor_id), []):
-                if e["key"] == key:
-                    e["theme"] = str(theme)
-                    return True
-            return False
-
-        def get_theme(self, monitor_id: int, key: str) -> str:
-            for e in self.placements.get(str(monitor_id), []):
-                if e["key"] == key:
-                    return e.get("theme", "normal")
-            return "normal"
-
-        def set_color(self, monitor_id: int, key: str, color: str) -> bool:
-            for e in self.placements.get(str(monitor_id), []):
-                if e["key"] == key:
-                    e["color"] = str(color)
-                    return True
-            return False
-
-        def get_color(self, monitor_id: int, key: str) -> str:
-            for e in self.placements.get(str(monitor_id), []):
-                if e["key"] == key:
-                    return e.get("color", "")
-            return ""
-
-        def set_variant(self, monitor_id: int, key: str, variant: str) -> bool:
-            for e in self.placements.get(str(monitor_id), []):
-                if e["key"] == key:
-                    e["variant"] = str(variant)
-                    return True
-            return False
-
-        def get_variant(self, monitor_id: int, key: str) -> str:
-            for e in self.placements.get(str(monitor_id), []):
-                if e["key"] == key:
-                    return e.get("variant", "")
-            return ""
 
         def set_span(self, monitor_id: int, key: str, span_x: int, span_y: int) -> bool:
             for e in self.placements.get(str(monitor_id), []):

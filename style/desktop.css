@@ -1,120 +1,36 @@
-/* ==========================================================================
-   Agility Shell - Desktop Widgets Stylesheet
-   Supports: Google Pixel (Material You) & Nothing OS Aesthetics
-   Surfaces: Normal (Solid), Blur (Frosted), Glassy, Transparent, AMOLED, Tonal
-   ========================================================================== */
-
-/* ── Base Desktop Widget ─────────────────────────────────────────────────── */
-
 .desktop-applet {
-    padding: 16px;
+    padding: 18px;
     background-color: var(--background);
     min-width: 138px;
     min-height: 138px;
     border-radius: apply(radius-xl);
     box-shadow: inset 0 0 0 1px var(--outline_variant);
-    transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1.0);
 }
 
 .desktop-applet.large {
     min-width: 324px;
 }
 
-/* ── Surface Themes ──────────────────────────────────────────────────────── */
-
-/* 1. Normal (Solid Adaptive Surface) */
-.desktop-applet-surface-normal {
-    background-color: var(--surface_container);
-    border-radius: apply(radius-xl);
-    box-shadow: inset 0 0 0 1px var(--outline_variant);
+.desktop-date-label {
+    font-size: 20px;
+    min-height: 28px;
 }
 
-/* 2. Blur (Frosted Glass) */
-.desktop-applet-surface-blur {
-    background-color: alpha(var(--background), 0.72);
-    border-radius: apply(radius-xl);
-    box-shadow: inset 0 0 0 1px alpha(var(--outline), 0.35);
+.desktop-date-label.day {
+    opacity: 0.6;
 }
 
-/* 3. Glassy (Glossy Translucent with Specular Reflection) */
-.desktop-applet-surface-glassy {
-    background-color: alpha(var(--surface_container_high), 0.45);
-    border-radius: apply(radius-xl);
-    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.25),
-                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.2),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-                0 8px 32px 0 rgba(0, 0, 0, 0.25);
-}
-
-/* 4. Transparent (Nothing OS Minimalist Outlined) */
-.desktop-applet-surface-transparent {
-    background-color: transparent;
-    border-radius: apply(radius-xl);
-    box-shadow: inset 0 0 0 1.5px alpha(var(--outline), 0.45);
-}
-
-/* 5. AMOLED Stark (Nothing OS Pitch Black) */
-.desktop-applet-surface-amoled {
-    background-color: #000000;
-    border-radius: apply(radius-xl);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-/* 6. Material Tonal (Google Pixel Soft Pastel Container) */
-.desktop-applet-surface-tonal {
-    background-color: var(--secondary_container);
-    border-radius: apply(radius-xl);
-    box-shadow: inset 0 0 0 1px alpha(var(--on_secondary_container), 0.08);
-}
-
-/* ── Typography & Nothing Dot-Matrix Accents ─────────────────────────────── */
-
-.nothing-dot-matrix {
-    font-family: "NDOT 57", "Nothing Phone (57)", "Dotted", monospace, apply(mixed-mono);
-    font-weight: 700;
-    letter-spacing: 2px;
-}
-
-.nothing-red-accent {
-    color: #EB0029;
-}
-
-.nothing-header-badge {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: #EB0029;
-    opacity: 0.95;
-}
-
-.pixel-header-badge {
-    font-size: 11px;
+.desktop-date-label.date {
     font-weight: 600;
-    color: var(--primary);
-    opacity: 0.9;
+    font-size: 32px;
+    min-height: 42px;
+    font-family: apply(mixed-mono);
 }
-
-/* ── Sub-module Card Containers ─────────────────────────────────────────── */
 
 .desktop-system-module {
-    background-color: var(--surface_container_high);
+    background-color: var(--surface_container);
     border-radius: apply(radius-m);
-    padding: 8px 10px;
-    box-shadow: inset 0 0 0 1px alpha(var(--outline_variant), 0.5);
-}
-
-.desktop-system-module.tonal {
-    background-color: alpha(var(--primary), 0.12);
-    border-radius: apply(radius-m);
-    padding: 8px 10px;
-}
-
-.desktop-system-module.amoled {
-    background-color: #121212;
-    border-radius: apply(radius-m);
-    box-shadow: inset 0 0 0 1px #262626;
-    padding: 8px 10px;
+    padding: 6px;
 }
 
 .desktop-system-module-label {
@@ -134,153 +50,9 @@
     opacity: 0.8;
 }
 
-/* ── Date Labels ─────────────────────────────────────────────────────────── */
-
-.desktop-date-label {
-    font-size: 20px;
-    min-height: 28px;
-}
-
-.desktop-date-label.day {
-    opacity: 0.7;
-    font-weight: 500;
-}
-
-.desktop-date-label.date {
-    font-weight: 700;
-    font-size: 36px;
-    min-height: 44px;
-    font-family: apply(mixed-mono);
-}
-
-.desktop-date-label.month {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-
-/* ── Battery Labels ──────────────────────────────────────────────────────── */
-
 .desktop-battery-label {
-    font-size: 22px;
-    min-height: 32px;
-    font-weight: 700;
-    font-family: apply(mixed-mono);
-}
-
-.desktop-battery-status {
-    font-size: 11px;
-    opacity: 0.75;
-    font-weight: 500;
-}
-
-/* ── Pixel At-a-Glance Widget ────────────────────────────────────────────── */
-
-.pixel-glance-pill {
-    background-color: alpha(var(--surface_container_high), 0.6);
-    border-radius: 20px;
-    padding: 6px 12px;
-    box-shadow: inset 0 0 0 1px alpha(var(--outline_variant), 0.4);
-}
-
-.pixel-glance-time {
-    font-size: 28px;
-    font-weight: 800;
-    font-family: apply(mixed-mono);
-}
-
-.pixel-glance-date {
-    font-size: 13px;
-    font-weight: 600;
-    opacity: 0.85;
-}
-
-.pixel-glance-weather {
-    font-size: 13px;
-    font-weight: 700;
-}
-
-/* ── Quick Toggle Buttons (Pixel / Nothing) ──────────────────────────────── */
-
-.quick-toggle-tile {
-    background-color: var(--surface_container_high);
-    border-radius: apply(radius-m);
-    padding: 8px;
-    min-height: 48px;
-    box-shadow: inset 0 0 0 1px alpha(var(--outline_variant), 0.4);
-    transition: all 0.15s ease-in-out;
-}
-
-.quick-toggle-tile:hover {
-    background-color: var(--surface_container_highest);
-}
-
-.quick-toggle-tile.active {
-    background-color: var(--primary);
-    color: var(--on_primary);
-    box-shadow: 0 2px 8px alpha(var(--primary), 0.35);
-}
-
-.quick-toggle-tile.active-nothing {
-    background-color: #EB0029;
-    color: #FFFFFF;
-    box-shadow: 0 2px 8px rgba(235, 0, 41, 0.4);
-}
-
-/* ── Media Player Desktop Card ───────────────────────────────────────────── */
-
-.desktop-media-card {
-    border-radius: apply(radius-xl);
-}
-
-.desktop-media-art {
-    border-radius: 14px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-.desktop-media-title {
-    font-size: 13px;
-    font-weight: 700;
-}
-
-.desktop-media-artist {
-    font-size: 11px;
-    opacity: 0.75;
-}
-
-.desktop-media-btn {
-    border-radius: 50%;
-    min-width: 32px;
-    min-height: 32px;
-    padding: 6px;
-    background-color: var(--surface_container_high);
-}
-
-.desktop-media-btn.play {
-    background-color: var(--primary);
-    color: var(--on_primary);
-    min-width: 36px;
+    font-size: 24px;
     min-height: 36px;
-}
-
-/* ── Hardware Telemetry Graphs ───────────────────────────────────────────── */
-
-.desktop-sysmon-card {
-    background-color: alpha(var(--surface_container_high), 0.5);
-    border-radius: apply(radius-m);
-    padding: 8px 10px;
-    box-shadow: inset 0 0 0 1px alpha(var(--outline_variant), 0.35);
-}
-
-.desktop-sysmon-val {
-    font-size: 12px;
-    font-weight: 700;
-    font-family: apply(mixed-mono);
-}
-
-.desktop-sysmon-sub {
-    font-size: 10px;
-    opacity: 0.7;
+    font-weight: 600;
     font-family: apply(mixed-mono);
 }
