@@ -16,6 +16,7 @@ from .processes import ProcessMonitorService
 from .themes import ThemeService
 from .night_mode import NightModeService
 from .recorder import RecorderService
+from .screenshot import ScreenshotService
 from .bluetooth import BluetoothClient
 from .system_tray import SystemTray
 from .clipboard import ClipboardService
@@ -44,6 +45,7 @@ timer = TimerService()
 process_monitor = ProcessMonitorService()
 night_mode = NightModeService()
 recorder = RecorderService()
+screenshot = ScreenshotService()
 watcher = SystemTray()
 clipboard = ClipboardService()
 caffeine = CaffeineService()

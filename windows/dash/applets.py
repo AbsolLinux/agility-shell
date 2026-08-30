@@ -34,6 +34,7 @@ ALL_BEAN_DATA: list[tuple[str, str]] = getattr(bar, "ALL_BEAN_DATA", [
     ("power-duotone",                   "Session"),
     ("lightning-duotone",               "Energy"),
     ("keyboard-duotone",                "Keyboard"),
+    ("camera-duotone",                  "Screenshot"),
     ("wifi-high-duotone",               "Wifi"),
     ("bluetooth-duotone",               "Bluetooth"),
     ("speaker-simple-high-duotone",     "Volume"),

@@ -1,4 +1,4 @@
-from .standalone_menus import AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet, WifiApplet, LogoutApplet
+from .standalone_menus import AudioApplet, PowerApplet, KeyboardApplet, ScreenshotApplet, BluetoothApplet, WifiApplet, LogoutApplet
 from .calculator import CalculatorApplet
 from .calendar import CalendarApplet
 from .launcher import LauncherApplet
@@ -33,5 +33,6 @@ __all__ = [
     "AudioApplet",
     "PowerApplet",
     "KeyboardApplet",
+    "ScreenshotApplet",
     "BluetoothApplet"
 ]

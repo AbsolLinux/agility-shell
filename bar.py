@@ -13,7 +13,7 @@ from bar_widgets import (
     LauncherButton, BluetoothButton, BatteryButton, CalendarButton, ClockButton,
     CPUIndicatorButton, NetworkButton, NotificationButton, Workspaces,
     NiriClientTitle, Media, QuickSettingsButton, WeatherButton, VolumeButton,
-    CalculatorButton, SessionButton, KeyboardButton, SystemTray, Dock, BrightnessButton, DashButton,
+    CalculatorButton, SessionButton, KeyboardButton, ScreenshotButton, SystemTray, Dock, BrightnessButton, DashButton,
     ClipboardButton, CaffeineButton, SysMonButton, NightLightButton
 )
 from user_options import user_options
@@ -28,7 +28,7 @@ from windows.quick_settings import QuickSettings
 from windows.launcher import LauncherApplet
 from windows.process_monitor import ProcessMonitorApplet
 from windows.standalone_menus import (
-    WifiApplet, LogoutApplet, AudioApplet, PowerApplet, KeyboardApplet, BluetoothApplet
+    WifiApplet, LogoutApplet, AudioApplet, PowerApplet, KeyboardApplet, ScreenshotApplet, BluetoothApplet
 )
 from windows.notifications import NotificationWindow
 from windows.osd import OSD
@@ -58,6 +58,7 @@ BAR_WIDGETS: dict[str, type] = {
     "Session":       SessionButton,
     "Calculator":    CalculatorButton,
     "Keyboard":      KeyboardButton,
+    "Screenshot":    ScreenshotButton,
     "Dock":          Dock,
     "Brightness":    BrightnessButton,
     "Dash":          DashButton,
@@ -81,6 +82,7 @@ APPLET_WIDGETS: dict[str, type] = {
     "Energy":        PowerApplet,
     "Calculator":    CalculatorApplet,
     "Keyboard":      KeyboardApplet,
+    "Screenshot":    ScreenshotApplet,
     "Launcher":      LauncherApplet,
     "Processes":     ProcessMonitorApplet,
     "Clipboard":     ClipboardApplet,
@@ -92,6 +94,7 @@ INCOMPATIBLE_GROUPS: set[frozenset] = {
     frozenset({"Settings", "Energy"}),
     frozenset({"Settings", "Volume"}),
     frozenset({"Settings", "Keyboard"}),
+    frozenset({"Settings", "Screenshot"}),
     frozenset({"Settings", "Session"}),
     frozenset({"Processes", "Launcher"}),
 }
@@ -119,6 +122,7 @@ ALL_BEAN_DATA: list[tuple[str, str]] = [
     ("power-duotone",                   "Session"),
     ("lightning-duotone",               "Energy"),
     ("keyboard-duotone",                "Keyboard"),
+    ("camera-duotone",                  "Screenshot"),
     ("wifi-high-duotone",               "Wifi"),
     ("bluetooth-duotone",               "Bluetooth"),
     ("speaker-simple-high-duotone",     "Volume"),
