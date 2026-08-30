@@ -114,18 +114,17 @@ class DashDismissLayer(Window):
             )
 
             menu = Gtk.Menu()
-            if bar_count < 2:
+            if bar_count < 6:
                 add_item = Gtk.MenuItem(label="Add Bar")
                 add_item.connect(
                     "activate",
                     lambda _: (
                         self._bar_manager.add_bar_for_monitor(active_monitor),
-                        self._bar_manager.set_bars_overlay(active_monitor),
                     ),
                 )
                 menu.append(add_item)
             else:
-                item = Gtk.MenuItem(label="Maximum bars (2) reached on this monitor")
+                item = Gtk.MenuItem(label="Maximum bars (6) reached on this monitor")
                 item.set_sensitive(False)
                 menu.append(item)
 
@@ -363,7 +362,14 @@ class Dash(Window):
             self.h_group_1.get_visible_child() is self.applets
             and self.v_stack.get_visible_child() is not self.h_group_2
         )
-        edit_mode.enable() if on_applets else edit_mode.disable()
+        if on_applets:
+            edit_mode.enable()
+            if self._active_monitor is not None:
+                self._bar_manager.set_bars_overlay(self._active_monitor)
+        else:
+            edit_mode.disable()
+            if self._active_monitor is not None:
+                self._bar_manager.set_bars_top(self._active_monitor)
         if self.h_group_1.get_visible_child() is not self.launcher:
             self.launcher.exit_drag_receive_mode()
 
@@ -413,7 +419,14 @@ class Dash(Window):
             self.revealer.open()
 
             if active_monitor is not None:
-                self._bar_manager.set_bars_overlay(active_monitor)
+                on_applets = (
+                    self.h_group_1.get_visible_child() is self.applets
+                    and self.v_stack.get_visible_child() is not self.h_group_2
+                )
+                if on_applets:
+                    self._bar_manager.set_bars_overlay(active_monitor)
+                else:
+                    self._bar_manager.set_bars_top(active_monitor)
 
             GLib.timeout_add(300, self._clear_opening)
 
