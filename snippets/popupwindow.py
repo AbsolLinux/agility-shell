@@ -44,7 +44,7 @@ class PopupWindow(WaylandWindow):
         self._parent = parent
         self._pointing_widget = pointing_to
         self._base_margin = self.extract_margin(margin)
-        self.margin = self._base_margin.values()
+        self.margin = tuple(self._base_margin.values()) if hasattr(self._base_margin, "values") else self._base_margin
         self._initial_position = True
 
         self.connect("notify::visible", self.do_update_handlers)
@@ -79,6 +79,12 @@ class PopupWindow(WaylandWindow):
                 pass
             return
 
+        try:
+            self._pointing_widget.disconnect_by_func(self.do_handle_size_allocate)
+            self.disconnect_by_func(self.do_handle_size_allocate)
+        except Exception:
+            pass
+
         self._pointing_widget.connect("size-allocate", self.do_handle_size_allocate)
         self.connect("size-allocate", self.do_handle_size_allocate)
 
@@ -90,7 +96,7 @@ class PopupWindow(WaylandWindow):
         return False
 
     def do_handle_size_allocate(self, *_):
-        if self.get_visible() and not self._initial_position:
+        if not self.get_visible():
             return
         return self.do_reposition(self.do_calculate_edges())
 
@@ -120,8 +126,15 @@ class PopupWindow(WaylandWindow):
 
         monitor_x, monitor_width, monitor_height = _get_monitor_geometry(self._parent)
         width = self.get_allocated_width()
+        if width <= 1 and hasattr(self, "_content_box"):
+            width = self._content_box.get_preferred_size()[1].width
+        if width <= 1:
+            width = self.get_preferred_size()[1].width
+
         height = self.get_allocated_height()
         bar_width = self._parent.get_allocated_width()
+        if bar_width <= 1:
+            bar_width = self._parent.get_preferred_size()[1].width
 
         parent_margin = self._parent.margin if hasattr(self._parent, "margin") else (0, 0, 0, 0)
         parent_margin_vals = tuple(parent_margin) if hasattr(parent_margin, "__iter__") else (0, 0, 0, 0)
@@ -169,8 +182,11 @@ class PopupWindow(WaylandWindow):
         )
 
         if is_bottom:
-            self.margin = (0, max(0, base_right), max(0, base_bottom), max(0, clamped_left + base_left))
+            new_margin = (0, max(0, base_right), max(0, base_bottom), max(0, clamped_left + base_left))
         else:
-            self.margin = (max(0, base_top), max(0, base_right), 0, max(0, clamped_left + base_left))
+            new_margin = (max(0, base_top), max(0, base_right), 0, max(0, clamped_left + base_left))
+
+        if self.margin != new_margin:
+            self.margin = new_margin
 
         self._initial_position = False

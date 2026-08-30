@@ -360,7 +360,8 @@ class DesktopAppletWindow(WaylandWindow):
             return
         from .singletons import style_service
 
-        style_service.connect("notify::style-changed", self._retrace_blur)
+        if style_service is not None:
+            style_service.connect("notify::style-changed", self._retrace_blur)
 
         self._blur_ctx = enable_blur(self)
         if not self._blur_ctx:
