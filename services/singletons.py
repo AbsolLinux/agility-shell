@@ -49,4 +49,7 @@ clipboard = ClipboardService()
 caffeine = CaffeineService()
 sysmon = SysMonService()
 wallpaper_service = WallpaperService.get_instance()
+
+from .desktop_applets import DesktopAppletService
+desktop_applets = DesktopAppletService.get_instance()
 idle.start()

@@ -268,9 +268,7 @@ class DesktopAppletWindow(WaylandWindow):
     def _initial_build(self) -> bool:
         self._ready = True
         self.recalculate_grid()
-        self._fixed.show_all()
-        self._overlay.show_all()
-        self._canvas_da.hide()
+        self.rebuild()
         return False
 
     def _apply_blur(self) -> None:
@@ -527,7 +525,7 @@ class DesktopAppletWindow(WaylandWindow):
             # Apply custom styles (opacity, custom color)
             custom_css = []
             if color:
-                custom_css.append(f"@define-color primary {color}; @define-color accent {color}; @define-color on_primary #FFFFFF; * {{ color: @primary; }}")
+                custom_css.append(f"* {{ color: {color}; }}")
             if op < 1.0:
                 custom_css.append(f"* {{ opacity: {op:.2f}; }}")
             
@@ -659,7 +657,7 @@ class DesktopAppletWindow(WaylandWindow):
 
     def add_applet(self, key: str, grid_x: int, grid_y: int) -> None:
         if key in self._children:
-            return
+            self.remove_applet(key)
         placed = user_options.desktop_canvas.get_applets(self._monitor_id)
         entry = next((e for e in placed if e["key"] == key), None)
         if not entry:
@@ -745,7 +743,7 @@ class DesktopAppletWindow(WaylandWindow):
                 op = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
             custom_css = []
             if color:
-                custom_css.append(f"@define-color primary {color}; @define-color accent {color}; @define-color on_primary #FFFFFF; * {{ color: @primary; }}")
+                custom_css.append(f"* {{ color: {color}; }}")
             if op < 1.0:
                 custom_css.append(f"* {{ opacity: {op:.2f}; }}")
             widget.set_style(" ".join(custom_css))
@@ -1338,6 +1336,8 @@ class DesktopAppletService(Service):
             win.exit_canvas_mode(restore=restore)
 
     def get_window(self, monitor_id: int) -> "DesktopAppletWindow | None":
+        if monitor_id not in self._windows:
+            self._sync_monitors()
         return self._windows.get(monitor_id)
 
     def apply_desktop_widget_opacity(self, opacity: float) -> None:
