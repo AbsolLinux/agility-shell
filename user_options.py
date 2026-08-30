@@ -19,8 +19,10 @@ class UserOptions:
             self.hover_widgets = [
                 "Dash", "Launcher", "SysMon", "Processes", "Clipboard", "Caffeine", "NightLight",
                 "Media", "Weather", "Volume", "Brightness", "Energy", "Wifi", "Bluetooth",
-                "Clock", "Calendar", "Notifications", "Settings", "Tray", "Calculator", "Keyboard", "Session"
+                "Clock", "Calendar", "Notifications", "Settings", "Tray", "Calculator", "Keyboard", "Screenshot", "Session"
             ]
+            self.bar_theme = "default"
+            self.bar_blur = True
             self.bar_opacity = 1.0
             self.widget_opacity = 1.0
             self.desktop_widget_opacity = 1.0

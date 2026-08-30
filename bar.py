@@ -1652,7 +1652,10 @@ class Bar(Window):
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
         self.gdk_monitor = monitor
         self.set_opacity(getattr(user_options.settings, "bar_opacity", 1.0))
-        if user_options.theme.blur:
+        current_theme = getattr(user_options.settings, "bar_theme", "default")
+        self.set_theme(current_theme)
+        should_blur = getattr(user_options.settings, "bar_blur", user_options.theme.blur)
+        if should_blur:
             self._blur_ctx = enable_blur(self)
             GLib.timeout_add(1500, self._update_blur_region)
 
@@ -1728,6 +1731,23 @@ class Bar(Window):
                 disable_blur(self._blur_ctx)
                 free_blur(self._blur_ctx)
                 self._blur_ctx = None
+
+    def set_theme(self, theme_name: str) -> None:
+        ctx = self._centerbox.get_style_context()
+        for cls in (
+            "bar-theme-liquid-glass",
+            "bar-theme-blurred",
+            "bar-theme-transparent",
+            "bar-theme-tinted-glass",
+            "bar-theme-default",
+        ):
+            ctx.remove_class(cls)
+        ctx.add_class(f"bar-theme-{theme_name}")
+
+        should_blur = getattr(user_options.settings, "bar_blur", True) if theme_name in ("liquid-glass", "blurred", "tinted-glass") else getattr(user_options.settings, "bar_blur", False)
+        self.apply_blur(should_blur)
+        if self._blur_ctx:
+            GLib.timeout_add(150, self._update_blur_region)
 
     def _on_button_release(self, widget, event: Gdk.EventButton):
         if event.button == 2:
@@ -2318,6 +2338,10 @@ class BarManager:
     def apply_blur(self, enabled: bool) -> None:
         for bar in self._bars.values():
             bar.apply_blur(enabled)
+
+    def apply_bar_theme(self, theme_name: str) -> None:
+        for bar in self._bars.values():
+            bar.set_theme(theme_name)
 
     def add_bar_for_monitor(self, monitor: Gdk.Monitor) -> None:
         monitor_id = None

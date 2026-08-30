@@ -109,6 +109,150 @@ class BarWidgetChip(Box):
         )
 
 
+BAR_THEME_PRESETS = [
+    {
+        "id": "liquid-glass",
+        "name": "Liquid Glass",
+        "desc": "Glass reflection highlights with backdrop blur",
+        "icon": "drop-duotone",
+        "bar_opacity": 0.35,
+        "widget_opacity": 0.55,
+        "blur": True,
+    },
+    {
+        "id": "blurred",
+        "name": "Frosted Blur",
+        "desc": "Deep frosted milky blur with soft containers",
+        "icon": "cloud-fog-duotone",
+        "bar_opacity": 0.65,
+        "widget_opacity": 0.75,
+        "blur": True,
+    },
+    {
+        "id": "transparent",
+        "name": "Pure Clear",
+        "desc": "Invisible bar with floating pill widgets",
+        "icon": "frame-corners-duotone",
+        "bar_opacity": 0.0,
+        "widget_opacity": 0.85,
+        "blur": False,
+    },
+    {
+        "id": "tinted-glass",
+        "name": "Tinted Glass",
+        "desc": "Accent-tinted glass with subtle glow",
+        "icon": "palette-duotone",
+        "bar_opacity": 0.45,
+        "widget_opacity": 0.60,
+        "blur": True,
+    },
+    {
+        "id": "default",
+        "name": "Classic Solid",
+        "desc": "Standard solid Material theme styling",
+        "icon": "square-duotone",
+        "bar_opacity": 1.0,
+        "widget_opacity": 1.0,
+        "blur": False,
+    },
+]
+
+
+class BarThemeCard(Button):
+    def __init__(
+        self,
+        theme_id: str,
+        title: str,
+        description: str,
+        icon_name: str,
+        is_active: bool,
+        on_select,
+        **kwargs,
+    ):
+        self.theme_id = theme_id
+        self._on_select = on_select
+
+        self._icon = Icon(icon_name=icon_name, icon_size=20)
+        self._title_label = Label(
+            label=title,
+            style_classes=["bar-theme-card-title"],
+            style="font-size: 13px; font-weight: 600;",
+            h_align="start",
+        )
+        self._desc_label = Label(
+            label=description,
+            style="font-size: 10.5px; opacity: 0.65;",
+            h_align="start",
+            line_wrap="word-char",
+        )
+        self._desc_label.set_lines(2)
+
+        header_box = Box(
+            orientation="h",
+            spacing=8,
+            h_align="fill",
+            children=[
+                self._icon,
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[self._title_label],
+                ),
+            ],
+        )
+
+        preview_box = Box(
+            style_classes=["bar-theme-preview-box", theme_id],
+            h_align="fill",
+            h_expand=True,
+            children=[
+                Box(
+                    orientation="h",
+                    spacing=4,
+                    h_align="center",
+                    children=[
+                        Box(style="min-width: 14px; min-height: 8px; border-radius: 3px; background: rgba(255,255,255,0.3);"),
+                        Box(style="min-width: 24px; min-height: 8px; border-radius: 3px; background: rgba(255,255,255,0.3);"),
+                        Box(style="min-width: 14px; min-height: 8px; border-radius: 3px; background: rgba(255,255,255,0.3);"),
+                    ],
+                )
+            ],
+        )
+
+        card_content = Box(
+            orientation="v",
+            spacing=6,
+            children=[
+                header_box,
+                self._desc_label,
+                preview_box,
+            ],
+        )
+
+        classes = ["bar-theme-card"]
+        if is_active:
+            classes.append("active")
+
+        super().__init__(
+            style_classes=classes,
+            child=card_content,
+            on_clicked=self._clicked,
+            h_expand=True,
+            **kwargs,
+        )
+
+    def _clicked(self, *_):
+        self._on_select(self.theme_id)
+
+    def set_active_state(self, active: bool):
+        if active:
+            self.add_style_class("active")
+        else:
+            self.remove_style_class("active")
+
+
 class DashSettingsPage(Box):
     """
     Dash settings page for configuring:
@@ -288,8 +432,70 @@ class DashSettingsPage(Box):
         )
 
         # =====================================================================
-        # Section 2: Bar Appearance & Transparency
+        # Section 2: Bar Themes & Appearance
         # =====================================================================
+        current_bar_theme = getattr(user_options.settings, "bar_theme", "default")
+        self._bar_theme_cards: dict[str, BarThemeCard] = {}
+
+        theme_cards_box = Box(orientation="h", spacing=8, h_align="fill", h_expand=True)
+        for preset in BAR_THEME_PRESETS:
+            card = BarThemeCard(
+                theme_id=preset["id"],
+                title=preset["name"],
+                description=preset["desc"],
+                icon_name=preset["icon"],
+                is_active=(preset["id"] == current_bar_theme),
+                on_select=self._on_bar_theme_selected,
+            )
+            self._bar_theme_cards[preset["id"]] = card
+            theme_cards_box.add(card)
+
+        bar_theme_selector_row = Box(
+            orientation="v",
+            spacing=8,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    children=[
+                        Label(label="Bar Style Preset", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Choose an aesthetic theme for the bar (Liquid Glass, Frosted Blur, Transparent, Tinted, Solid)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                theme_cards_box,
+            ],
+        )
+
+        self._bar_blur_switch = SmoothSwitch(
+            style_classes=["dash-switch"],
+            v_expand=True,
+            v_align="center",
+            on_user_toggle=self._on_bar_blur_toggled,
+            width=48,
+        )
+        self._bar_blur_switch.set_active(getattr(user_options.settings, "bar_blur", True))
+
+        bar_blur_row = Box(
+            orientation="h",
+            spacing=6,
+            h_align="fill",
+            children=[
+                Box(
+                    orientation="v",
+                    spacing=2,
+                    h_align="start",
+                    h_expand=True,
+                    children=[
+                        Label(label="Bar Background Blur", style_classes=["dim-label"], h_align="start"),
+                        Label(label="Enable hardware-accelerated backdrop blur behind the bar", style="font-size: 11px; opacity: 0.6;", h_align="start"),
+                    ],
+                ),
+                Box(h_align="end", children=[self._bar_blur_switch]),
+            ],
+        )
+
         current_bar_opacity = getattr(user_options.settings, "bar_opacity", 1.0)
         self._bar_opacity_slider = FlatScale(
             style_classes=["scale"],
@@ -384,8 +590,8 @@ class DashSettingsPage(Box):
         )
 
         bar_appearance_section = Section(
-            title="Appearance & Opacity",
-            children=[bar_opacity_row, widget_opacity_row, desktop_opacity_row],
+            title="Bar Themes & Appearance",
+            children=[bar_theme_selector_row, bar_blur_row, bar_opacity_row, widget_opacity_row, desktop_opacity_row],
         )
 
         # =====================================================================
@@ -1234,6 +1440,45 @@ class DashSettingsPage(Box):
     def _on_delay_changed(self, _scale, val: float):
         user_options.settings.hover_delay = int(val)
         user_options.save()
+
+    def _on_bar_theme_selected(self, theme_id: str):
+        preset = next((p for p in BAR_THEME_PRESETS if p["id"] == theme_id), None)
+        if not preset:
+            return
+
+        user_options.settings.bar_theme = theme_id
+        user_options.settings.bar_opacity = preset["bar_opacity"]
+        user_options.settings.widget_opacity = preset["widget_opacity"]
+        user_options.settings.bar_blur = preset["blur"]
+        user_options.save()
+
+        for tid, card in getattr(self, "_bar_theme_cards", {}).items():
+            card.set_active_state(tid == theme_id)
+
+        if hasattr(self, "_bar_opacity_slider"):
+            self._bar_opacity_slider.set_value(preset["bar_opacity"])
+        if hasattr(self, "_widget_opacity_slider"):
+            self._widget_opacity_slider.set_value(preset["widget_opacity"])
+        if hasattr(self, "_bar_blur_switch"):
+            self._bar_blur_switch.set_active(preset["blur"])
+
+        bm = self._bar_manager or singletons.bar_manager
+        if bm:
+            if hasattr(bm, "apply_bar_theme"):
+                bm.apply_bar_theme(theme_id)
+            if hasattr(bm, "apply_bar_opacity"):
+                bm.apply_bar_opacity(preset["bar_opacity"])
+            if hasattr(bm, "apply_widget_opacity"):
+                bm.apply_widget_opacity(preset["widget_opacity"])
+            if hasattr(bm, "apply_blur"):
+                bm.apply_blur(preset["blur"])
+
+    def _on_bar_blur_toggled(self, state: bool):
+        user_options.settings.bar_blur = state
+        user_options.save()
+        bm = self._bar_manager or singletons.bar_manager
+        if bm and hasattr(bm, "apply_blur"):
+            bm.apply_blur(state)
 
     def _on_bar_opacity_changed(self, _scale, val: float):
         opacity = max(0.0, min(1.0, float(val)))
