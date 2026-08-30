@@ -123,6 +123,105 @@
     transition: 0.3s ease;
 }
 
+/* =========================================================================
+   Bar Themes
+   ========================================================================= */
+
+/* 1. Liquid Glass */
+.bar.bar-theme-liquid-glass {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.30), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25), 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+    transition: all 0.3s ease;
+}
+
+.bar.bar-theme-liquid-glass .bar-widget {
+    background-color: alpha(var(--surface_container), 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.22), 0 2px 8px 0 rgba(0, 0, 0, 0.12);
+    transition: all 0.25s ease;
+}
+
+.bar.bar-theme-liquid-glass .bar-widget.hovered {
+    background-color: alpha(var(--surface_container_high), 0.65);
+    border-color: rgba(255, 255, 255, 0.30);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.40), 0 4px 12px 0 rgba(0, 0, 0, 0.18);
+}
+
+.bar.bar-theme-liquid-glass .bar-widget.applet-open {
+    background-color: alpha(var(--surface_container_highest), 0.75);
+    border-color: var(--primary);
+}
+
+/* 2. Blurred / Frosted Glass */
+.bar.bar-theme-blurred {
+    border: 1px solid alpha(var(--outline_variant), 0.30);
+    box-shadow: 0 6px 24px 0 rgba(0, 0, 0, 0.25);
+    transition: all 0.3s ease;
+}
+
+.bar.bar-theme-blurred .bar-widget {
+    background-color: alpha(var(--surface_container), 0.70);
+    border: 1px solid alpha(var(--outline_variant), 0.20);
+    transition: all 0.25s ease;
+}
+
+.bar.bar-theme-blurred .bar-widget.hovered {
+    background-color: alpha(var(--surface_container_high), 0.85);
+}
+
+.bar.bar-theme-blurred .bar-widget.applet-open {
+    background-color: alpha(var(--surface_container_highest), 0.95);
+}
+
+/* 3. Pure Transparent */
+.bar.bar-theme-transparent {
+    border: none;
+    box-shadow: none;
+    transition: all 0.3s ease;
+}
+
+.bar.bar-theme-transparent .bar-widget {
+    background-color: alpha(var(--surface_container), 0.85);
+    border: 1px solid alpha(var(--outline_variant), 0.25);
+    box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.18);
+    transition: all 0.25s ease;
+}
+
+.bar.bar-theme-transparent .bar-widget.hovered {
+    background-color: var(--surface_container_high);
+}
+
+.bar.bar-theme-transparent .bar-widget.applet-open {
+    background-color: var(--surface_container_highest);
+}
+
+/* 4. Tinted Glass */
+.bar.bar-theme-tinted-glass {
+    border: 1px solid alpha(var(--primary), 0.35);
+    box-shadow: inset 0 1px 1px 0 alpha(var(--primary), 0.35), 0 8px 28px 0 rgba(0, 0, 0, 0.25);
+    transition: all 0.3s ease;
+}
+
+.bar.bar-theme-tinted-glass .bar-widget {
+    background-color: mix(alpha(var(--surface_container), 0.55), alpha(var(--primary), 0.2), 0.25);
+    border: 1px solid alpha(var(--primary), 0.25);
+    transition: all 0.25s ease;
+}
+
+.bar.bar-theme-tinted-glass .bar-widget.hovered {
+    background-color: mix(alpha(var(--surface_container_high), 0.75), alpha(var(--primary), 0.3), 0.35);
+}
+
+.bar.bar-theme-tinted-glass .bar-widget.applet-open {
+    background-color: alpha(var(--primary), 0.40);
+    border-color: var(--primary);
+}
+
+/* 5. Classic Solid */
+.bar.bar-theme-default {
+    /* Uses base bar styling */
+}
+
 /* ----- Widgets ----- */
 
 .bar-button {
