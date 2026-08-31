@@ -89,4 +89,4 @@ You can pass any of these identifier handles into `bar_manager.toggle('<Applet>'
 
 Contributions are always welcome! Please check the issues tab, follow our descriptive branching workflow, and submit a pull request.
 
-Special thanks to [caffyne-shell](https://github.com/caffyne-org/caffyne-shell), quickshell , `@its-darsh` (Fabric framework), `@Axenide` (backend clients), `@linkfrg` (Ignis runtime inspiration), and `@amansxcalibur` (UI code snippets) for making this project possible.
+Special thanks to [caffyne-shell](https://github.com/caffyne-org/caffyne-shell) , `@its-darsh` (Fabric framework), `@Axenide` (backend clients), `@linkfrg` (Ignis runtime inspiration), and `@amansxcalibur` (UI code snippets) for making this project possible.
