@@ -30,6 +30,7 @@ class UserOptions:
             self.dash_dim_opacity = 0.6
             self.dash_card_opacity = 1.0
             self.instant_dash = True
+            self.awe_widgets_enabled = False
             self.pinned_apps = []
 
     class Bars:

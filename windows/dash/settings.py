@@ -278,7 +278,10 @@ class DashSettingsPage(Box):
             fade_distance=56,
             overlay_scroll=True,
             kinetic_scroll=True,
+            h_scrollbar_policy="never",
+            v_scrollbar_policy="automatic",
         )
+        self.scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.scroll.set_size_request(1104, 604)
 
         super().__init__(

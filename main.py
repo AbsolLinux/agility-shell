@@ -30,6 +30,30 @@ def seed_user_environment():
                         except Exception:
                             pass
 
+    # Seed quickshell Awe directory
+    qs_src = os.path.join(repo_dir, "quickshell", "Awe")
+    qs_dst = os.path.expanduser("~/.config/quickshell/Awe")
+    if os.path.exists(qs_src):
+        os.makedirs(os.path.dirname(qs_dst), exist_ok=True)
+        if not os.path.exists(qs_dst):
+            try:
+                shutil.copytree(qs_src, qs_dst)
+            except Exception:
+                pass
+        else:
+            for root, _, files in os.walk(qs_src):
+                rel = os.path.relpath(root, qs_src)
+                target_subdir = os.path.join(qs_dst, rel) if rel != "." else qs_dst
+                os.makedirs(target_subdir, exist_ok=True)
+                for f in files:
+                    src_file = os.path.join(root, f)
+                    dst_file = os.path.join(target_subdir, f)
+                    if not os.path.exists(dst_file):
+                        try:
+                            shutil.copy2(src_file, dst_file)
+                        except Exception:
+                            pass
+
 seed_user_environment()
 
 import bar
@@ -38,6 +62,7 @@ from setproctitle import setproctitle
 from fabric import Application
 from services.wallpaper import WallpaperService
 from services.style import StyleService
+from services.awe_service import AweService
 from utils.sounds import play_sound
 setproctitle("agility-shell")
 
@@ -52,6 +77,8 @@ singletons.bar_manager = bar_manager
 
 wallpaper_service = WallpaperService.get_instance()
 # wallpaper_service.set_bar_manager(bar_manager)
+
+AweService.get_instance().init_startup()
 
 play_sound("session-start")
 app.run()
