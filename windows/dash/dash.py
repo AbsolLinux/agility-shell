@@ -4,6 +4,7 @@ from fabric.widgets.eventbox import EventBox
 from fabric.widgets.stack import Stack
 from .launcher import DashLauncherPage
 from .applets import DashAppletPage, AppletDropZone
+from .widgets import DashWidgetsPage
 from .components import DashGroup, DashHeader
 from .settings import DashSettingsPage
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
@@ -23,6 +24,7 @@ REVEAL_DURATION = 300
 _PAGE_META = {
     "apps":       ("diamonds-four-duotone",      "Apps"),
     "applets":    ("stack-duotone",              "Applets"),
+    "widgets":    ("puzzle-piece-duotone",       "Widgets"),
     "settings":   ("gear-six-duotone",           "Settings"),
     "wallpapers": ("images-duotone",             "Wallpapers"),
     "themes":     ("swatches-duotone",           "Themes"),
@@ -30,13 +32,14 @@ _PAGE_META = {
 _PAGE_LABELS = {
     "apps":       "Apps",
     "applets":    "Applets",
+    "widgets":    "Widgets",
     "settings":   "Settings",
     "wallpapers": "Wallpapers",
     "themes":     "Themes",
 }
 
-_PAGES_WITH_SEARCH = {"apps", "applets"}
-_PRIMARY_PAGES = {"apps", "applets", "settings"}
+_PAGES_WITH_SEARCH = {"apps", "applets", "widgets"}
+_PRIMARY_PAGES = {"apps", "applets", "widgets", "settings"}
 _SECONDARY_PAGES = {"wallpapers", "themes"}
 
 
@@ -172,6 +175,7 @@ class Dash(Window):
             on_applet_drag_begin=self._on_applet_drag_begin,
             on_applet_drag_end=self._on_applet_drag_end,
         )
+        self.widgets    = DashWidgetsPage(self, bar_manager=bar_manager)
         self.settings   = DashSettingsPage(bar_manager=bar_manager)
         self.themes     = DashThemePage(bar_manager=bar_manager)
         self.wallpapers = DashWallpaperPage()
@@ -185,6 +189,7 @@ class Dash(Window):
 
         self.h_group_1.add_named(self.launcher,   "apps")
         self.h_group_1.add_named(self.applets,    "applets")
+        self.h_group_1.add_named(self.widgets,    "widgets")
         self.h_group_1.add_named(self.settings,   "settings")
         self.h_group_2.add_named(self.wallpapers, "wallpapers")
         self.h_group_2.add_named(self.themes,     "themes")
@@ -195,6 +200,7 @@ class Dash(Window):
         self._name_to_page = {
             "apps":       self.launcher,
             "applets":    self.applets,
+            "widgets":    self.widgets,
             "settings":   self.settings,
             "wallpapers": self.wallpapers,
             "themes":     self.themes,
@@ -320,6 +326,8 @@ class Dash(Window):
                 return "apps"
             elif child is self.applets:
                 return "applets"
+            elif child is self.widgets:
+                return "widgets"
             elif child is self.settings:
                 return "settings"
             return "apps"
@@ -333,6 +341,7 @@ class Dash(Window):
         primary_tabs = [
             ("apps", "diamonds-four-duotone", "Apps", lambda: self.h_group_1.set_visible_child_name("apps")),
             ("applets", "stack-duotone", "Applets", lambda: self.h_group_1.set_visible_child_name("applets")),
+            ("widgets", "puzzle-piece-duotone", "Widgets", lambda: self.h_group_1.set_visible_child_name("widgets")),
             ("settings", "gear-six-duotone", "Settings", lambda: self.h_group_1.set_visible_child_name("settings")),
         ]
 
@@ -404,6 +413,7 @@ class Dash(Window):
                         break
 
             self.applets.set_monitor(active_monitor)
+            self.widgets.set_monitor(active_monitor)
 
             self.dismiss_layer.show()
             if getattr(user_options.settings, "dash_blur", True) and user_options.theme.blur:
@@ -440,6 +450,12 @@ class Dash(Window):
         if not self.is_visible():
             self.toggle(active_monitor)
         edit_mode.enable()
+
+    def toggle_widgets(self, active_monitor=None):
+        self.h_group_1.set_visible_child(self.widgets)
+        self.v_stack.set_visible_child(self.h_group_1)
+        if not self.is_visible():
+            self.toggle(active_monitor)
 
     def toggle_settings(self, active_monitor=None):
         self.h_group_1.set_visible_child(self.settings)

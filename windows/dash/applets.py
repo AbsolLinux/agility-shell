@@ -88,18 +88,12 @@ class DashAppletItem(Button):
             visible=False,
             tooltip_text="In launcher",
         )
-        self._desktop_indicator = Icon(
-            icon_name="monitor-duotone",
-            icon_size=16,
-            visible=False,
-            tooltip_text="On desktop",
-        )
         self._indicator_row = Box(
             orientation="h",
             spacing=6,
             h_align="center",
             style_classes=["applet-indicators"],
-            children=[self._bar_indicator, self._launcher_indicator, self._desktop_indicator],
+            children=[self._bar_indicator, self._launcher_indicator],
         )
 
         self.box = Box(
@@ -150,19 +144,8 @@ class DashAppletItem(Button):
         menu.set_reserve_toggle_size(False)
 
         has_desktop = self.key in DESKTOP_APPLET_SIZES
-        in_desktop = self.key in page._get_desktop_keys()
         in_launcher = self.key in page._get_launcher_keys()
         mid = page._monitor_id if page._monitor_id is not None else 0
-
-        if has_desktop:
-            if not in_desktop:
-                item = Gtk.MenuItem(label="Add to Desktop (Beta)")
-                item.connect("activate", lambda _: page._place_on_desktop(self.key, mid))
-                menu.append(item)
-            else:
-                item = Gtk.MenuItem(label="Remove from Desktop (Beta)")
-                item.connect("activate", lambda _: page._remove_from_desktop(self.key, mid))
-                menu.append(item)
 
         bar_sub = Gtk.MenuItem(label="Add to Bar")
         bar_menu = Gtk.Menu()
@@ -239,16 +222,14 @@ class DashAppletItem(Button):
         return False
 
 
-    def refresh_state(self, in_bar: bool, in_launcher: bool, in_desktop: bool, has_desktop: bool) -> None:
+    def refresh_state(self, in_bar: bool, in_launcher: bool, in_desktop: bool = False, has_desktop: bool = False) -> None:
         self._bar_indicator.set_visible(True)
         self._launcher_indicator.set_visible(has_desktop)
-        self._desktop_indicator.set_visible(has_desktop)
 
         self._bar_indicator.set_opacity(0.35 if in_bar else 1.0)
         self._launcher_indicator.set_opacity(0.35 if in_launcher else 1.0)
-        self._desktop_indicator.set_opacity(0.35 if in_desktop else 1.0)
 
-        all_filled = in_bar and (in_launcher if has_desktop else True) and (in_desktop if has_desktop else True)
+        all_filled = in_bar and (in_launcher if has_desktop else True)
         self.box.get_style_context().add_class("in-bar") if all_filled else self.box.get_style_context().remove_class("in-bar")
         self.set_sensitive(not all_filled)
 
@@ -363,10 +344,9 @@ class DashAppletPage(DashPage):
     def _handle_drag_begin(self, key: str) -> None:
         in_launcher  = key in self._get_launcher_keys()
         has_desktop  = key in DESKTOP_APPLET_SIZES
-        in_desktop   = key in self._get_desktop_keys()
 
         show_left  = has_desktop and not in_launcher
-        show_right = has_desktop and not in_desktop
+        show_right = False
 
         if self._on_applet_drag_begin:
             self._on_applet_drag_begin(key, show_left=show_left, show_right=show_right)
