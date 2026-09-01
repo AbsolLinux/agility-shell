@@ -673,6 +673,15 @@ class BluetoothClient(Service):
             if BLUEZ_ADAPTER_IFACE in ifaces:
                 self._add_adapter(path, ifaces[BLUEZ_ADAPTER_IFACE])
 
+        from user_options import user_options
+        if not getattr(user_options.settings, "bluetooth_on_startup", False):
+            for adapter in self._adapters.values():
+                if adapter.powered:
+                    logger.info(
+                        f"[Bluetooth] Setting adapter {adapter.name} powered=False on startup (bluetooth_on_startup is False)"
+                    )
+                    adapter.powered = False
+
         for path, ifaces in objects.items():
             if BLUEZ_DEVICE_IFACE in ifaces:
                 self._add_device(path, ifaces[BLUEZ_DEVICE_IFACE])

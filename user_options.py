@@ -31,6 +31,7 @@ class UserOptions:
             self.dash_card_opacity = 1.0
             self.instant_dash = True
             self.awe_widgets_enabled = False
+            self.bluetooth_on_startup = False
             self.pinned_apps = []
 
     class Bars:

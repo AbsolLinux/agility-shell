@@ -3,7 +3,7 @@ from typing import Any, List, Literal
 import gi
 from fabric.core.service import Property, Service, Signal
 from fabric.utils import bulk_connect, exec_shell_command_async
-from gi.repository import Gio
+from gi.repository import Gio, GLib
 from loguru import logger
 
 try:
@@ -338,19 +338,29 @@ class NetworkClient(Service):
                         return True
         return False
 
-    def connect_wifi_bssid(self, bssid: str, callback=None):
+    def connect_wifi_bssid(self, bssid: str, ssid: str | None = None, iface: str | None = None, callback=None):
         import subprocess
         import threading
         def _run():
             try:
-                res = subprocess.run(
-                    ["nmcli", "device", "wifi", "connect", bssid],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
+                target_iface = iface or (self.wifi_device._device.get_iface() if self.wifi_device and self.wifi_device._device else None)
+                res = None
+                if ssid and self.is_network_saved(ssid):
+                    cmd = ["nmcli", "connection", "up", "id", ssid]
+                    if target_iface:
+                        cmd.extend(["ifname", target_iface])
+                    logger.debug(f"[Network] Activating saved connection: {' '.join(cmd)}")
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+                if res is None or res.returncode != 0:
+                    cmd = ["nmcli", "device", "wifi", "connect", bssid]
+                    if target_iface:
+                        cmd.extend(["ifname", target_iface])
+                    logger.debug(f"[Network] Connecting to BSSID: {' '.join(cmd)}")
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
                 success = (res.returncode == 0)
-                msg = res.stdout if success else res.stderr
+                msg = (res.stdout or "Connected").strip() if success else (res.stderr or res.stdout or "Connection failed").strip()
                 logger.debug(f"[Network] connect_wifi_bssid result: success={success}, msg={msg}")
                 if callback:
                     GLib.idle_add(callback, success, msg)
@@ -360,35 +370,75 @@ class NetworkClient(Service):
                     GLib.idle_add(callback, False, str(e))
         threading.Thread(target=_run, daemon=True).start()
 
-    def connect_wifi_with_password(self, bssid: str, password: str, callback):
+    def connect_wifi_with_password(self, bssid: str, password: str, ssid: str | None = None, iface: str | None = None, callback=None):
         import subprocess
         import threading
         if not self._client or not self.wifi_device:
-            callback(False, "No wifi device found")
+            if callback:
+                GLib.idle_add(callback, False, "No wifi device found")
             return
 
         def _run():
             try:
+                target_iface = iface or (self.wifi_device._device.get_iface() if self.wifi_device and self.wifi_device._device else None)
+                cmd = ["nmcli", "device", "wifi", "connect"]
+                if ssid:
+                    cmd.append(ssid)
+                else:
+                    cmd.append(bssid)
+                cmd.extend(["password", password])
+                if bssid and ssid:
+                    cmd.extend(["bssid", bssid])
+                if target_iface:
+                    cmd.extend(["ifname", target_iface])
+
+                logger.debug(f"[Network] Connecting with password: {' '.join(cmd[:-2])} [password hidden]")
                 res = subprocess.run(
-                    ["nmcli", "device", "wifi", "connect", bssid, "password", password],
+                    cmd,
                     capture_output=True,
                     text=True,
                     timeout=35,
                 )
                 success = (res.returncode == 0)
+
+                err = (res.stderr or res.stdout or "").strip()
+                if not success and ssid and ("already exists" in err.lower() or "secret" in err.lower() or "not provided" in err.lower()):
+                    logger.info(f"[Network] Removing stale connection profile for {ssid} and retrying")
+                    subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True, text=True, timeout=5)
+                    res = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=35,
+                    )
+                    success = (res.returncode == 0)
+                    err = (res.stderr or res.stdout or "").strip()
+
                 if success:
-                    logger.info(f"[Network] WiFi connected to {bssid}")
-                    GLib.idle_add(callback, True, "Connected")
+                    logger.info(f"[Network] WiFi connected to {ssid or bssid}")
+                    if callback:
+                        GLib.idle_add(callback, True, "Connected")
                 else:
-                    err = res.stderr or res.stdout or "Connection failed"
                     logger.warning(f"[Network] WiFi connect failed: {err}")
-                    if "secret" in err.lower() or "password" in err.lower() or "auth" in err.lower() or "802-11-wireless-security" in err.lower():
-                        GLib.idle_add(callback, False, "Incorrect password. Please try again.")
+                    err_lower = err.lower()
+                    if "secret" in err_lower or "password" in err_lower or "auth" in err_lower or "802-11-wireless-security" in err_lower or "not provided" in err_lower:
+                        msg = "Incorrect password. Please try again."
+                    elif "no network" in err_lower or "not found" in err_lower:
+                        msg = "Network not found or out of range."
+                    elif "timeout" in err_lower or "timed out" in err_lower:
+                        msg = "Connection timed out. Please try again."
                     else:
-                        GLib.idle_add(callback, False, err.strip().split("\n")[-1] or "Connection failed")
+                        clean_lines = [l for l in err.splitlines() if l.strip()]
+                        last_line = clean_lines[-1] if clean_lines else "Connection failed"
+                        if last_line.startswith("Error:"):
+                            last_line = last_line[6:].strip()
+                        msg = last_line or "Connection failed"
+                    if callback:
+                        GLib.idle_add(callback, False, msg)
             except Exception as e:
                 logger.error(f"[Network] WiFi connection exception: {e}")
-                GLib.idle_add(callback, False, str(e))
+                if callback:
+                    GLib.idle_add(callback, False, str(e))
         threading.Thread(target=_run, daemon=True).start()
 
     @Property(str, "readable")

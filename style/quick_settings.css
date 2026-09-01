@@ -381,3 +381,41 @@
     color: var(--on_primary);
     transition: 0.3s ease;
 }
+
+.wifi-disconnect-confirm-box {
+    background-color: var(--surface_container_high);
+    border-radius: apply(radius-m);
+    padding: 6px 10px;
+    margin: 2px 0px 4px 0px;
+    transition: all 0.25s ease;
+}
+
+.wifi-disconnect-btn {
+    background-color: var(--error);
+    border-radius: apply(radius-s);
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: 0.2s ease;
+}
+
+.wifi-disconnect-btn:hover {
+    background-color: shade(var(--error), 1.15);
+}
+
+.wifi-disconnect-btn * {
+    color: var(--on_error);
+}
+
+.wifi-cancel-btn {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-s);
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: 0.2s ease;
+}
+
+.wifi-cancel-btn:hover {
+    background-color: var(--surface_container_highest);
+}
