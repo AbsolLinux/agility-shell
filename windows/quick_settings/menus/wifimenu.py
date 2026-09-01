@@ -63,7 +63,7 @@ class WifiIcon(Icon):
         else:                return "wifi-none-duotone"
 
 
-class AccessPointItem(Button):
+class AccessPointItem(Box):
     def __init__(self, ap: AccessPoint, on_connect, wifi, tab=None, **kwargs):
         self.ap = ap
         self._wifi = wifi
@@ -108,7 +108,7 @@ class AccessPointItem(Button):
             children=[self._status_box, self._sec_icon],
         )
 
-        super().__init__(
+        self.main_btn = Button(
             events=["click"],
             child=Box(
                 spacing=8,
@@ -120,6 +120,44 @@ class AccessPointItem(Button):
             ),
             on_clicked=lambda _: self._handle_click(),
             style_classes=["menu-device-item"],
+        )
+
+        self._confirm_prompt = Label(
+            label="Disconnect?",
+            style="font-size: 12px; font-weight: 500; opacity: 0.85;",
+            h_align="start",
+            h_expand=True,
+        )
+        self._disconnect_btn = Button(
+            label="Disconnect",
+            style_classes=["wifi-disconnect-btn"],
+            on_clicked=lambda _: self._confirm_disconnect(),
+        )
+        self._cancel_btn = Button(
+            label="Cancel",
+            style_classes=["wifi-cancel-btn"],
+            on_clicked=lambda _: self._hide_disconnect_confirm(),
+        )
+
+        self.confirm_box = Box(
+            orientation="h",
+            spacing=6,
+            style_classes=["wifi-disconnect-confirm-box"],
+            visible=False,
+            children=[
+                self._confirm_prompt,
+                self._cancel_btn,
+                self._disconnect_btn,
+            ],
+        )
+
+        super().__init__(
+            orientation="v",
+            spacing=2,
+            children=[
+                self.main_btn,
+                self.confirm_box,
+            ],
             **kwargs,
         )
 
@@ -140,9 +178,16 @@ class AccessPointItem(Button):
 
     def _set_state(self, state: APState):
         self._state = state
+        if state != APState.CONNECTED:
+            self._hide_disconnect_confirm()
+
         for cls in ["active", "connecting", "failed", "connected"]:
+            self.main_btn.remove_style_class(cls)
             self.remove_style_class(cls)
+
         if state == APState.CONNECTED:
+            self.main_btn.add_style_class("active")
+            self.main_btn.add_style_class("connected")
             self.add_style_class("active")
             self.add_style_class("connected")
             self._status_badge.set_label("Connected")
@@ -150,12 +195,14 @@ class AccessPointItem(Button):
             self._status_icon.set_property("icon-name", "check-circle-duotone")
             self._status_icon.set_visible(True)
         elif state == APState.CONNECTING:
+            self.main_btn.add_style_class("connecting")
             self.add_style_class("connecting")
             self._status_badge.set_label("Connecting…")
             self._status_badge.set_visible(True)
             self._status_icon.set_property("icon-name", "arrows-clockwise-duotone")
             self._status_icon.set_visible(True)
         elif state == APState.FAILED:
+            self.main_btn.add_style_class("failed")
             self.add_style_class("failed")
             self._status_badge.set_label("Failed")
             self._status_badge.set_visible(True)
@@ -170,11 +217,19 @@ class AccessPointItem(Button):
 
     def _handle_click(self):
         if self._state == APState.CONNECTED:
-            self._wifi._device.disconnect(None)
-            self._set_state(APState.IDLE)
+            self.confirm_box.set_visible(not self.confirm_box.get_visible())
         elif self._state != APState.CONNECTING:
+            self._hide_disconnect_confirm()
             self._set_state(APState.CONNECTING)
             self._on_connect(self.ap)
+
+    def _confirm_disconnect(self):
+        self._hide_disconnect_confirm()
+        self._wifi._device.disconnect(None)
+        self._set_state(APState.IDLE)
+
+    def _hide_disconnect_confirm(self):
+        self.confirm_box.set_visible(False)
 
     def set_failed(self):
         self._set_state(APState.FAILED)
@@ -445,30 +500,64 @@ class WifiMenu(QSAppletPage):
     # ------------------------------------------------------------------ #
     # AP connection handling (shared across all tabs)
 
+    def get_ap_item(self, bssid: str) -> AccessPointItem | None:
+        for tab in self._wifi_tabs.values():
+            item = tab.get_ap_item(bssid)
+            if item:
+                return item
+        return None
+
     def _handle_ap_connect(self, ap: AccessPoint):
+        iface = (ap._device._device.get_iface() if hasattr(ap._device, "_device") and ap._device._device else None)
+        bssid = ap._dict.get("bssid", "")
+        ssid = ap.ssid
+
         if not ap.psk:
-            network.connect_wifi_bssid(ap._dict["bssid"])
+            def _cb(success: bool, msg: str):
+                if not success:
+                    item = self.get_ap_item(bssid)
+                    if item:
+                        item.set_failed()
+            network.connect_wifi_bssid(bssid, ssid=ssid, iface=iface, callback=_cb)
             return
-        if network.is_network_saved(ap.ssid):
-            network.connect_wifi_bssid(ap._dict["bssid"])
+
+        if network.is_network_saved(ssid):
+            def _cb(success: bool, msg: str):
+                if not success:
+                    item = self.get_ap_item(bssid)
+                    if item:
+                        item.set_failed()
+                    self._password_menu.load(
+                        ssid=ssid,
+                        bssid=bssid,
+                        on_submit=self._on_password_submit,
+                        on_cancel=lambda: self._reset_ap_item(bssid),
+                    )
+                    self._password_menu.show_error("Saved credentials failed. Please re-enter password.")
+                    if self.stack:
+                        self.stack.set_visible_child_name("wifi-password")
+            network.connect_wifi_bssid(bssid, ssid=ssid, iface=iface, callback=_cb)
             return
+
         self._password_menu.load(
-            ssid=ap.ssid,
-            bssid=ap._dict["bssid"],
+            ssid=ssid,
+            bssid=bssid,
             on_submit=self._on_password_submit,
-            on_cancel=lambda: self._reset_ap_item(ap._dict["bssid"]),
+            on_cancel=lambda: self._reset_ap_item(bssid),
         )
         if self.stack:
             self.stack.set_visible_child_name("wifi-password")
 
     def _reset_ap_item(self, bssid: str):
-        for tab in self._wifi_tabs.values():
-            item = tab.get_ap_item(bssid)
-            if item:
-                item._set_state(APState.IDLE)
-                break
+        item = self.get_ap_item(bssid)
+        if item:
+            item._set_state(APState.IDLE)
 
     def _on_password_submit(self, bssid: str, password: str):
+        item = self.get_ap_item(bssid)
+        ssid = item.ap.ssid if item else None
+        iface = (item._wifi._device.get_iface() if item and hasattr(item._wifi, "_device") and item._wifi._device else None)
+
         def _result(success: bool, message: str):
             if success:
                 self._password_menu.show_connected()
@@ -481,10 +570,8 @@ class WifiMenu(QSAppletPage):
                 )
             else:
                 self._password_menu.show_error(message)
-                for tab in self._wifi_tabs.values():
-                    item = tab.get_ap_item(bssid)
-                    if item:
-                        item.set_failed()
-                        break
+                item = self.get_ap_item(bssid)
+                if item:
+                    item.set_failed()
 
-        network.connect_wifi_with_password(bssid, password, _result)
+        network.connect_wifi_with_password(bssid, password, ssid=ssid, iface=iface, callback=_result)
