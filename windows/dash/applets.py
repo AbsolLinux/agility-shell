@@ -169,11 +169,8 @@ class DashAppletItem(Button):
                 l_item.connect("activate", lambda _: page._remove_from_launcher(self.key))
                 menu.append(l_item)
 
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
+        menu.show_all()
+        menu.popup_at_pointer(event)
         return True
 
 

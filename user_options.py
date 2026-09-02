@@ -128,7 +128,6 @@ class UserOptions:
             self.is_dark = True
             self.scheme_type = "scheme-tonal-spot"
             self.opacity = 1.0
-            self.blur = False
             self.border_style = "medium"
             self.font_monospace_style = "none"
 

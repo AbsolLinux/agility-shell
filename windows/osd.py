@@ -4,15 +4,12 @@ from fabric.widgets.label import Label
 from fabric.widgets.eventbox import EventBox
 from fabric.widgets.button import Button
 from icons import VolumeIcon
-from snippets import Icon, AnimatedScale, DashReveal, enable_blur, disable_blur, free_blur, trace_widget_regions
+from snippets import Icon, AnimatedScale, DashReveal
 from services.singletons import audio, brightness, wm, timer, battery
 from gi.repository import GLib, Gdk
-from user_options import user_options
 from utils.monitors import get_connector_from_monitor_id
 REVEAL_DURATION = 300
 import math
-from snippets.blur.region_trace import trace_widget_regions
-from snippets.blur.blur import set_blur_regions
 # from snippets.dashreveal import _ease_out_expo
 from utils.update_checker import check_for_updates, do_pull, restart_shell
 from utils.sounds import play_sound
@@ -217,7 +214,6 @@ class OSD(WaylandWindow):
         self._bound_speaker = None
         self._speaker_volume_handler = None
         self._speaker_muted_handler = None
-        self._blur_ctx = None
         self._saved_brightness = 0
         self._battery_state = None
         self._monitor_connector = get_connector_from_monitor_id(monitor)
@@ -412,8 +408,6 @@ class OSD(WaylandWindow):
             if not self.is_visible():
                 self.set_visible(True)
                 self.revealer.open()
-                if user_options.theme.blur:
-                    GLib.timeout_add(10, self._apply_blur)
 
             self._reset_timer()
 
@@ -461,68 +455,9 @@ class OSD(WaylandWindow):
 
         self._last_charging = charging
 
-    def _apply_blur(self):
-        if self._blur_ctx:
-            disable_blur(self._blur_ctx)
-            free_blur(self._blur_ctx)
-            self._blur_ctx = None
-        
-        self._blur_ctx = enable_blur(self)
-        target_widget = self.revealer.children[0]
-
-        def on_progress(value):
-            if not self._blur_ctx:
-                return
-            
-            coords = target_widget.translate_coordinates(self, 0, 0)
-            if not coords:
-                return
-            cx, cy = coords
-            
-            alloc = target_widget.get_allocation()
-            if alloc.width <= 1 or alloc.height <= 1:
-                return
-
-            # retrace every time so regions are always based on current allocation
-            traced = trace_widget_regions(target_widget, accuracy=1, erode=2)
-            if not traced:
-                return
-
-            scale = DashReveal.SCALE_START + (1.0 - DashReveal.SCALE_START) * value
-
-            if value < 0.05:
-                set_blur_regions(self._blur_ctx, [])
-                return
-
-            anchor_x = cx + alloc.width / 2.0
-            anchor_y = cy + alloc.height / 2.0
-
-            clipped = []
-            for r in traced:
-                x1 = anchor_x + (cx + r.x - anchor_x) * scale
-                y1 = anchor_y + (cy + r.y - anchor_y) * scale
-                x2 = anchor_x + (cx + r.x + r.width - anchor_x) * scale
-                y2 = anchor_y + (cy + r.y + r.height - anchor_y) * scale
-
-                clipped.append((
-                    math.floor(x1),
-                    math.floor(y1),
-                    max(1, math.ceil(x2 - x1)),
-                    max(1, math.ceil(y2 - y1))
-                ))
-
-            set_blur_regions(self._blur_ctx, clipped)
-
-        self.revealer.progress_cb = on_progress
-        return False
-
     def _start_hide(self):
         self.revealer.progress_cb = None
         self.revealer.close(on_done=self._hide)
-        if self._blur_ctx:
-            disable_blur(self._blur_ctx)
-            free_blur(self._blur_ctx)
-            self._blur_ctx = None
         self._hide_timer = None
         return False
 
