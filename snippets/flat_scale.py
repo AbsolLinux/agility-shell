@@ -130,6 +130,13 @@ class FlatScale(Gtk.DrawingArea, Widget):
         size: Iterable[int] | int | None = None,
         **kwargs,
     ):
+        if size is None:
+            is_horiz = (
+                (isinstance(orientation, str) and orientation == "horizontal")
+                or orientation == Gtk.Orientation.HORIZONTAL
+            )
+            size = (160, 24) if is_horiz else (24, 160)
+
         Gtk.DrawingArea.__init__(self)
         Widget.__init__(
             self,
@@ -606,6 +613,10 @@ class FlatScale(Gtk.DrawingArea, Widget):
     def _on_button_press(self, _widget, event: Gdk.EventButton) -> bool:
         if event.button == 1:
             self._dragging = True
+            try:
+                self.grab_add()
+            except Exception:
+                pass
             self._update_state_flags()
             self.set_value(self._value_from_coords(event.x, event.y))
             self._bubble_open()
@@ -614,6 +625,10 @@ class FlatScale(Gtk.DrawingArea, Widget):
     def _on_button_release(self, _widget, event: Gdk.EventButton) -> bool:
         if event.button == 1:
             self._dragging = False
+            try:
+                self.grab_remove()
+            except Exception:
+                pass
             self._update_state_flags()
             self._bubble_close()
         return False
@@ -643,11 +658,11 @@ class FlatScale(Gtk.DrawingArea, Widget):
 
     def _on_leave(self, _widget, _event) -> bool:
         self._hovering = False
-        self._dragging = False
-        self._update_state_flags()
-        # Close bubble if pointer leaves mid-drag
-        if self._bubble_progress > 0.0:
-            self._bubble_close()
+        if not self._dragging:
+            self._update_state_flags()
+            # Close bubble if pointer leaves mid-drag
+            if self._bubble_progress > 0.0:
+                self._bubble_close()
         return False
 
     def _update_state_flags(self) -> None:

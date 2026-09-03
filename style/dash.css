@@ -451,10 +451,10 @@ tooltip label {
 .bar-theme-card {
     background-color: var(--surface_container);
     border-radius: apply(radius-l);
-    padding: 12px 14px;
+    padding: 10px 8px;
     border: 1.5px solid var(--outline_variant);
     transition: all 0.25s ease;
-    min-width: 178px;
+    min-width: 120px;
 }
 
 .bar-theme-card:hover {
@@ -505,4 +505,96 @@ tooltip label {
     background-color: var(--surface_container_highest);
     border: 1px solid var(--outline_variant);
 }
+
+/* ========================================================================= */
+/* Dash Settings Page Overhaul (Sidebar Navigation + Grouped Cards)          */
+/* ========================================================================= */
+
+.dash-settings-container {
+    min-width: 1104px;
+    min-height: 604px;
+}
+
+.dash-settings-sidebar {
+    min-width: 264px;
+    background-color: var(--surface_container_lowest);
+    border: 1px solid var(--outline_variant);
+    border-radius: apply(radius-xl);
+    padding: 16px 12px;
+}
+
+.dash-settings-sidebar-brand {
+    padding: 8px 10px;
+    border-radius: apply(radius-m);
+}
+
+.dash-settings-page-title,
+.dash-settings-sidebar-brand-title {
+    font-family: apply(mixed-mono);
+}
+
+.dash-settings-nav-btn {
+    background-color: transparent;
+    border-radius: apply(radius-l);
+    padding: 10px 14px;
+    min-height: 52px;
+    transition: all 0.25s ease;
+    border: 1px solid transparent;
+}
+
+.dash-settings-nav-btn:hover {
+    background-color: var(--surface_container_high);
+    border-color: alpha(var(--primary), 0.2);
+}
+
+.dash-settings-nav-btn.active {
+    background-color: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 4px 14px alpha(var(--primary), 0.35);
+}
+
+.dash-settings-nav-btn.active * {
+    color: var(--on_primary);
+}
+
+.dash-settings-nav-btn.active .settings-nav-subtitle {
+    opacity: 0.85;
+}
+
+.dash-settings-stack {
+    border-radius: apply(radius-xl);
+}
+
+.dash-settings-page-header {
+    padding: 6px 4px 8px 4px;
+}
+
+.dash-settings-card {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-l);
+    border: 1px solid var(--outline_variant);
+    padding: 6px 16px;
+    transition: border-color 0.25s ease, background-color 0.25s ease;
+}
+
+.dash-settings-card:hover {
+    border-color: alpha(var(--primary), 0.35);
+}
+
+.dash-settings-card-header {
+    padding: 8px 0;
+}
+
+.dash-settings-row {
+    padding: 10px 0;
+    min-height: 42px;
+}
+
+.dash-settings-divider {
+    min-height: 1px;
+    background-color: var(--outline_variant);
+    opacity: 0.3;
+    margin: 0;
+}
+
 
