@@ -597,4 +597,32 @@ tooltip label {
     margin: 0;
 }
 
+/* ----- Desktop Widget Theme Chips in Widgets Tab ----- */
+.widget-theme-chip {
+    background-color: var(--surface_container);
+    border-radius: apply(radius-m);
+    padding: 5px 8px;
+    border: 1px solid var(--outline_variant);
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+.widget-theme-chip:hover {
+    background-color: var(--surface_container_high);
+    border-color: alpha(var(--primary), 0.5);
+    opacity: 1.0;
+}
+
+.widget-theme-chip.active {
+    background-color: alpha(var(--primary), 0.2);
+    border-color: var(--primary);
+    box-shadow: inset 0 0 0 1.5px var(--primary);
+    opacity: 1.0;
+}
+
+.widget-theme-chip.active:hover {
+    background-color: alpha(var(--primary), 0.28);
+}
+
+
 

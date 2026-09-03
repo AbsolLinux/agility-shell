@@ -48,9 +48,16 @@ def seed_user_environment():
                 for f in files:
                     src_file = os.path.join(root, f)
                     dst_file = os.path.join(target_subdir, f)
-                    if not os.path.exists(dst_file):
+                    if f == "widget_settings.json":
+                        if not os.path.exists(dst_file):
+                            try:
+                                shutil.copy2(src_file, dst_file)
+                            except Exception:
+                                pass
+                    else:
                         try:
-                            shutil.copy2(src_file, dst_file)
+                            if not os.path.exists(dst_file) or os.path.getmtime(src_file) > os.path.getmtime(dst_file):
+                                shutil.copy2(src_file, dst_file)
                         except Exception:
                             pass
 
