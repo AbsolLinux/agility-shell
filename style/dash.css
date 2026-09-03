@@ -570,7 +570,7 @@ tooltip label {
 }
 
 .dash-settings-card {
-    background-color: var(--surface_container);
+    background-color: var(--surface_container_lowest);
     border-radius: apply(radius-l);
     border: 1px solid var(--outline_variant);
     padding: 6px 16px;
