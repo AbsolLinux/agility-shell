@@ -491,6 +491,7 @@ class DashSettingsPage(Box):
         self._hover_chip_widgets: dict[str, HoverWidgetChip] = {}
         self._setting_trans_buttons: dict[str, Button] = {}
         self._pool_chips: dict[str, Button] = {}
+        self._all_cards: list[Box] = []
 
         # Build pages
         page_behavior = self._build_page_behavior()
@@ -515,6 +516,7 @@ class DashSettingsPage(Box):
         self._stack.add_named(self._wrap_scroll(page_dash), "dash_effects")
 
         sidebar = self._build_sidebar()
+        self._sidebar = sidebar
 
         # Wrap in main layout
         main_box = Box(
@@ -536,6 +538,36 @@ class DashSettingsPage(Box):
             **kwargs,
         )
         self.set_size_request(1104, 604)
+
+        # Apply saved card and sidebar opacity
+        initial_opacity = getattr(user_options.settings, "dash_card_opacity", 1.0)
+        self.set_card_opacity(initial_opacity)
+
+    def _create_card(
+        self,
+        title: str | None = None,
+        description: str | None = None,
+        rows: list[Gtk.Widget] | None = None,
+        header_action: Gtk.Widget | None = None,
+        body_widget: Gtk.Widget | None = None,
+    ) -> Box:
+        card = create_settings_card(
+            title=title,
+            description=description,
+            rows=rows,
+            header_action=header_action,
+            body_widget=body_widget,
+        )
+        self._all_cards.append(card)
+        return card
+
+    def set_card_opacity(self, opacity: float):
+        opacity = max(0.0, min(1.0, float(opacity)))
+        bg_style = f"background-color: alpha(var(--surface_container_lowest), {opacity:.2f});"
+        if hasattr(self, "_sidebar") and self._sidebar:
+            self._sidebar.set_style(bg_style)
+        for card in getattr(self, "_all_cards", []):
+            card.set_style(bg_style)
 
     def _wrap_scroll(self, content_widget: Gtk.Widget) -> ClippingScrolledWindow:
         scroll = ClippingScrolledWindow(
@@ -637,7 +669,7 @@ class DashSettingsPage(Box):
             control_min_width=240,
         )
 
-        hover_card = create_settings_card(
+        hover_card = self._create_card(
             title="Hover Interaction",
             description="Control how agility-shell reacts to mouse cursor hover over the bar",
             rows=[hover_row, delay_row],
@@ -698,7 +730,7 @@ class DashSettingsPage(Box):
             children=[hover_chips_container],
         )
 
-        chips_card = create_settings_card(
+        chips_card = self._create_card(
             title="Hover-Enabled Widgets",
             description="Select which specific widgets automatically open their popup/menu when hovered",
             header_action=actions_box,
@@ -743,7 +775,7 @@ class DashSettingsPage(Box):
             children=[theme_cards_box],
         )
 
-        theme_card = create_settings_card(
+        theme_card = self._create_card(
             title="Bar Style Preset",
             description="Choose an aesthetic theme preset for the bar (Liquid Glass, Frosted Blur, Pure Clear, Tinted Glass, Classic Solid)",
             body_widget=theme_wrapper,
@@ -831,7 +863,7 @@ class DashSettingsPage(Box):
             control_min_width=240,
         )
 
-        transparency_card = create_settings_card(
+        transparency_card = self._create_card(
             title="Blur & Transparency Levels",
             description="Fine-tune transparency layers for bar containers and placed desktop widgets",
             rows=[bar_blur_row, bar_opacity_row, widget_opacity_row, desktop_opacity_row],
@@ -864,7 +896,7 @@ class DashSettingsPage(Box):
             children=[self._bar_selector_container],
         )
 
-        bar_selector_card = create_settings_card(
+        bar_selector_card = self._create_card(
             title="Active Bar Configuration",
             description="Select which bar to edit on this monitor or add/remove bars",
             body_widget=selector_wrapper,
@@ -905,7 +937,7 @@ class DashSettingsPage(Box):
                 children=[sec_box],
             )
 
-            sec_card = create_settings_card(
+            sec_card = self._create_card(
                 title=f"{sec.capitalize()} Section Widgets",
                 description=section_descriptions.get(sec, ""),
                 header_action=add_btn,
@@ -1024,7 +1056,7 @@ class DashSettingsPage(Box):
             control_min_width=None,
         )
 
-        placement_card = create_settings_card(
+        placement_card = self._create_card(
             title="Screen Edge & Alignment",
             description="Configure where the bar sits on the monitor display",
             rows=[pos_row, h_align_row],
@@ -1081,7 +1113,7 @@ class DashSettingsPage(Box):
             control_min_width=None,
         )
 
-        dock_card = create_settings_card(
+        dock_card = self._create_card(
             title="Dock Styling & Auto-Hide",
             description="Customize bar geometry, borders, and auto-hide behaviors",
             rows=[minwidth_row, floating_row, autohide_row],
@@ -1157,8 +1189,8 @@ class DashSettingsPage(Box):
         self._card_opacity_slider.connect("value-changed", self._on_card_opacity_changed)
 
         card_opacity_row = create_slider_row(
-            title="Dash App Tiles Opacity",
-            subtitle="Adjust background tile transparency for application launcher cards",
+            title="Dash Cards & Tiles Opacity",
+            subtitle="Adjust background transparency for launcher tiles, settings sidebar, and preference cards",
             slider=self._card_opacity_slider,
             value_badge=self._card_opacity_badge,
             control_min_width=240,
@@ -1180,7 +1212,7 @@ class DashSettingsPage(Box):
             control_min_width=None,
         )
 
-        dash_card = create_settings_card(
+        dash_card = self._create_card(
             title="Dash Overlay & Performance",
             description="Customize Dash backdrop effect, darkening, and launcher tile translucency",
             rows=[blur_row, dim_row, card_opacity_row, instant_row],
@@ -1288,7 +1320,7 @@ class DashSettingsPage(Box):
             children=[pool_title_col, pool_flow],
         )
 
-        wallpaper_card = create_settings_card(
+        wallpaper_card = self._create_card(
             title="Wallpaper Transitions & Effects",
             description="Configure animations and the random transition pool for desktop wallpapers",
             rows=[wallpaper_trans_row, wallpaper_pool_row],
@@ -1754,6 +1786,8 @@ class DashSettingsPage(Box):
             self._card_opacity_badge.set_label(f"{round(opacity * 100)}%")
         user_options.settings.dash_card_opacity = opacity
         user_options.save()
+
+        self.set_card_opacity(opacity)
 
         bm = self._bar_manager or singletons.bar_manager
         if bm and getattr(bm, "_dash", None) and hasattr(bm._dash, "launcher"):
