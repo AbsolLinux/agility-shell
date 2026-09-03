@@ -10,6 +10,89 @@ AWE_DIR = os.path.expanduser("~/.config/quickshell/Awe")
 SETTINGS_FILE = os.path.expanduser("~/.config/quickshell/widget_settings.json")
 ALT_SETTINGS_FILE = os.path.expanduser("~/.config/quickshell/Awe/widget_settings.json")
 
+AWE_THEMES: list[dict] = [
+    {
+        "id": "liquid_glass",
+        "name": "Liquid Glass",
+        "icon": "drop-duotone",
+        "desc": "Translucent frosted glass with specular gloss",
+        "accent": "#7DD3FC",
+        "tile_bg": "#80141B24",
+    },
+    {
+        "id": "transparent",
+        "name": "Transparent",
+        "icon": "frame-corners-duotone",
+        "desc": "Minimal see-through floating aesthetic",
+        "accent": "#38BDF8",
+        "tile_bg": "#260B0E14",
+    },
+    {
+        "id": "material",
+        "name": "Material 3",
+        "icon": "paint-brush-duotone",
+        "desc": "Original dark slate with Pixel cyan",
+        "accent": "#C2E7FF",
+        "tile_bg": "#232D33",
+    },
+    {
+        "id": "cyberpunk",
+        "name": "Cyberpunk",
+        "icon": "lightning-duotone",
+        "desc": "High-contrast neon glow on obsidian",
+        "accent": "#00FFE0",
+        "tile_bg": "#0A0B10",
+    },
+    {
+        "id": "nordic",
+        "name": "Nordic Frost",
+        "icon": "snowflake-duotone",
+        "desc": "Arctic cold blue & snow storm palette",
+        "accent": "#88C0D0",
+        "tile_bg": "#2E3440",
+    },
+    {
+        "id": "oled",
+        "name": "OLED Black",
+        "icon": "moon-stars-duotone",
+        "desc": "100% pitch-black with crisp white typography",
+        "accent": "#FFFFFF",
+        "tile_bg": "#000000",
+    },
+    {
+        "id": "warm_latte",
+        "name": "Warm Latte",
+        "icon": "coffee-duotone",
+        "desc": "Cozy espresso & caramel with warm amber",
+        "accent": "#F59E0B",
+        "tile_bg": "#1E1A16",
+    },
+    {
+        "id": "tokyo_night",
+        "name": "Tokyo Night",
+        "icon": "sparkle-duotone",
+        "desc": "Midnight indigo-violet with lavender & cyan",
+        "accent": "#7AA2F7",
+        "tile_bg": "#1A1B26",
+    },
+    {
+        "id": "evergreen_moss",
+        "name": "Evergreen",
+        "icon": "tree-evergreen-duotone",
+        "desc": "Translucent forest green with phosphor telemetry",
+        "accent": "#22C55E",
+        "tile_bg": "#0C1A12",
+    },
+    {
+        "id": "aurora_prism",
+        "name": "Aurora Prism",
+        "icon": "diamond-duotone",
+        "desc": "Crystal glass with iridescent aurora reflections",
+        "accent": "#E879F9",
+        "tile_bg": "#161826",
+    },
+]
+
 
 class AweService(Service):
     """
@@ -21,6 +104,9 @@ class AweService(Service):
 
     @Signal
     def visibility_changed(self, widget_id: str, is_visible: bool) -> None: ...
+
+    @Signal
+    def theme_changed(self, theme_id: str) -> None: ...
 
     _instance = None
 
@@ -34,7 +120,9 @@ class AweService(Service):
         super().__init__(**kwargs)
         self._proc: subprocess.Popen | None = None
         self._widgets_visibility: dict[str, bool] = {}
+        self._current_theme: str = "liquid_glass"
         self._load_visibility()
+        self._load_theme()
 
     def is_running(self) -> bool:
         if self._proc is not None:
@@ -193,3 +281,45 @@ class AweService(Service):
         new_state = not self.get_visibility(widget_id)
         self.set_visibility(widget_id, new_state)
         return new_state
+
+    # ── Theme Settings Management ───────────────────────────────────────────
+
+    def _load_theme(self) -> None:
+        target_file = SETTINGS_FILE if os.path.exists(SETTINGS_FILE) else ALT_SETTINGS_FILE
+        if os.path.exists(target_file):
+            try:
+                with open(target_file, "r") as f:
+                    data = json.load(f)
+                theme = data.get("manager", {}).get("theme", "liquid_glass")
+                if theme:
+                    self._current_theme = str(theme)
+            except Exception as e:
+                logger.warning(f"[awe] Error reading widget theme: {e}")
+
+    def get_theme(self) -> str:
+        return self._current_theme
+
+    def set_theme(self, theme_id: str) -> None:
+        self._current_theme = str(theme_id)
+
+        # Persist to JSON files
+        for target_path in [SETTINGS_FILE, ALT_SETTINGS_FILE]:
+            try:
+                data = {}
+                if os.path.exists(target_path):
+                    with open(target_path, "r") as f:
+                        data = json.load(f)
+
+                if "manager" not in data:
+                    data["manager"] = {}
+
+                data["manager"]["theme"] = str(theme_id)
+
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with open(target_path, "w") as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                logger.warning(f"[awe] Failed to write theme to {target_path}: {e}")
+
+        self.theme_changed(self._current_theme)
+
