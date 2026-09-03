@@ -6,10 +6,10 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/AbsolOrg/agility-shell.git"
+REPO_URL="https://github.com/Naitik-Vadher-4661/agility-shell.git"
 INSTALL_DIR="$HOME/.config/agility-shell"
 CONFIG_DIR="$INSTALL_DIR/config"
-SCRIPT_URL="https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/install.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/install.sh"
 
 SCRIPT_SRC="${BASH_SOURCE[0]:-}"
 if [[ -n "$SCRIPT_SRC" && "$SCRIPT_SRC" != "bash" && "$SCRIPT_SRC" != "sh" && "$SCRIPT_SRC" != "/dev/stdin" && -f "$SCRIPT_SRC" ]]; then
