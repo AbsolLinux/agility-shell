@@ -12,7 +12,6 @@ from fabric.widgets.overlay import Overlay
 from loguru import logger
 
 from user_options import user_options
-from utils.helpers import popup_with_blur
 from desktop_applets import DESKTOP_APPLET_SIZES, DESKTOP_APPLET_WIDGETS, DESKTOP_CANVAS_SIZES
 from .themes import wallpaper
 from snippets import Animator, disable_blur, free_blur, set_blur_regions_from_widget, enable_blur, trace_widget_regions
@@ -356,18 +355,7 @@ class DesktopAppletWindow(WaylandWindow):
         return False
     
     def _apply_blur(self) -> None:
-        if not user_options.theme.blur:
-            return
-        from .singletons import style_service
-
-        if style_service is not None:
-            style_service.connect("notify::style-changed", self._retrace_blur)
-
-        self._blur_ctx = enable_blur(self)
-        if not self._blur_ctx:
-            return
-
-        self._retrace_blur()
+        pass
 
     def _retrace_blur(self) -> None:
         if not self._blur_ctx:
@@ -803,9 +791,6 @@ class DesktopAppletWindow(WaylandWindow):
             self._overlay.set_opacity(1.0)
             self._overlay.show_all()
 
-            if not self._blur_ctx and user_options.theme.blur:
-                self._apply_blur()
-
     def remove_applet(self, key: str) -> None:
         widget = self._children.pop(key, None)
         if widget:
@@ -965,11 +950,8 @@ class DesktopAppletWindow(WaylandWindow):
         )
         menu.append(remove_item)
 
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
+        menu.show_all()
+        menu.popup_at_pointer(event)
         return True
 
     def _set_desktop_applet_variant(self, key: str, variant: str):
@@ -1065,11 +1047,8 @@ class DesktopAppletWindow(WaylandWindow):
             item.set_sensitive(False)
             menu.append(item)
 
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
+        menu.show_all()
+        menu.popup_at_pointer(event)
 
         return True
 
@@ -1161,13 +1140,6 @@ class DesktopAppletService(Service):
         self._sync_monitors()
         for win in self._windows.values():
             win.rebuild()
-
-        if user_options.theme.blur:
-            GLib.timeout_add(2000, self._initial_blur)
-
-    def _initial_blur(self) -> bool:
-        self.apply_blur(True)
-        return False
 
     def _sync_monitors(self) -> None:
         display  = Gdk.Display.get_default()

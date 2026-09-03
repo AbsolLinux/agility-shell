@@ -6,8 +6,6 @@ from fabric.widgets.label import Label
 from fabric.system_tray.service import SystemTrayItem
 from snippets import Icon
 from services.singletons import edit_mode, watcher
-from user_options import user_options
-from utils.helpers import popup_with_blur
 from gi.repository import GLib
 
 
@@ -60,10 +58,7 @@ class TrayItem(EventBox):
             case 3:
                 menu = self._item.get_menu()
                 if menu:
-                    if user_options.theme.blur:
-                        popup_with_blur(menu, event)
-                    else:
-                        menu.popup_at_pointer(event)
+                    menu.popup_at_pointer(event)
                 else:
                     self._item.invoke_menu_for_event(event)
 

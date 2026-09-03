@@ -416,7 +416,7 @@ class Dash(Window):
             self.widgets.set_monitor(active_monitor)
 
             self.dismiss_layer.show()
-            if getattr(user_options.settings, "dash_blur", True) and user_options.theme.blur:
+            if getattr(user_options.settings, "dash_blur", True):
                 if not self.dismiss_layer._blur_ctx:
                     self.dismiss_layer._blur_ctx = enable_blur(self.dismiss_layer)
             else:

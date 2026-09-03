@@ -11,7 +11,6 @@ from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch, Fl
 from services.singletons import theme_service
 from services.templates import template_service, TEMPLATES_DIR
 from services.themes import WALLPAPER_THEME
-from services.desktop_applets import DesktopAppletService
 from user_options import user_options
 
 THUMB_BG_W   = 174
@@ -443,25 +442,6 @@ class ThemePreview(Box):
             ],
         )
 
-        self._blur_switch = SmoothSwitch(
-            style_classes=["dash-switch"],
-            v_expand=True,
-            v_align="center",
-            on_user_toggle=self._on_blur_toggled,
-            width=48,
-        )
-        self._blur_switch.set_active(user_options.theme.blur)
-        blur_section = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            v_align="center",
-            children=[
-                Label(label="Blur (Beta)", style_classes=["dim-label"]),
-                Box(h_expand=True, h_align="end", children=self._blur_switch),
-            ],
-        )
-
         self._template_rows: dict[str, TemplateRow] = {}
         self._templates_section_body = None
 
@@ -480,7 +460,7 @@ class ThemePreview(Box):
                 ),
                 Section(
                     title="General",
-                    children=[radius_section, opacity_section, blur_section],
+                    children=[radius_section, opacity_section],
                 ),
                 Section(
                     title="Fonts",
@@ -567,12 +547,6 @@ class ThemePreview(Box):
         user_options.theme.opacity = value
         user_options.save()
         theme_service.apply()
-
-    def _on_blur_toggled(self, state: bool) -> None:
-        user_options.theme.blur = state
-        user_options.save()
-        self.bar_manager.apply_blur(state)
-        DesktopAppletService.get_instance().apply_blur(state)
 
     def _on_accent_clicked(self, name: str) -> None:
         theme_service.apply_accent(name)

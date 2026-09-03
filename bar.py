@@ -6,8 +6,6 @@ from fabric.widgets.box import Box
 from fabric.widgets.centerbox import CenterBox
 from fabric.widgets.eventbox import EventBox
 from snippets import HackedRevealer, enable_blur, set_blur_regions_from_widget, disable_blur, free_blur, AppletReveal
-from snippets.blur.blur import set_blur_regions
-from snippets.blur.region_trace import Rect
 from gi.repository import Gdk, Gtk, GLib, GtkLayerShell
 from bar_widgets import (
     LauncherButton, BluetoothButton, BatteryButton, CalendarButton, ClockButton,
@@ -35,7 +33,6 @@ from windows.osd import OSD
 from windows.clipboard import ClipboardApplet
 from windows.wallpaper_picker import WallpaperPicker
 from snippets.popupwindow import PopupWindow
-from utils.helpers import popup_with_blur
 from utils.monitors import get_connector_from_monitor_id
 from utils.sounds import play_sound
 
@@ -241,7 +238,6 @@ class DismissLayer(Window):
 class AppletWindow(PopupWindow):
     def __init__(self, applet, alignment: str = "top", standalone = False, **kwargs):
         self._keys = None
-        self._blur_ctx = None
         self._alignment = alignment
         applets = applet if isinstance(applet, list) else [applet]
 
@@ -286,137 +282,14 @@ class AppletWindow(PopupWindow):
             self.dismiss_layer.set_visible(True)
             self.show()
             self.revealer.open()
-            if user_options.theme.blur:
-                self._start_animated_blur()
             self.set_focus(None)
+
     def _finish_close(self):
         GLib.timeout_add(50, self.hide)
-        if self._blur_ctx:
-            disable_blur(self._blur_ctx)
-            free_blur(self._blur_ctx)
-            self._blur_ctx = None
-    def _trace_content_box(self, erode=10):
-        alloc = self._content_box.get_allocation()
-        w, h = alloc.width, alloc.height
-
-        if w <= 0 or h <= 0:
-            return [Rect(0, 0, w, h)]
-
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
-        cr = cairo.Context(surface)
-
-        cr.set_operator(cairo.OPERATOR_CLEAR)
-        cr.paint()
-        cr.set_operator(cairo.OPERATOR_OVER)
-
-        style_ctx = self._content_box.get_style_context()
-
-        Gtk.render_background(style_ctx, cr, erode, erode, w - erode * 2, h - erode * 2)
-
-        data    = surface.get_data()
-        stride  = surface.get_stride()
-        accuracy = 1
-        alpha_threshold = 20
-
-        raw: list[Rect] = []
-        for y in range(0, h, accuracy):
-            step_h = min(accuracy, h - y)
-            x = 0
-            while x < w:
-                alpha = data[y * stride + x * 4 + 3]
-                if alpha > alpha_threshold:
-                    start_x = x
-                    while x < w and data[y * stride + x * 4 + 3] > alpha_threshold:
-                        x += 1
-                    raw.append(Rect(start_x, y, x - start_x, step_h))
-                else:
-                    x += 1
-
-        merged: list[Rect] = []
-        for rect in raw:
-            found = False
-            for m in reversed(merged):
-                if (m.x == rect.x and
-                    m.width == rect.width and
-                    m.y + m.height == rect.y):
-                    m.height += rect.height
-                    found = True
-                    break
-            if not found:
-                merged.append(Rect(rect.x, rect.y, rect.width, rect.height))
-
-        return merged if merged else [Rect(0, 0, w, h)]
-    def _start_animated_blur(self):
-        if self._blur_ctx:
-            disable_blur(self._blur_ctx)
-            free_blur(self._blur_ctx)
-            self._blur_ctx = None
-
-        self.revealer.progress_cb = None 
-
-        self._blur_ctx = enable_blur(self)
-
-        try:
-            cx, cy = self._content_box.translate_coordinates(self, 0, 0)
-        except Exception:
-            GLib.timeout_add(32, self._start_animated_blur)
-            return
-
-        traced_rects  = self._trace_content_box()
-        content_alloc = self._content_box.get_allocation()
-        content_h     = content_alloc.height
-        content_w     = content_alloc.width
-        alignment     = self._alignment
-
-        def on_progress(value):
-            if not self._blur_ctx:
-                return
-            try:
-                cx, cy = self._content_box.translate_coordinates(self, 0, 0)
-            except Exception:
-                return
-
-            clipped = []
-
-            scale = (
-                self.revealer.SCALE_START
-                + (1.0 - self.revealer.SCALE_START) * value
-            )
-
-            anchor_x = cx + (content_w / 2.0)
-            anchor_y = cy if alignment != "bottom" else cy + content_h
-
-            for r in traced_rects:
-                abs_x = cx + r.x
-                abs_y = cy + r.y - 2
-
-                left   = math.floor(anchor_x + (abs_x - anchor_x) * scale)
-                top    = math.floor(anchor_y + (abs_y - anchor_y) * scale)
-
-                right  = math.ceil(
-                    anchor_x + ((abs_x + r.width) - anchor_x) * scale
-                )
-
-                bottom = math.ceil(
-                    anchor_y + ((abs_y + r.height) - anchor_y) * scale
-                )
-
-                clipped.append((
-                    left,
-                    top,
-                    max(1, right - left),
-                    max(1, bottom - top),
-                ))
-            if clipped:
-                set_blur_regions(self._blur_ctx, clipped)
-        self.revealer.progress_cb = on_progress
 
     def destroy(self):
         self.dismiss_layer.destroy()
         self.revealer.progress_cb = None
-        if self._blur_ctx:
-            disable_blur(self._blur_ctx)
-            free_blur(self._blur_ctx)
         super().destroy()
 def _make_applet_popup(
     keys: str | list[str],
@@ -1670,7 +1543,7 @@ class Bar(Window):
             GLib.idle_add(self._update_smart_autohide)
 
     def _on_realize(self, *_):
-        should_blur = getattr(user_options.settings, "bar_blur", user_options.theme.blur)
+        should_blur = getattr(user_options.settings, "bar_blur", True)
         if should_blur:
             self._blur_ctx = enable_blur(self)
             GLib.timeout_add(1500, self._update_blur_region)
@@ -1873,11 +1746,8 @@ class Bar(Window):
             remove_item = Gtk.MenuItem(label="Remove Bar")
             remove_item.connect("activate", lambda _: self._request_remove())
         menu.connect("deactivate", self._on_menu_deactivate)
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
+        menu.show_all()
+        menu.popup_at_pointer(event)
 
     def _set_alignment(self, alignment: str):
         self.alignment = alignment

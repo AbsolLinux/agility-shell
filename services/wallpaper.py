@@ -155,11 +155,8 @@ class WallpaperDropWindow(WaylandWindow):
             item.set_sensitive(False)
             menu.append(item)
 
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
+        menu.show_all()
+        menu.popup_at_pointer(event)
 
         return True
     def set_bar_manager(self, bar_manager) -> None:

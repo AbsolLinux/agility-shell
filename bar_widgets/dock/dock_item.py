@@ -10,8 +10,7 @@ from fabric.widgets.box import Box
 from fabric.widgets.image import Image
 
 from services.singletons import edit_mode
-from user_options import user_options
-from utils.helpers import get_app_icon_name, popup_with_blur
+from utils.helpers import get_app_icon_name
 
 DOCK_DRAG_TARGET = "dock-item"
 DOCK_DRAG_INFO = 0
@@ -181,12 +180,8 @@ class DockItem(EventBox):
         pin_item = Gtk.MenuItem(label=pin_label)
         pin_item.connect("activate", lambda *_: self._do_pin_toggle())
         menu.append(pin_item)
-
-        if user_options.theme.blur:
-            popup_with_blur(menu, event)
-        else:
-            menu.show_all()
-            menu.popup_at_pointer(event)
+        menu.show_all()
+        menu.popup_at_pointer(event)
 
     def _do_pin_toggle(self) -> None:
         self._on_pin_toggle(self.app_id)

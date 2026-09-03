@@ -9,8 +9,6 @@ from services.singletons import bluetooth
 from services.bluetooth import BluetoothAdapter, BluetoothDevice
 from enum import Enum, auto
 from gi.repository import GLib, Gdk, Gtk
-from utils.helpers import popup_with_blur
-from user_options import user_options
 
 
 class BTState(Enum):
@@ -113,12 +111,8 @@ def _build_device_menu(device: BluetoothDevice, event: Gdk.EventButton) -> None:
         lambda _: setattr(device, "trusted", not device.trusted),
     )
     menu.append(trust_item)
-
-    if user_options.theme.blur:
-        popup_with_blur(menu, event)
-    else:
-        menu.show_all()
-        menu.popup_at_pointer(event)
+    menu.show_all()
+    menu.popup_at_pointer(event)
 
 
 class BluetoothDeviceItem(Box):

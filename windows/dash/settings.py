@@ -3,6 +3,7 @@ import os
 from fabric.widgets.box import Box
 from fabric.widgets.button import Button
 from fabric.widgets.label import Label
+from fabric.widgets.stack import Stack
 from gi.repository import Gtk, GLib, Gdk
 from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch, FlatScale
 from user_options import user_options
@@ -253,49 +254,351 @@ class BarThemeCard(Button):
             self.remove_style_class("active")
 
 
+class SettingsNavButton(Button):
+    def __init__(
+        self,
+        page_id: str,
+        title: str,
+        subtitle: str,
+        icon_name: str,
+        on_clicked_cb,
+        is_active: bool = False,
+    ):
+        self.page_id = page_id
+        self._on_clicked_cb = on_clicked_cb
+
+        self._icon = Icon(icon_name=icon_name, icon_size=20)
+        self._title_label = Label(
+            label=title,
+            style="font-size: 13px; font-weight: 600;",
+            h_align="start",
+            style_classes=["settings-nav-title"],
+        )
+        self._sub_label = Label(
+            label=subtitle,
+            style="font-size: 10.5px; opacity: 0.65;",
+            h_align="start",
+            style_classes=["settings-nav-subtitle"],
+        )
+        text_box = Box(
+            orientation="v",
+            spacing=2,
+            h_align="start",
+            v_align="center",
+            h_expand=True,
+            children=[self._title_label, self._sub_label],
+        )
+
+        content_box = Box(
+            orientation="h",
+            spacing=12,
+            h_align="fill",
+            v_align="center",
+            children=[self._icon, text_box],
+        )
+
+        classes = ["dash-settings-nav-btn"]
+        if is_active:
+            classes.append("active")
+
+        super().__init__(
+            child=content_box,
+            style_classes=classes,
+            on_clicked=lambda *_: self._on_clicked_cb(self.page_id),
+            h_align="fill",
+            h_expand=True,
+        )
+
+    def set_active_state(self, active: bool):
+        if active:
+            self.add_style_class("active")
+        else:
+            self.remove_style_class("active")
+
+
+def create_settings_card(
+    title: str | None = None,
+    description: str | None = None,
+    rows: list[Gtk.Widget] | None = None,
+    header_action: Gtk.Widget | None = None,
+    body_widget: Gtk.Widget | None = None,
+) -> Box:
+    """
+    Modern GNOME/macOS-style grouped card container with header and clean dividers.
+    """
+    card_box = Box(
+        orientation="v",
+        spacing=0,
+        h_align="fill",
+        h_expand=True,
+        style_classes=["dash-settings-card"],
+    )
+
+    if title:
+        header_row = Box(
+            orientation="h",
+            spacing=8,
+            h_align="fill",
+            style_classes=["dash-settings-card-header"],
+        )
+        title_col = Box(
+            orientation="v",
+            spacing=2,
+            h_align="start",
+            h_expand=True,
+            children=[
+                Label(label=title, style="font-size: 13.5px; font-weight: 700;", h_align="start"),
+            ],
+        )
+        if description:
+            title_col.add(
+                Label(label=description, style="font-size: 11px; opacity: 0.65;", h_align="start")
+            )
+        header_row.add(title_col)
+        if header_action:
+            header_row.add(header_action)
+        card_box.add(header_row)
+
+        if rows or body_widget:
+            card_box.add(Box(style_classes=["dash-settings-divider"]))
+
+    if rows:
+        for idx, row in enumerate(rows):
+            card_box.add(row)
+            if idx < len(rows) - 1:
+                card_box.add(Box(style_classes=["dash-settings-divider"]))
+
+    if body_widget:
+        card_box.add(body_widget)
+
+    return card_box
+
+
+def create_setting_row(
+    title: str,
+    subtitle: str,
+    control: Gtk.Widget,
+    control_min_width: int | None = 224,
+) -> Box:
+    """
+    Individual setting row with title/description on the left and control on the right.
+    """
+    title_col = Box(
+        orientation="v",
+        spacing=2,
+        h_align="start",
+        h_expand=True,
+        children=[
+            Label(label=title, style_classes=["dim-label"], style="font-size: 12.5px; font-weight: 600;", h_align="start"),
+            Label(label=subtitle, style="font-size: 11px; opacity: 0.6;", h_align="start", line_wrap="word-char"),
+        ],
+    )
+    ctl_box = Box(
+        h_align="end",
+        v_align="center",
+        children=[control],
+    )
+    if control_min_width:
+        ctl_box.set_style(f"min-width: {control_min_width}px;")
+
+    return Box(
+        orientation="h",
+        spacing=12,
+        h_align="fill",
+        style_classes=["dash-settings-row"],
+        children=[title_col, ctl_box],
+    )
+
+
+def create_slider_row(
+    title: str,
+    subtitle: str,
+    slider: FlatScale,
+    value_badge: Label,
+    control_min_width: int = 240,
+) -> Box:
+    """
+    Pairs a FlatScale with an inline value badge (e.g. '60%', '180ms')
+    and sets proper layout constraints so it can be dragged smoothly.
+    """
+    badge_box = Box(
+        orientation="h",
+        h_align="center",
+        v_align="center",
+        style="min-width: 50px; padding: 3px 8px; border-radius: 6px; background-color: var(--surface_container_high);",
+        children=[value_badge],
+    )
+    control_box = Box(
+        orientation="h",
+        spacing=10,
+        h_align="end",
+        v_align="center",
+        children=[slider, badge_box],
+    )
+    control_box.set_style(f"min-width: {control_min_width}px;")
+
+    return create_setting_row(
+        title=title,
+        subtitle=subtitle,
+        control=control_box,
+        control_min_width=control_min_width,
+    )
+
+
+def create_page_header(title: str, description: str, icon_name: str) -> Box:
+    """
+    Hero header at the top of each settings view.
+    """
+    icon = Icon(icon_name=icon_name, icon_size=24)
+    title_lbl = Label(
+        label=title,
+        style="font-size: 17px; font-weight: 700;",
+        style_classes=["dash-settings-page-title"],
+        h_align="start",
+    )
+    desc_lbl = Label(
+        label=description,
+        style="font-size: 11.5px; opacity: 0.7;",
+        h_align="start",
+    )
+    text_box = Box(orientation="v", spacing=2, h_align="start", children=[title_lbl, desc_lbl])
+    return Box(
+        orientation="h",
+        spacing=14,
+        h_align="fill",
+        style_classes=["dash-settings-page-header"],
+        children=[icon, text_box],
+    )
+
+
 class DashSettingsPage(Box):
     """
-    Dash settings page for configuring:
-      - Bar Behavior (Hover-to-Open & Delay)
-      - Bar Appearance (Bar background opacity, Widget container opacity, Desktop widget opacity)
-      - Bar Widgets Manager (View and remove / add active widgets in Left, Center, Right)
-      - Bar Position (Top / Bottom alignment)
-      - Dash Appearance & Performance (Blur toggle, Dim opacity, Card opacity, Instant opening)
+    Modernized Dash settings page featuring a vertical navigation sidebar
+    and grouped setting card pages:
+      - Bar Behaviour (Hover-to-Open, Delay, Triggers)
+      - Bar Themes & Appearance (Style presets, Blur, Opacity levels)
+      - Active Bar Widgets (Bar instances, Left, Center, Right slots)
+      - Bar Position & Layout (Screen edge, Alignment, Min-width, Dock, Auto-hide)
+      - Dash Appearance & Wallpaper Effects (Backdrop blur, Dim, Tiles, Animations)
     """
 
     def __init__(self, bar_manager=None, **kwargs):
         self._bar_manager = bar_manager
         self._selected_bar_index = 0
         self._section_boxes: dict[str, Box] = {}
-        content = self._build_content()
+        self._nav_buttons: dict[str, SettingsNavButton] = {}
+        self._bar_theme_cards: dict[str, BarThemeCard] = {}
+        self._hover_chip_widgets: dict[str, HoverWidgetChip] = {}
+        self._setting_trans_buttons: dict[str, Button] = {}
+        self._pool_chips: dict[str, Button] = {}
 
-        self.scroll = ClippingScrolledWindow(
+        # Build pages
+        page_behavior = self._build_page_behavior()
+        page_appearance = self._build_page_appearance()
+        page_widgets = self._build_page_widgets()
+        page_layout = self._build_page_layout()
+        page_dash = self._build_page_dash()
+
+        self._stack = Stack(
+            transition_type="crossfade",
+            transition_duration=200,
             h_expand=False,
-            h_align="center",
-            style_classes=["dash-grid"],
-            child=content,
-            max_content_size=(1104, 604),
-            fade_distance=56,
-            overlay_scroll=True,
-            kinetic_scroll=True,
-            h_scrollbar_policy="never",
-            v_scrollbar_policy="automatic",
+            v_expand=True,
+            style_classes=["dash-settings-stack"],
         )
-        self.scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.scroll.set_size_request(1104, 604)
+        self._stack.set_size_request(822, 604)
+        self._stack.set_homogeneous(False)
+        self._stack.add_named(self._wrap_scroll(page_behavior), "bar_behavior")
+        self._stack.add_named(self._wrap_scroll(page_appearance), "bar_appearance")
+        self._stack.add_named(self._wrap_scroll(page_widgets), "bar_widgets")
+        self._stack.add_named(self._wrap_scroll(page_layout), "bar_layout")
+        self._stack.add_named(self._wrap_scroll(page_dash), "dash_effects")
+
+        sidebar = self._build_sidebar()
+
+        # Wrap in main layout
+        main_box = Box(
+            orientation="h",
+            spacing=18,
+            h_align="fill",
+            v_align="fill",
+            h_expand=True,
+            v_expand=True,
+            children=[sidebar, self._stack],
+        )
 
         super().__init__(
             orientation="v",
             v_align="center",
-            spacing=24,
-            children=[self.scroll],
+            h_align="center",
+            style_classes=["dash-settings-container"],
+            children=[main_box],
             **kwargs,
         )
+        self.set_size_request(1104, 604)
 
-    def _build_content(self) -> Box:
-        # =====================================================================
-        # Section 1: Bar Behavior & Hover
-        # =====================================================================
+    def _wrap_scroll(self, content_widget: Gtk.Widget) -> ClippingScrolledWindow:
+        scroll = ClippingScrolledWindow(
+            h_expand=False,
+            v_expand=True,
+            child=content_widget,
+            max_content_size=(822, 604),
+            fade_distance=40,
+            overlay_scroll=True,
+            kinetic_scroll=False,
+            h_scrollbar_policy="never",
+            v_scrollbar_policy="automatic",
+        )
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_size_request(822, 604)
+        return scroll
+
+    def _build_sidebar(self) -> Box:
+        sidebar = Box(
+            orientation="v",
+            spacing=8,
+            h_align="start",
+            v_align="fill",
+            style_classes=["dash-settings-sidebar"],
+        )
+        sidebar.set_size_request(264, 604)
+
+        nav_items = [
+            ("bar_behavior",   "Bar Behaviour",             "Hover trigger & timing",     "sliders-duotone"),
+            ("bar_appearance", "Bar Themes & Appearance",   "Styles, blur & opacities",    "palette-duotone"),
+            ("bar_widgets",    "Active Bar Widgets",        "Left, center & right slots", "puzzle-piece-duotone"),
+            ("bar_layout",     "Bar Position & Layout",     "Edge, alignment & dock",     "layout-duotone"),
+            ("dash_effects",   "Dash & Wallpaper Effects",  "Dim, blur & transitions",    "sparkle-duotone"),
+        ]
+
+        for pid, title, subtitle, icon_name in nav_items:
+            is_active = (pid == "bar_behavior")
+            btn = SettingsNavButton(
+                page_id=pid,
+                title=title,
+                subtitle=subtitle,
+                icon_name=icon_name,
+                on_clicked_cb=self._switch_page,
+                is_active=is_active,
+            )
+            self._nav_buttons[pid] = btn
+            sidebar.add(btn)
+
+        sidebar.add(Box(v_expand=True))
+        return sidebar
+
+    def _switch_page(self, page_id: str):
+        for pid, btn in self._nav_buttons.items():
+            btn.set_active_state(pid == page_id)
+        self._stack.set_visible_child_name(page_id)
+
+    def _build_page_behavior(self) -> Box:
+        header = create_page_header(
+            title="Bar Behaviour",
+            description="Configure auto-open interactions, hover debouncing, and interactive widget targets",
+            icon_name="sliders-duotone",
+        )
+
         self._hover_switch = SmoothSwitch(
             style_classes=["dash-switch"],
             v_expand=True,
@@ -305,27 +608,17 @@ class DashSettingsPage(Box):
         )
         self._hover_switch.set_active(getattr(user_options.settings, "hover_open", True))
 
-        hover_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Hover to Open", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Open Dash and bar applets automatically when hovering over them", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._hover_switch]),
-            ],
+        hover_row = create_setting_row(
+            title="Hover to Open",
+            subtitle="Open Dash and bar applets automatically when hovering over them",
+            control=self._hover_switch,
+            control_min_width=None,
         )
 
         current_delay = getattr(user_options.settings, "hover_delay", 180)
+        self._delay_badge = Label(label=f"{current_delay}ms", style="font-size: 11px; font-weight: 600;")
         self._delay_slider = FlatScale(
+            size=(170, 24),
             style_classes=["scale"],
             min_value=50,
             max_value=500,
@@ -336,30 +629,24 @@ class DashSettingsPage(Box):
         )
         self._delay_slider.connect("value-changed", self._on_delay_changed)
 
-        delay_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Hover Delay", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Debounce duration before opening on hover to prevent accidental triggers", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._delay_slider]),
-            ],
+        delay_row = create_slider_row(
+            title="Hover Delay",
+            subtitle="Debounce duration before opening on hover to prevent accidental triggers",
+            slider=self._delay_slider,
+            value_badge=self._delay_badge,
+            control_min_width=240,
+        )
+
+        hover_card = create_settings_card(
+            title="Hover Interaction",
+            description="Control how agility-shell reacts to mouse cursor hover over the bar",
+            rows=[hover_row, delay_row],
         )
 
         # Multi-select chips for hover widgets
-        self._hover_chip_widgets: dict[str, HoverWidgetChip] = {}
         hover_chips_container = Gtk.FlowBox()
         hover_chips_container.set_valign(Gtk.Align.START)
-        hover_chips_container.set_max_children_per_line(8)
+        hover_chips_container.set_max_children_per_line(5)
         hover_chips_container.set_selection_mode(Gtk.SelectionMode.NONE)
         hover_chips_container.set_column_spacing(6)
         hover_chips_container.set_row_spacing(6)
@@ -397,49 +684,45 @@ class DashSettingsPage(Box):
             on_clicked=lambda *_: self._set_all_hover_widgets(False),
         )
 
-        hover_list_row = Box(
+        actions_box = Box(
+            orientation="h",
+            spacing=6,
+            h_align="end",
+            children=[select_all_btn, deselect_all_btn],
+        )
+
+        chips_wrapper = Box(
             orientation="v",
             spacing=10,
+            style="padding: 12px 0 6px 0;",
+            children=[hover_chips_container],
+        )
+
+        chips_card = create_settings_card(
+            title="Hover-Enabled Widgets",
+            description="Select which specific widgets automatically open their popup/menu when hovered",
+            header_action=actions_box,
+            body_widget=chips_wrapper,
+        )
+
+        page_box = Box(
+            orientation="v",
+            spacing=16,
             h_align="fill",
-            children=[
-                Box(
-                    orientation="h",
-                    spacing=8,
-                    h_align="fill",
-                    children=[
-                        Box(
-                            orientation="v",
-                            spacing=2,
-                            h_align="start",
-                            h_expand=True,
-                            children=[
-                                Label(label="Hover-Enabled Widgets", style_classes=["dim-label"], h_align="start"),
-                                Label(label="Select which specific widgets automatically open their popup/menu when hovered", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                            ],
-                        ),
-                        Box(
-                            orientation="h",
-                            spacing=6,
-                            h_align="end",
-                            children=[select_all_btn, deselect_all_btn],
-                        ),
-                    ],
-                ),
-                hover_chips_container,
-            ],
+            h_expand=True,
+            style="padding: 6px 12px 24px 4px;",
+            children=[header, hover_card, chips_card],
+        )
+        return page_box
+
+    def _build_page_appearance(self) -> Box:
+        header = create_page_header(
+            title="Bar Themes & Appearance",
+            description="Customize styling presets, backdrop blur, and element transparencies",
+            icon_name="palette-duotone",
         )
 
-        behavior_section = Section(
-            title="Bar Behavior",
-            children=[hover_row, delay_row, hover_list_row],
-        )
-
-        # =====================================================================
-        # Section 2: Bar Themes & Appearance
-        # =====================================================================
         current_bar_theme = getattr(user_options.settings, "bar_theme", "default")
-        self._bar_theme_cards: dict[str, BarThemeCard] = {}
-
         theme_cards_box = Box(orientation="h", spacing=8, h_align="fill", h_expand=True)
         for preset in BAR_THEME_PRESETS:
             card = BarThemeCard(
@@ -453,22 +736,17 @@ class DashSettingsPage(Box):
             self._bar_theme_cards[preset["id"]] = card
             theme_cards_box.add(card)
 
-        bar_theme_selector_row = Box(
+        theme_wrapper = Box(
             orientation="v",
-            spacing=8,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    children=[
-                        Label(label="Bar Style Preset", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Choose an aesthetic theme for the bar (Liquid Glass, Frosted Blur, Transparent, Tinted, Solid)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                theme_cards_box,
-            ],
+            spacing=6,
+            style="padding: 10px 0 6px 0;",
+            children=[theme_cards_box],
+        )
+
+        theme_card = create_settings_card(
+            title="Bar Style Preset",
+            description="Choose an aesthetic theme preset for the bar (Liquid Glass, Frosted Blur, Pure Clear, Tinted Glass, Classic Solid)",
+            body_widget=theme_wrapper,
         )
 
         self._bar_blur_switch = SmoothSwitch(
@@ -480,27 +758,17 @@ class DashSettingsPage(Box):
         )
         self._bar_blur_switch.set_active(getattr(user_options.settings, "bar_blur", True))
 
-        bar_blur_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Bar Background Blur", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Enable hardware-accelerated backdrop blur behind the bar", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._bar_blur_switch]),
-            ],
+        bar_blur_row = create_setting_row(
+            title="Bar Background Blur",
+            subtitle="Enable hardware-accelerated backdrop blur behind the bar",
+            control=self._bar_blur_switch,
+            control_min_width=None,
         )
 
         current_bar_opacity = getattr(user_options.settings, "bar_opacity", 1.0)
+        self._bar_opacity_badge = Label(label=f"{round(current_bar_opacity * 100)}%", style="font-size: 11px; font-weight: 600;")
         self._bar_opacity_slider = FlatScale(
+            size=(170, 24),
             style_classes=["scale"],
             min_value=0.0,
             max_value=1.0,
@@ -511,27 +779,18 @@ class DashSettingsPage(Box):
         )
         self._bar_opacity_slider.connect("value-changed", self._on_bar_opacity_changed)
 
-        bar_opacity_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Bar Background Opacity", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Adjust outer bar background transparency (0% is fully clear)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._bar_opacity_slider]),
-            ],
+        bar_opacity_row = create_slider_row(
+            title="Bar Background Opacity",
+            subtitle="Adjust outer bar background transparency (0% is fully clear)",
+            slider=self._bar_opacity_slider,
+            value_badge=self._bar_opacity_badge,
+            control_min_width=240,
         )
 
         current_widget_opacity = getattr(user_options.settings, "widget_opacity", 1.0)
+        self._widget_opacity_badge = Label(label=f"{round(current_widget_opacity * 100)}%", style="font-size: 11px; font-weight: 600;")
         self._widget_opacity_slider = FlatScale(
+            size=(170, 24),
             style_classes=["scale"],
             min_value=0.0,
             max_value=1.0,
@@ -542,27 +801,18 @@ class DashSettingsPage(Box):
         )
         self._widget_opacity_slider.connect("value-changed", self._on_widget_opacity_changed)
 
-        widget_opacity_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Bar Widgets Opacity", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Adjust widget pill container opacity (100% solid, 0% transparent)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._widget_opacity_slider]),
-            ],
+        widget_opacity_row = create_slider_row(
+            title="Bar Widgets Opacity",
+            subtitle="Adjust widget pill container opacity (100% solid, 0% transparent)",
+            slider=self._widget_opacity_slider,
+            value_badge=self._widget_opacity_badge,
+            control_min_width=240,
         )
 
         current_desktop_opacity = getattr(user_options.settings, "desktop_widget_opacity", 1.0)
+        self._desktop_opacity_badge = Label(label=f"{round(current_desktop_opacity * 100)}%", style="font-size: 11px; font-weight: 600;")
         self._desktop_opacity_slider = FlatScale(
+            size=(170, 24),
             style_classes=["scale"],
             min_value=0.0,
             max_value=1.0,
@@ -573,89 +823,116 @@ class DashSettingsPage(Box):
         )
         self._desktop_opacity_slider.connect("value-changed", self._on_desktop_opacity_changed)
 
-        desktop_opacity_row = Box(
-            orientation="h",
-            spacing=6,
+        desktop_opacity_row = create_slider_row(
+            title="Desktop Canvas Widgets Opacity",
+            subtitle="Adjust card opacity for widgets placed directly on the desktop canvas",
+            slider=self._desktop_opacity_slider,
+            value_badge=self._desktop_opacity_badge,
+            control_min_width=240,
+        )
+
+        transparency_card = create_settings_card(
+            title="Blur & Transparency Levels",
+            description="Fine-tune transparency layers for bar containers and placed desktop widgets",
+            rows=[bar_blur_row, bar_opacity_row, widget_opacity_row, desktop_opacity_row],
+        )
+
+        page_box = Box(
+            orientation="v",
+            spacing=16,
             h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Desktop Canvas Widgets Opacity", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Adjust card opacity for widgets placed directly on the desktop", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._desktop_opacity_slider]),
-            ],
+            h_expand=True,
+            style="padding: 6px 12px 24px 4px;",
+            children=[header, theme_card, transparency_card],
+        )
+        return page_box
+
+    def _build_page_widgets(self) -> Box:
+        header = create_page_header(
+            title="Active Bar Widgets",
+            description="Manage multiple bars and configure widget placements across Left, Center, and Right zones",
+            icon_name="puzzle-piece-duotone",
         )
 
-        bar_appearance_section = Section(
-            title="Bar Themes & Appearance",
-            children=[bar_theme_selector_row, bar_blur_row, bar_opacity_row, widget_opacity_row, desktop_opacity_row],
-        )
-
-        # =====================================================================
-        # Section 3: Bar Widgets Layout & Management
-        # =====================================================================
         self._bar_selector_container = Box(orientation="h", spacing=8, h_align="fill")
         self._refresh_bar_selector_ui()
 
-        bar_widgets_container = Box(
+        selector_wrapper = Box(
             orientation="v",
-            spacing=14,
-            h_align="fill",
+            spacing=6,
+            style="padding: 8px 0 4px 0;",
             children=[self._bar_selector_container],
         )
 
+        bar_selector_card = create_settings_card(
+            title="Active Bar Configuration",
+            description="Select which bar to edit on this monitor or add/remove bars",
+            body_widget=selector_wrapper,
+        )
+
+        cards = [header, bar_selector_card]
+
+        section_descriptions = {
+            "left": "Widgets placed in the left-aligned cluster of the selected bar",
+            "center": "Widgets placed in the center cluster of the selected bar",
+            "right": "Widgets placed in the right-aligned cluster of the selected bar",
+        }
+
         for sec in ("left", "center", "right"):
-            sec_box = Box(orientation="h", spacing=8, h_align="start")
+            sec_box = Gtk.FlowBox()
+            sec_box.set_valign(Gtk.Align.START)
+            sec_box.set_max_children_per_line(5)
+            sec_box.set_selection_mode(Gtk.SelectionMode.NONE)
+            sec_box.set_column_spacing(6)
+            sec_box.set_row_spacing(6)
+            sec_box.set_homogeneous(False)
             self._section_boxes[sec] = sec_box
 
             add_btn = Button(
                 child=Box(
                     orientation="h",
                     spacing=4,
-                    children=[Icon(icon_name="plus-circle-duotone", icon_size=14), Label(label="Add Widget")],
+                    children=[Icon(icon_name="plus-circle-duotone", icon_size=14), Label(label="Add Widget", style="font-size: 11px; font-weight: 500;")],
                 ),
                 style_classes=["bar-chip-add-btn"],
                 on_clicked=lambda _btn, s=sec: self._show_add_widget_menu(_btn, s),
             )
 
-            sec_row = Box(
+            chips_box = Box(
                 orientation="v",
                 spacing=6,
-                h_align="fill",
-                children=[
-                    Box(
-                        orientation="h",
-                        spacing=8,
-                        h_align="fill",
-                        children=[
-                            Label(label=f"{sec.capitalize()} Section", style="font-size: 13px; font-weight: 600;", h_align="start"),
-                            Box(h_expand=True),
-                            add_btn,
-                        ],
-                    ),
-                    sec_box,
-                ],
+                style="padding: 10px 0 6px 0;",
+                children=[sec_box],
             )
-            bar_widgets_container.add(sec_row)
+
+            sec_card = create_settings_card(
+                title=f"{sec.capitalize()} Section Widgets",
+                description=section_descriptions.get(sec, ""),
+                header_action=add_btn,
+                body_widget=chips_box,
+            )
+            cards.append(sec_card)
 
         self._refresh_bar_widgets_ui()
 
-        bar_layout_section = Section(
-            title="Active Bar Widgets",
-            children=[bar_widgets_container],
+        page_box = Box(
+            orientation="v",
+            spacing=16,
+            h_align="fill",
+            h_expand=True,
+            style="padding: 6px 12px 24px 4px;",
+            children=cards,
+        )
+        return page_box
+
+    def _build_page_layout(self) -> Box:
+        header = create_page_header(
+            title="Bar Position, Alignment & Layout",
+            description="Adjust screen placement, corner alignment, and smart visibility behaviors",
+            icon_name="layout-duotone",
         )
 
-        # =====================================================================
-        # Section 4: Bar Position, Alignment & Layout
-        # =====================================================================
         current_pos = self._get_current_bar_alignment()
-
         self._top_btn = Button(
             child=Box(
                 orientation="h",
@@ -668,7 +945,6 @@ class DashSettingsPage(Box):
             style_classes=["option-selection-button"],
             on_clicked=lambda *_: self._set_position("top"),
         )
-
         self._bottom_btn = Button(
             child=Box(
                 orientation="h",
@@ -681,32 +957,19 @@ class DashSettingsPage(Box):
             style_classes=["option-selection-button"],
             on_clicked=lambda *_: self._set_position("bottom"),
         )
-
         self._update_position_buttons(current_pos)
 
-        pos_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Screen Edge Position", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Attach the selected bar to the top or bottom screen edge", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(
-                    style_classes=["option-selection-container"],
-                    orientation="h",
-                    spacing=6,
-                    h_align="end",
-                    children=[self._top_btn, self._bottom_btn],
-                ),
-            ],
+        pos_row = create_setting_row(
+            title="Screen Edge Position",
+            subtitle="Attach the selected bar to the top or bottom screen edge",
+            control=Box(
+                style_classes=["option-selection-container"],
+                orientation="h",
+                spacing=6,
+                h_align="end",
+                children=[self._top_btn, self._bottom_btn],
+            ),
+            control_min_width=None,
         )
 
         current_h_align = self._get_current_bar_h_align()
@@ -748,29 +1011,23 @@ class DashSettingsPage(Box):
         )
         self._update_h_align_buttons(current_h_align)
 
-        h_align_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Bar Alignment & Side", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Move bar to left corner, center, or right corner (applies when Min Width is active)", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(
-                    style_classes=["option-selection-container"],
-                    orientation="h",
-                    spacing=4,
-                    h_align="end",
-                    children=[self._left_align_btn, self._center_align_btn, self._right_align_btn],
-                ),
-            ],
+        h_align_row = create_setting_row(
+            title="Bar Alignment & Side",
+            subtitle="Move bar to left corner, center, or right corner (active when Compact Min-Width is enabled)",
+            control=Box(
+                style_classes=["option-selection-container"],
+                orientation="h",
+                spacing=4,
+                h_align="end",
+                children=[self._left_align_btn, self._center_align_btn, self._right_align_btn],
+            ),
+            control_min_width=None,
+        )
+
+        placement_card = create_settings_card(
+            title="Screen Edge & Alignment",
+            description="Configure where the bar sits on the monitor display",
+            rows=[pos_row, h_align_row],
         )
 
         current_minwidth = self._get_current_bar_cfg().get("min_width", False)
@@ -783,23 +1040,11 @@ class DashSettingsPage(Box):
         )
         self._bar_minwidth_switch.set_active(current_minwidth)
 
-        minwidth_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Compact Min-Width Bar", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Shrink bar to only wrap its active widgets instead of spanning full width", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._bar_minwidth_switch]),
-            ],
+        minwidth_row = create_setting_row(
+            title="Compact Min-Width Bar",
+            subtitle="Shrink bar to only wrap its active widgets instead of spanning full screen width",
+            control=self._bar_minwidth_switch,
+            control_min_width=None,
         )
 
         current_floating = self._get_current_bar_cfg().get("floating_bar", False)
@@ -812,23 +1057,11 @@ class DashSettingsPage(Box):
         )
         self._bar_floating_switch.set_active(current_floating)
 
-        floating_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Floating Bar", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Detach the bar from screen borders with rounded margins and shadows", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._bar_floating_switch]),
-            ],
+        floating_row = create_setting_row(
+            title="Floating Bar",
+            subtitle="Detach the bar from screen borders with rounded margins and shadows",
+            control=self._bar_floating_switch,
+            control_min_width=None,
         )
 
         current_autohide = self._get_current_bar_cfg().get("auto_hide", False)
@@ -841,33 +1074,36 @@ class DashSettingsPage(Box):
         )
         self._bar_autohide_switch.set_active(current_autohide)
 
-        autohide_row = Box(
-            orientation="h",
-            spacing=6,
+        autohide_row = create_setting_row(
+            title="Smart Auto-Hide (Intellihide)",
+            subtitle="Keep the bar visible when screen is empty; auto-hide when active windows overlap",
+            control=self._bar_autohide_switch,
+            control_min_width=None,
+        )
+
+        dock_card = create_settings_card(
+            title="Dock Styling & Auto-Hide",
+            description="Customize bar geometry, borders, and auto-hide behaviors",
+            rows=[minwidth_row, floating_row, autohide_row],
+        )
+
+        page_box = Box(
+            orientation="v",
+            spacing=16,
             h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Smart Auto-Hide (Intellihide)", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Keep the bar visible when screen is empty; auto-hide when windows are open", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._bar_autohide_switch]),
-            ],
+            h_expand=True,
+            style="padding: 6px 12px 24px 4px;",
+            children=[header, placement_card, dock_card],
+        )
+        return page_box
+
+    def _build_page_dash(self) -> Box:
+        header = create_page_header(
+            title="Dash Appearance & Wallpaper Effects",
+            description="Tune Dash overlay visuals, card tile translucency, and wallpaper transition effects",
+            icon_name="sparkle-duotone",
         )
 
-        position_section = Section(
-            title="Bar Position, Alignment & Layout",
-            children=[pos_row, h_align_row, minwidth_row, floating_row, autohide_row],
-        )
-
-        # =====================================================================
-        # Section 5: Dash Customization & Effects
-        # =====================================================================
         self._blur_switch = SmoothSwitch(
             style_classes=["dash-switch"],
             v_expand=True,
@@ -877,27 +1113,17 @@ class DashSettingsPage(Box):
         )
         self._blur_switch.set_active(getattr(user_options.settings, "dash_blur", True))
 
-        blur_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Dash Background Blur", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Enable or disable backdrop blur when Dash is open", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._blur_switch]),
-            ],
+        blur_row = create_setting_row(
+            title="Dash Background Blur",
+            subtitle="Enable or disable backdrop blur when Dash is open",
+            control=self._blur_switch,
+            control_min_width=None,
         )
 
         current_dim = getattr(user_options.settings, "dash_dim_opacity", 0.6)
+        self._dim_badge = Label(label=f"{round(current_dim * 100)}%", style="font-size: 11px; font-weight: 600;")
         self._dim_slider = FlatScale(
+            size=(170, 24),
             style_classes=["scale"],
             min_value=0.0,
             max_value=1.0,
@@ -908,27 +1134,18 @@ class DashSettingsPage(Box):
         )
         self._dim_slider.connect("value-changed", self._on_dim_changed)
 
-        dim_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Dash Backdrop Dim Opacity", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Adjust background darkness/transparency when Dash is opened", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._dim_slider]),
-            ],
+        dim_row = create_slider_row(
+            title="Dash Backdrop Dim Opacity",
+            subtitle="Adjust background darkness/transparency when Dash is opened",
+            slider=self._dim_slider,
+            value_badge=self._dim_badge,
+            control_min_width=240,
         )
 
         current_card_opacity = getattr(user_options.settings, "dash_card_opacity", 1.0)
+        self._card_opacity_badge = Label(label=f"{round(current_card_opacity * 100)}%", style="font-size: 11px; font-weight: 600;")
         self._card_opacity_slider = FlatScale(
+            size=(170, 24),
             style_classes=["scale"],
             min_value=0.0,
             max_value=1.0,
@@ -939,23 +1156,12 @@ class DashSettingsPage(Box):
         )
         self._card_opacity_slider.connect("value-changed", self._on_card_opacity_changed)
 
-        card_opacity_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Dash App Tiles Opacity", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Adjust background tile transparency for application launcher cards", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", style="min-width: 224px;", children=[self._card_opacity_slider]),
-            ],
+        card_opacity_row = create_slider_row(
+            title="Dash App Tiles Opacity",
+            subtitle="Adjust background tile transparency for application launcher cards",
+            slider=self._card_opacity_slider,
+            value_badge=self._card_opacity_badge,
+            control_min_width=240,
         )
 
         self._instant_switch = SmoothSwitch(
@@ -967,23 +1173,17 @@ class DashSettingsPage(Box):
         )
         self._instant_switch.set_active(getattr(user_options.settings, "instant_dash", True))
 
-        instant_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Ultra-Fast Instant Dash Opening", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Zero-latency instant display when pressing Super or clicking Dash button", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                Box(h_align="end", children=[self._instant_switch]),
-            ],
+        instant_row = create_setting_row(
+            title="Ultra-Fast Instant Dash Opening",
+            subtitle="Zero-latency instant display when pressing Super or clicking Dash button",
+            control=self._instant_switch,
+            control_min_width=None,
+        )
+
+        dash_card = create_settings_card(
+            title="Dash Overlay & Performance",
+            description="Customize Dash backdrop effect, darkening, and launcher tile translucency",
+            rows=[blur_row, dim_row, card_opacity_row, instant_row],
         )
 
         # Wallpaper Transition row
@@ -999,15 +1199,27 @@ class DashSettingsPage(Box):
             ("outer", "Shrink"),
             ("random", "Random"),
         ]
-        self._setting_trans_buttons: dict[str, Button] = {}
         cur_trans = getattr(user_options.wallpaper, "transition_type", "grow")
 
-        trans_buttons_box = Box(
-            style_classes=["option-selection-container"],
-            orientation="h",
-            spacing=4,
-            h_align="end",
+        trans_title_col = Box(
+            orientation="v",
+            spacing=2,
+            h_align="start",
+            h_expand=True,
+            children=[
+                Label(label="Wallpaper Transition Effect", style_classes=["dim-label"], style="font-size: 12.5px; font-weight: 600;", h_align="start"),
+                Label(label="Animation effect used when switching desktop wallpapers", style="font-size: 11px; opacity: 0.6;", h_align="start", line_wrap="word-char"),
+            ],
         )
+
+        trans_flow = Gtk.FlowBox()
+        trans_flow.set_valign(Gtk.Align.START)
+        trans_flow.set_max_children_per_line(5)
+        trans_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        trans_flow.set_column_spacing(6)
+        trans_flow.set_row_spacing(6)
+        trans_flow.set_homogeneous(True)
+
         for t_key, t_name in trans_options:
             b = Button(
                 child=Label(label=t_name, style="font-size: 11px; font-weight: 500;"),
@@ -1015,25 +1227,14 @@ class DashSettingsPage(Box):
                 on_clicked=lambda _, k=t_key: self._on_wallpaper_transition_changed(k),
             )
             self._setting_trans_buttons[t_key] = b
-            trans_buttons_box.add(b)
+            trans_flow.add(b)
 
         wallpaper_trans_row = Box(
-            orientation="h",
-            spacing=6,
+            orientation="v",
+            spacing=10,
             h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Wallpaper Transition Effect", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Animation effect used when switching wallpapers", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                trans_buttons_box,
-            ],
+            style_classes=["dash-settings-row"],
+            children=[trans_title_col, trans_flow],
         )
 
         # Random Animation Pool multi-select chips
@@ -1048,15 +1249,27 @@ class DashSettingsPage(Box):
             ("bottom", "Slide Down"),
             ("outer", "Shrink"),
         ]
-        self._pool_chips: dict[str, Button] = {}
         enabled_pool = set(getattr(user_options.wallpaper, "enabled_transitions", ["grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer"]))
 
-        pool_box = Box(
-            style_classes=["option-selection-container"],
-            orientation="h",
-            spacing=4,
-            h_align="end",
+        pool_title_col = Box(
+            orientation="v",
+            spacing=2,
+            h_align="start",
+            h_expand=True,
+            children=[
+                Label(label="Random Animation Pool", style_classes=["dim-label"], style="font-size: 12.5px; font-weight: 600;", h_align="start"),
+                Label(label="Toggle animations used by the system during random wallpaper switches", style="font-size: 11px; opacity: 0.6;", h_align="start", line_wrap="word-char"),
+            ],
         )
+
+        pool_flow = Gtk.FlowBox()
+        pool_flow.set_valign(Gtk.Align.START)
+        pool_flow.set_max_children_per_line(5)
+        pool_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        pool_flow.set_column_spacing(6)
+        pool_flow.set_row_spacing(6)
+        pool_flow.set_homogeneous(True)
+
         for p_key, p_name in pool_options:
             is_on = p_key in enabled_pool
             b = Button(
@@ -1065,45 +1278,31 @@ class DashSettingsPage(Box):
                 on_clicked=lambda _, k=p_key, n=p_name: self._on_wallpaper_pool_toggled(k, n),
             )
             self._pool_chips[p_key] = b
-            pool_box.add(b)
+            pool_flow.add(b)
 
         wallpaper_pool_row = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
-            children=[
-                Box(
-                    orientation="v",
-                    spacing=2,
-                    h_align="start",
-                    h_expand=True,
-                    children=[
-                        Label(label="Random Animation Pool (Included Transitions)", style_classes=["dim-label"], h_align="start"),
-                        Label(label="Click to toggle animations used by system during random wallpaper switches", style="font-size: 11px; opacity: 0.6;", h_align="start"),
-                    ],
-                ),
-                pool_box,
-            ],
-        )
-
-        dash_section = Section(
-            title="Dash Appearance & Wallpaper Effects",
-            children=[blur_row, dim_row, card_opacity_row, instant_row, wallpaper_trans_row, wallpaper_pool_row],
-        )
-
-        container = Box(
             orientation="v",
-            spacing=32,
-            h_align="center",
-            children=[
-                behavior_section,
-                bar_appearance_section,
-                bar_layout_section,
-                position_section,
-                dash_section,
-            ],
+            spacing=10,
+            h_align="fill",
+            style_classes=["dash-settings-row"],
+            children=[pool_title_col, pool_flow],
         )
-        return container
+
+        wallpaper_card = create_settings_card(
+            title="Wallpaper Transitions & Effects",
+            description="Configure animations and the random transition pool for desktop wallpapers",
+            rows=[wallpaper_trans_row, wallpaper_pool_row],
+        )
+
+        page_box = Box(
+            orientation="v",
+            spacing=16,
+            h_align="fill",
+            h_expand=True,
+            style="padding: 6px 12px 24px 4px;",
+            children=[header, dash_card, wallpaper_card],
+        )
+        return page_box
 
     def _get_current_bar_cfg(self) -> dict:
         if not user_options.bars.configs or not user_options.bars.configs[0].get("bars"):
@@ -1366,6 +1565,8 @@ class DashSettingsPage(Box):
         return cfg.get("horizontal_alignment", "center") if cfg else "center"
 
     def _update_position_buttons(self, alignment: str):
+        if not hasattr(self, "_top_btn") or not hasattr(self, "_bottom_btn"):
+            return
         if alignment == "top":
             self._top_btn.add_style_class("active")
             self._bottom_btn.remove_style_class("active")
@@ -1374,6 +1575,8 @@ class DashSettingsPage(Box):
             self._top_btn.remove_style_class("active")
 
     def _update_h_align_buttons(self, h_align: str):
+        if not hasattr(self, "_left_align_btn") or not hasattr(self, "_center_align_btn") or not hasattr(self, "_right_align_btn"):
+            return
         self._left_align_btn.remove_style_class("active")
         self._center_align_btn.remove_style_class("active")
         self._right_align_btn.remove_style_class("active")
@@ -1447,7 +1650,10 @@ class DashSettingsPage(Box):
         user_options.save()
 
     def _on_delay_changed(self, _scale, val: float):
-        user_options.settings.hover_delay = int(val)
+        int_val = int(val)
+        if hasattr(self, "_delay_badge"):
+            self._delay_badge.set_label(f"{int_val}ms")
+        user_options.settings.hover_delay = int_val
         user_options.save()
 
     def _on_bar_theme_selected(self, theme_id: str):
@@ -1466,8 +1672,12 @@ class DashSettingsPage(Box):
 
         if hasattr(self, "_bar_opacity_slider"):
             self._bar_opacity_slider.set_value(preset["bar_opacity"])
+        if hasattr(self, "_bar_opacity_badge"):
+            self._bar_opacity_badge.set_label(f"{round(preset['bar_opacity'] * 100)}%")
         if hasattr(self, "_widget_opacity_slider"):
             self._widget_opacity_slider.set_value(preset["widget_opacity"])
+        if hasattr(self, "_widget_opacity_badge"):
+            self._widget_opacity_badge.set_label(f"{round(preset['widget_opacity'] * 100)}%")
         if hasattr(self, "_bar_blur_switch"):
             self._bar_blur_switch.set_active(preset["blur"])
 
@@ -1491,6 +1701,8 @@ class DashSettingsPage(Box):
 
     def _on_bar_opacity_changed(self, _scale, val: float):
         opacity = max(0.0, min(1.0, float(val)))
+        if hasattr(self, "_bar_opacity_badge"):
+            self._bar_opacity_badge.set_label(f"{round(opacity * 100)}%")
         user_options.settings.bar_opacity = opacity
         user_options.save()
 
@@ -1500,6 +1712,8 @@ class DashSettingsPage(Box):
 
     def _on_widget_opacity_changed(self, _scale, val: float):
         opacity = max(0.0, min(1.0, float(val)))
+        if hasattr(self, "_widget_opacity_badge"):
+            self._widget_opacity_badge.set_label(f"{round(opacity * 100)}%")
         user_options.settings.widget_opacity = opacity
         user_options.save()
 
@@ -1509,6 +1723,8 @@ class DashSettingsPage(Box):
 
     def _on_desktop_opacity_changed(self, _scale, val: float):
         opacity = max(0.0, min(1.0, float(val)))
+        if hasattr(self, "_desktop_opacity_badge"):
+            self._desktop_opacity_badge.set_label(f"{round(opacity * 100)}%")
         user_options.settings.desktop_widget_opacity = opacity
         user_options.save()
 
@@ -1523,6 +1739,8 @@ class DashSettingsPage(Box):
 
     def _on_dim_changed(self, _scale, val: float):
         opacity = max(0.0, min(1.0, float(val)))
+        if hasattr(self, "_dim_badge"):
+            self._dim_badge.set_label(f"{round(opacity * 100)}%")
         user_options.settings.dash_dim_opacity = opacity
         user_options.save()
 
@@ -1531,7 +1749,9 @@ class DashSettingsPage(Box):
             bm._dash.dismiss_layer.set_dim_opacity(opacity)
 
     def _on_card_opacity_changed(self, _scale, val: float):
-        opacity = max(0.0, min(1.0, float(opacity)))
+        opacity = max(0.0, min(1.0, float(val)))
+        if hasattr(self, "_card_opacity_badge"):
+            self._card_opacity_badge.set_label(f"{round(opacity * 100)}%")
         user_options.settings.dash_card_opacity = opacity
         user_options.save()
 
