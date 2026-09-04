@@ -17,7 +17,7 @@ CACHE_THEME_PATH = os.path.expanduser("~/.cache/agility-shell/theme.json")
 
 WALLPAPER_THEME = "Matugen"
 
-wallpaper = WallpaperService().get_instance()
+wallpaper = WallpaperService.get_instance()
 
 def opacity_to_hex(opacity: float) -> str:
     if not 0 <= opacity <= 1:

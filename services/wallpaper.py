@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 import gc
 import gi
 gi.require_version("Gtk", "3.0")
@@ -232,6 +233,12 @@ class WallpaperService(Service):
     """
 
     _instance: "WallpaperService | None" = None
+    _initialized: bool = False
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     @staticmethod
     def get_instance() -> "WallpaperService":
@@ -247,6 +254,9 @@ class WallpaperService(Service):
         return self._wallpaper_path
 
     def __init__(self, **kwargs):
+        if self._initialized:
+            return
+        self._initialized = True
         super().__init__(**kwargs)
         self._blurred_pixbuf: GdkPixbuf.Pixbuf | None = None
         # self._windows: dict[int, WallpaperDropWindow] = {}
@@ -282,11 +292,24 @@ class WallpaperService(Service):
             logger.error("awww not found — install it with your package manager")
             return
 
+        # Prevent duplicate spawn if another process is already starting it
+        try:
+            pgrep = subprocess.run(["pgrep", "-x", "awww-daemon"], capture_output=True)
+            if pgrep.returncode == 0:
+                logger.info("awww-daemon process is already running")
+                return
+        except Exception:
+            pass
+
         try:
             subprocess.Popen(["awww-daemon"])
-
-            GLib.timeout_add(500, lambda: None)
             logger.info("awww-daemon started")
+
+            # Wait up to 1 second for socket to become ready
+            for _ in range(20):
+                time.sleep(0.05)
+                if subprocess.run(["awww", "query"], capture_output=True).returncode == 0:
+                    break
         except Exception as e:
             logger.error(f"Failed to start awww-daemon: {e}")
 
