@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import threading
 from fabric.widgets.box import Box
 from fabric.widgets.button import Button
 from fabric.widgets.label import Label
@@ -8,7 +9,13 @@ from gi.repository import Gtk, GLib, Gdk
 from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch, FlatScale
 from user_options import user_options
 import services.singletons as singletons
-from .themes import Section
+from services.themes import WALLPAPER_THEME
+from services.templates import template_service
+from services.singletons import theme_service
+from .themes import (
+    _color_dot, TemplateRefreshRow, TemplateRow, ThemeThumb, MatugenThumb,
+    RADIUS_MAP, FONT_MAP, write_border_css, write_font_css,
+)
 
 WIDGET_ICONS: dict[str, str] = {
     "Dash":          "diamonds-four-duotone",
@@ -493,9 +500,18 @@ class DashSettingsPage(Box):
         self._pool_chips: dict[str, Button] = {}
         self._all_cards: list[Box] = []
 
+        # Theme page instance variables
+        self._theme_active_thumb: ThemeThumb | MatugenThumb | None = None
+        self._theme_accent_buttons: dict[str, Button] = {}
+        self._theme_radius_buttons: dict[str, Button] = {}
+        self._theme_font_buttons: dict[str, Button] = {}
+        self._theme_template_rows: dict[str, TemplateRow] = {}
+        self._theme_rebuild_timeout_id = None
+
         # Build pages
         page_behavior = self._build_page_behavior()
         page_appearance = self._build_page_appearance()
+        page_theme = self._build_page_theme()
         page_widgets = self._build_page_widgets()
         page_layout = self._build_page_layout()
         page_dash = self._build_page_dash()
@@ -511,12 +527,22 @@ class DashSettingsPage(Box):
         self._stack.set_homogeneous(False)
         self._stack.add_named(self._wrap_scroll(page_behavior), "bar_behavior")
         self._stack.add_named(self._wrap_scroll(page_appearance), "bar_appearance")
+        self._stack.add_named(self._wrap_scroll(page_theme), "system_theme")
         self._stack.add_named(self._wrap_scroll(page_widgets), "bar_widgets")
         self._stack.add_named(self._wrap_scroll(page_layout), "bar_layout")
         self._stack.add_named(self._wrap_scroll(page_dash), "dash_effects")
 
         sidebar = self._build_sidebar()
         self._sidebar = sidebar
+
+        # Listen to theme service changes
+        if template_service.monitor:
+            template_service.monitor.connect(
+                "changed",
+                self._on_templates_dir_changed,
+            )
+        theme_service.connect("mode-changed", self._on_theme_mode_changed)
+        theme_service.connect("accent-changed", lambda _: self._refresh_active_theme_accent())
 
         # Wrap in main layout
         main_box = Box(
@@ -596,11 +622,12 @@ class DashSettingsPage(Box):
         sidebar.set_size_request(264, 604)
 
         nav_items = [
-            ("bar_behavior",   "Bar Behaviour",             "Hover trigger & timing",     "sliders-duotone"),
-            ("bar_appearance", "Bar Themes & Appearance",   "Styles, blur & opacities",    "palette-duotone"),
-            ("bar_widgets",    "Active Bar Widgets",        "Left, center & right slots", "puzzle-piece-duotone"),
-            ("bar_layout",     "Bar Position & Layout",     "Edge, alignment & dock",     "layout-duotone"),
-            ("dash_effects",   "Dash & Wallpaper Effects",  "Dim, blur & transitions",    "sparkle-duotone"),
+            ("bar_behavior",   "Bar Behaviour",             "Hover trigger & timing",          "sliders-duotone"),
+            ("bar_appearance", "Bar Themes & Appearance",   "Styles, blur & opacities",         "palette-duotone"),
+            ("system_theme",   "System Theme",              "Palettes, mode, accents & fonts",  "swatches-duotone"),
+            ("bar_widgets",    "Active Bar Widgets",        "Left, center & right slots",      "puzzle-piece-duotone"),
+            ("bar_layout",     "Bar Position & Layout",     "Edge, alignment & dock",          "layout-duotone"),
+            ("dash_effects",   "Dash & Wallpaper Effects",  "Dim, blur & transitions",         "sparkle-duotone"),
         ]
 
         for pid, title, subtitle, icon_name in nav_items:
@@ -618,6 +645,9 @@ class DashSettingsPage(Box):
 
         sidebar.add(Box(v_expand=True))
         return sidebar
+
+    def switch_to_page(self, page_id: str):
+        self._switch_page(page_id)
 
     def _switch_page(self, page_id: str):
         for pid, btn in self._nav_buttons.items():
@@ -1829,3 +1859,462 @@ class DashSettingsPage(Box):
                 btn.add_style_class("active")
             else:
                 btn.remove_style_class("active")
+
+    # ------------------------------------------------------------------
+    # System Theme Page
+    # ------------------------------------------------------------------
+    def _build_page_theme(self) -> Box:
+        header = create_page_header(
+            title="System Theme",
+            description="Personalize system color schemes, material palettes, fonts, and external templates",
+            icon_name="swatches-duotone",
+        )
+
+        # 1. Theme Presets (Horizontal Strip)
+        self._theme_thumb_strip = Box(
+            orientation="h",
+            spacing=12,
+            h_expand=False,
+            v_expand=False,
+            style="padding: 4px 6px 6px 6px;",
+        )
+        self._theme_thumb_scroll = ClippingScrolledWindow(
+            h_expand=True,
+            v_expand=False,
+            style_classes=["grid-selector-thumb-scroll"],
+            max_content_size=(788, 124),
+            fade_distance=30,
+            child=self._theme_thumb_strip,
+            overlay_scroll=True,
+            kinetic_scroll=True,
+        )
+        self._theme_thumb_scroll.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
+        h_scrollbar = self._theme_thumb_scroll.get_hscrollbar()
+        if h_scrollbar:
+            h_scrollbar.set_visible(False)
+            h_scrollbar.set_no_show_all(True)
+        self._theme_thumb_scroll.set_size_request(788, 124)
+        self._theme_thumb_scroll.connect("scroll-event", self._on_thumb_scroll_event)
+
+        card_presets = self._create_card(
+            title="Theme Presets",
+            description="Select a curated color palette or generate dynamic Material You colors from your wallpaper",
+            body_widget=self._theme_thumb_scroll,
+        )
+
+        # 2. Color Scheme & Accents
+        self._theme_light_btn = Button(
+            child=Box(orientation="h", spacing=6, children=[
+                Icon(icon_name="sun-dim-duotone", icon_size=16),
+                Label(label="Light")
+            ]),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda _: self._set_theme_dark_mode(False),
+        )
+        self._theme_dark_btn = Button(
+            child=Box(orientation="h", spacing=6, children=[
+                Icon(icon_name="moon-stars-duotone", icon_size=16),
+                Label(label="Dark")
+            ]),
+            style_classes=["option-selection-button"],
+            on_clicked=lambda _: self._set_theme_dark_mode(True),
+        )
+        mode_box = Box(
+            style_classes=["option-selection-container"],
+            orientation="h",
+            spacing=6,
+            h_align="end",
+            children=[self._theme_light_btn, self._theme_dark_btn],
+        )
+        row_mode = create_setting_row(
+            title="Theme Mode",
+            subtitle="Switch between light and dark color schemes across the desktop",
+            control=mode_box,
+            control_min_width=180,
+        )
+
+        self._theme_accent_row = Box(
+            orientation="h",
+            spacing=8,
+            h_align="end",
+            v_align="center",
+        )
+        row_accent = create_setting_row(
+            title="Accent Color",
+            subtitle="Primary accent highlight used for active buttons, focus rings, and badges",
+            control=self._theme_accent_row,
+            control_min_width=224,
+        )
+
+        card_color_scheme = self._create_card(
+            title="Color Scheme & Accents",
+            description="Manage desktop mode and customize the primary accent color",
+            rows=[row_mode, row_accent],
+        )
+
+        # 3. Window Style & Typography
+        self._theme_radius_buttons = {}
+        radius_box = Box(
+            style_classes=["option-selection-container"],
+            orientation="h",
+            spacing=6,
+            h_align="end",
+        )
+        for label_text, r_key in [("Sharp", "sharp"), ("Medium", "medium"), ("Round", "round")]:
+            btn = Button(
+                label=label_text,
+                style_classes=["option-selection-button"],
+                on_clicked=lambda _, k=r_key: self._on_theme_radius_clicked(k),
+            )
+            self._theme_radius_buttons[r_key] = btn
+            radius_box.add(btn)
+
+        row_radius = create_setting_row(
+            title="Corner Radius",
+            subtitle="Curvature applied to windows, applets, and interface cards",
+            control=radius_box,
+            control_min_width=220,
+        )
+
+        init_theme_opacity = getattr(user_options.theme, "opacity", 1.0)
+        self._theme_opacity_badge = Label(
+            label=f"{round(init_theme_opacity * 100)}%",
+            style="font-size: 11px; font-weight: 600;",
+        )
+        self._theme_opacity_slider = FlatScale(
+            style_classes=["scale"],
+            min_value=0.2,
+            max_value=1.0,
+            step=0.05,
+            value=init_theme_opacity,
+            h_expand=True,
+            on_value_changed=self._on_theme_opacity_changed,
+        )
+        self._theme_opacity_slider.connect("button-release-event", self._on_theme_opacity_released)
+        row_opacity = create_slider_row(
+            title="Window & Surface Opacity",
+            subtitle="Base background transparency for agility windows and panels",
+            slider=self._theme_opacity_slider,
+            value_badge=self._theme_opacity_badge,
+            control_min_width=240,
+        )
+
+        self._theme_font_buttons = {}
+        font_box = Box(
+            style_classes=["option-selection-container"],
+            orientation="h",
+            spacing=6,
+            h_align="end",
+        )
+        for label_text, f_key in [("None", "none"), ("Mixed", "mixed"), ("All", "all")]:
+            btn = Button(
+                label=label_text,
+                style_classes=["option-selection-button"],
+                on_clicked=lambda _, k=f_key: self._on_theme_font_clicked(k),
+            )
+            self._theme_font_buttons[f_key] = btn
+            font_box.add(btn)
+
+        row_font = create_setting_row(
+            title="Monospace Typography",
+            subtitle="Apply monospaced font formatting across labels and numerical readouts",
+            control=font_box,
+            control_min_width=220,
+        )
+
+        card_style = self._create_card(
+            title="Window Style & Typography",
+            description="Configure border radius, window surface opacity, and font preferences",
+            rows=[row_radius, row_opacity, row_font],
+        )
+
+        # 4. Matugen Application Templates
+        self._template_rows_box = Box(
+            orientation="v",
+            spacing=0,
+            h_align="fill",
+            h_expand=True,
+        )
+
+        refresh_btn = Button(
+            style_classes=["applet-misc-button"],
+            child=Icon(icon_name="arrows-clockwise-duotone", icon_size=16),
+            on_clicked=self._on_refresh_templates_clicked,
+            tooltip_text="Pull latest templates from GitHub",
+        )
+
+        self._rebuild_templates_rows()
+
+        card_templates = self._create_card(
+            title="Application Templates",
+            description="Export dynamic color schemes and variables to external desktop applications (Hyprland, Kitty, Rofi, etc.)",
+            header_action=refresh_btn,
+            body_widget=self._template_rows_box,
+        )
+
+        # Initial UI states
+        self._update_theme_mode_buttons(user_options.theme.is_dark)
+        self._update_theme_radius_buttons(user_options.theme.border_style)
+        self._update_theme_font_buttons(user_options.theme.font_monospace_style)
+        self._load_theme_thumbs()
+        self._load_theme_accents()
+
+        return Box(
+            orientation="v",
+            spacing=18,
+            h_align="fill",
+            h_expand=True,
+            style="padding-bottom: 24px;",
+            children=[
+                header,
+                card_presets,
+                card_color_scheme,
+                card_style,
+                card_templates,
+            ],
+        )
+
+    def _on_thumb_scroll_event(self, widget, event):
+        adj = widget.get_hadjustment()
+        if not adj:
+            return False
+        step = adj.get_step_increment() or 40.0
+        ok, dx, dy = event.get_scroll_deltas()
+        if ok:
+            delta = dx if abs(dx) > abs(dy) else dy
+            target = adj.get_value() + (delta * step * 1.5)
+            adj.set_value(max(adj.get_lower(), min(adj.get_upper() - adj.get_page_size(), target)))
+            return True
+
+        if event.direction in (Gdk.ScrollDirection.UP, Gdk.ScrollDirection.LEFT):
+            adj.set_value(max(adj.get_lower(), adj.get_value() - step * 2))
+            return True
+        elif event.direction in (Gdk.ScrollDirection.DOWN, Gdk.ScrollDirection.RIGHT):
+            adj.set_value(min(adj.get_upper() - adj.get_page_size(), adj.get_value() + step * 2))
+            return True
+        return False
+
+    def _load_theme_thumbs(self):
+        for child in self._theme_thumb_strip.get_children():
+            child.destroy()
+        self._theme_active_thumb = None
+
+        def load():
+            is_dark = theme_service.is_dark
+            theme_names = theme_service.list_themes(dark=is_dark)
+            for name in theme_names:
+                data = theme_service.load_theme_data(name, dark=is_dark)
+                if data is None:
+                    continue
+                thumb = ThemeThumb(name, data, is_dark, self._on_theme_thumb_clicked)
+                GLib.idle_add(self._theme_thumb_strip.add, thumb)
+                GLib.idle_add(thumb.show_all)
+
+            def finish():
+                matugen = MatugenThumb(self._on_theme_thumb_clicked)
+                self._theme_thumb_strip.add(matugen)
+                matugen.show_all()
+                self._restore_active_theme_thumb(theme_service.active_theme_name)
+            GLib.idle_add(finish)
+
+        threading.Thread(target=load, daemon=True).start()
+
+    def _on_theme_thumb_clicked(self, thumb: ThemeThumb | MatugenThumb):
+        self._set_theme_active_thumb(thumb)
+        if isinstance(thumb, MatugenThumb):
+            if theme_service.is_dark:
+                theme_service.apply_dark_theme(WALLPAPER_THEME)
+            else:
+                theme_service.apply_light_theme(WALLPAPER_THEME)
+        else:
+            if theme_service.is_dark:
+                theme_service.apply_dark_theme(thumb.theme_name)
+            else:
+                theme_service.apply_light_theme(thumb.theme_name)
+        user_options.save()
+
+    def _set_theme_active_thumb(self, thumb: ThemeThumb | MatugenThumb):
+        if self._theme_active_thumb and self._theme_active_thumb is not thumb:
+            self._theme_active_thumb.set_active(False)
+        self._theme_active_thumb = thumb
+        thumb.set_active(True)
+        if isinstance(thumb, MatugenThumb):
+            self._load_theme_accents(None)
+        else:
+            self._load_theme_accents(
+                theme_service.load_theme_data(thumb.theme_name, dark=theme_service.is_dark)
+            )
+
+    def _restore_active_theme_thumb(self, name: str):
+        for thumb in self._theme_thumb_strip.get_children():
+            if isinstance(thumb, (ThemeThumb, MatugenThumb)):
+                if thumb.theme_name == name:
+                    self._set_theme_active_thumb(thumb)
+                else:
+                    thumb.set_active(False)
+
+    def _set_theme_dark_mode(self, dark: bool):
+        theme_service.apply_dark(dark)
+        self._update_theme_mode_buttons(dark)
+
+    def _update_theme_mode_buttons(self, is_dark: bool):
+        if hasattr(self, "_theme_dark_btn") and hasattr(self, "_theme_light_btn"):
+            if is_dark:
+                self._theme_dark_btn.add_style_class("active")
+                self._theme_light_btn.remove_style_class("active")
+            else:
+                self._theme_light_btn.add_style_class("active")
+                self._theme_dark_btn.remove_style_class("active")
+
+    def _on_theme_mode_changed(self, _service):
+        self._load_theme_thumbs()
+        self._restore_active_theme_thumb(theme_service.active_theme_name)
+        self._update_theme_mode_buttons(theme_service.is_dark)
+
+    def _load_theme_accents(self, data: dict | None = None):
+        if not hasattr(self, "_theme_accent_row"):
+            return
+        for child in self._theme_accent_row.get_children():
+            self._theme_accent_row.remove(child)
+        self._theme_accent_buttons.clear()
+
+        if data is None and theme_service.current_theme_data is not None:
+            data = theme_service.current_theme_data
+
+        if data is None or theme_service.active_theme_name == WALLPAPER_THEME:
+            self._theme_accent_row.add(Label(
+                label="Colours generated from wallpaper",
+                style_classes=["dim-label"],
+                style="font-size: 11.5px;",
+            ))
+            self._theme_accent_row.show_all()
+            return
+
+        accents = data.get("accents", {}).get("available", {})
+        active_accent = theme_service.active_accent
+        default_accent = data.get("accents", {}).get("default", "")
+
+        if active_accent not in accents:
+            active_accent = default_accent
+
+        for accent_name, hex_color in accents.items():
+            is_active = accent_name == active_accent
+            dot = _color_dot(hex_color, size=22, active=is_active)
+            btn = Button(
+                child=dot,
+                style_classes=["accent-btn"],
+                on_clicked=lambda _, n=accent_name: self._on_theme_accent_clicked(n),
+            )
+            self._theme_accent_buttons[accent_name] = btn
+            self._theme_accent_row.add(btn)
+
+        self._theme_accent_row.show_all()
+
+    def _refresh_active_theme_accent(self):
+        if not hasattr(self, "_theme_accent_buttons") or not self._theme_accent_buttons:
+            self._load_theme_accents()
+            return
+        if theme_service.current_theme_data is None:
+            return
+        accents = theme_service.current_theme_data.get("accents", {}).get("available", {})
+        active = theme_service.active_accent
+
+        for accent_name, btn in self._theme_accent_buttons.items():
+            hex_color = accents.get(accent_name, "#ffffff")
+            is_active = accent_name == active
+            old = btn.get_child()
+            if old:
+                btn.remove(old)
+            btn.add(_color_dot(hex_color, size=22, active=is_active))
+            btn.show_all()
+
+    def _on_theme_accent_clicked(self, name: str):
+        theme_service.apply_accent(name)
+        self._refresh_active_theme_accent()
+        user_options.save()
+
+    def _on_theme_radius_clicked(self, key: str):
+        self._update_theme_radius_buttons(key)
+        user_options.theme.border_style = key
+        user_options.save()
+        write_border_css(key)
+
+    def _update_theme_radius_buttons(self, key: str):
+        for k, btn in getattr(self, "_theme_radius_buttons", {}).items():
+            if k == key:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+
+    def _on_theme_opacity_changed(self, _scale, val: float):
+        opacity = max(0.2, min(1.0, float(val)))
+        if hasattr(self, "_theme_opacity_badge"):
+            self._theme_opacity_badge.set_label(f"{round(opacity * 100)}%")
+
+    def _on_theme_opacity_released(self, scale, event):
+        value = round(scale.get_value(), 2)
+        user_options.theme.opacity = value
+        user_options.save()
+        theme_service.apply()
+
+    def _on_theme_font_clicked(self, key: str):
+        self._update_theme_font_buttons(key)
+        user_options.theme.font_monospace_style = key
+        user_options.save()
+        write_font_css(key)
+
+    def _update_theme_font_buttons(self, key: str):
+        for k, btn in getattr(self, "_theme_font_buttons", {}).items():
+            if k == key:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+
+    def _rebuild_templates_rows(self):
+        if not hasattr(self, "_template_rows_box"):
+            return
+        for child in self._template_rows_box.get_children():
+            self._template_rows_box.remove(child)
+        self._theme_template_rows.clear()
+
+        templates = template_service.list_templates()
+        if templates:
+            for idx, meta in enumerate(templates):
+                row = TemplateRow(meta)
+                self._theme_template_rows[meta["id"]] = row
+                self._template_rows_box.add(row)
+                if idx < len(templates) - 1:
+                    self._template_rows_box.add(Box(style_classes=["dash-settings-divider"]))
+        else:
+            self._template_rows_box.add(
+                Label(
+                    label="No templates found — click refresh to get started",
+                    style_classes=["dim-label"],
+                    style="padding: 12px 0;",
+                    h_align="center",
+                )
+            )
+        self._template_rows_box.show_all()
+
+    def _on_refresh_templates_clicked(self, btn: Button):
+        btn.set_sensitive(False)
+        template_service.fetch_templates(callback=lambda success: GLib.idle_add(self._on_templates_refreshed, success, btn))
+
+    def _on_templates_refreshed(self, success: bool, btn: Button | None = None):
+        if btn:
+            btn.set_sensitive(True)
+        if success:
+            self._rebuild_templates_rows()
+
+    def _on_templates_dir_changed(self, *_):
+        if self._theme_rebuild_timeout_id is not None:
+            GLib.source_remove(self._theme_rebuild_timeout_id)
+        self._theme_rebuild_timeout_id = GLib.timeout_add(
+            500,
+            self._do_rebuild_templates,
+        )
+
+    def _do_rebuild_templates(self) -> bool:
+        self._theme_rebuild_timeout_id = None
+        self._rebuild_templates_rows()
+        return GLib.SOURCE_REMOVE
