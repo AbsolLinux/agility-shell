@@ -10,7 +10,6 @@ from .settings import DashSettingsPage
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 from services.singletons import edit_mode
 from .wallpapers import DashWallpaperPage
-from .themes import DashThemePage
 from snippets import DashReveal, enable_blur, disable_blur, free_blur
 import bar
 from user_options import user_options
@@ -27,7 +26,6 @@ _PAGE_META = {
     "widgets":    ("puzzle-piece-duotone",       "Widgets"),
     "settings":   ("gear-six-duotone",           "Settings"),
     "wallpapers": ("images-duotone",             "Wallpapers"),
-    "themes":     ("swatches-duotone",           "Themes"),
 }
 _PAGE_LABELS = {
     "apps":       "Apps",
@@ -35,12 +33,11 @@ _PAGE_LABELS = {
     "widgets":    "Widgets",
     "settings":   "Settings",
     "wallpapers": "Wallpapers",
-    "themes":     "Themes",
 }
 
 _PAGES_WITH_SEARCH = {"apps", "applets", "widgets"}
 _PRIMARY_PAGES = {"apps", "applets", "widgets", "settings"}
-_SECONDARY_PAGES = {"wallpapers", "themes"}
+_SECONDARY_PAGES = {"wallpapers"}
 
 
 class DashDismissLayer(Window):
@@ -177,7 +174,6 @@ class Dash(Window):
         )
         self.widgets    = DashWidgetsPage(self, bar_manager=bar_manager)
         self.settings   = DashSettingsPage(bar_manager=bar_manager)
-        self.themes     = DashThemePage(bar_manager=bar_manager)
         self.wallpapers = DashWallpaperPage()
         self.dismiss_layer = DashDismissLayer(
             dash=self,
@@ -192,8 +188,7 @@ class Dash(Window):
         self.h_group_1.add_named(self.widgets,    "widgets")
         self.h_group_1.add_named(self.settings,   "settings")
         self.h_group_2.add_named(self.wallpapers, "wallpapers")
-        self.h_group_2.add_named(self.themes,     "themes")
-        self.v_stack.add_named(self.h_group_2,    "themes-wallpapers")
+        self.v_stack.add_named(self.h_group_2,    "wallpapers")
         self.v_stack.add_named(self.h_group_1,    "apps-applets")
         self.v_stack.set_visible_child(self.h_group_1)
 
@@ -203,7 +198,6 @@ class Dash(Window):
             "widgets":    self.widgets,
             "settings":   self.settings,
             "wallpapers": self.wallpapers,
-            "themes":     self.themes,
         }
 
         self._main_box = Box(
@@ -332,7 +326,7 @@ class Dash(Window):
                 return "settings"
             return "apps"
         else:
-            return "wallpapers" if self.h_group_2.get_visible_child() is self.wallpapers else "themes"
+            return "wallpapers"
 
     def _sync_header(self):
         name = self._current_page_name()
@@ -347,11 +341,10 @@ class Dash(Window):
 
         secondary_tabs = [
             ("wallpapers", "images-duotone", "Wallpapers", lambda: self.h_group_2.set_visible_child_name("wallpapers")),
-            ("themes", "swatches-duotone", "Themes", lambda: self.h_group_2.set_visible_child_name("themes")),
         ]
 
-        v_icon = "diamonds-four-duotone" if is_secondary else "paint-brush-broad-duotone"
-        v_target = "apps-applets" if is_secondary else "themes-wallpapers"
+        v_icon = "diamonds-four-duotone" if is_secondary else "images-duotone"
+        v_target = "apps-applets" if is_secondary else "wallpapers"
 
         self.header.update(
             current_page=name,
@@ -457,7 +450,9 @@ class Dash(Window):
         if not self.is_visible():
             self.toggle(active_monitor)
 
-    def toggle_settings(self, active_monitor=None):
+    def toggle_settings(self, active_monitor=None, tab: str | None = None):
+        if tab:
+            self.settings.switch_to_page(tab)
         self.h_group_1.set_visible_child(self.settings)
         self.v_stack.set_visible_child(self.h_group_1)
         if not self.is_visible():
@@ -470,8 +465,9 @@ class Dash(Window):
             self.toggle(active_monitor)
 
     def toggle_themes(self, active_monitor=None):
-        self.v_stack.set_visible_child(self.h_group_2)
-        self.h_group_2.set_visible_child(self.themes)
+        self.settings.switch_to_page("system_theme")
+        self.h_group_1.set_visible_child(self.settings)
+        self.v_stack.set_visible_child(self.h_group_1)
         if not self.is_visible():
             self.toggle(active_monitor)
 

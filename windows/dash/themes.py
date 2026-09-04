@@ -13,9 +13,9 @@ from services.templates import template_service, TEMPLATES_DIR
 from services.themes import WALLPAPER_THEME
 from user_options import user_options
 
-THUMB_BG_W   = 174
-THUMB_BG_H   = 174
-ACCENT_DOT   = 16
+THUMB_BG_W   = 154
+THUMB_BG_H   = 110
+ACCENT_DOT   = 14
 MAX_DOTS     = 4
 
 RADIUS_MAP = {
@@ -29,6 +29,22 @@ FONT_MAP = {
     "mixed": {"mixed-mono": "monospace",  "always-mono": "unset"},
     "all":  {"mixed-mono": "monospace", "always-mono": "monospace"},
 }
+
+def write_border_css(key: str) -> None:
+    values = RADIUS_MAP.get(key, RADIUS_MAP["round"])
+    css = "\n".join(f"@define {k} {v};" for k, v in values.items())
+    path = os.path.expanduser("~/.config/agility-shell/style/borders.css")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(css + "\n")
+
+def write_font_css(key: str) -> None:
+    values = FONT_MAP.get(key, FONT_MAP["none"])
+    css = "\n".join(f"@define {k} {v};" for k, v in values.items())
+    path = os.path.expanduser("~/.config/agility-shell/style/fonts.css")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(css + "\n")
 
 def _color_dot(hex_color: str, size: int = ACCENT_DOT, active: bool = False) -> Gtk.Widget:
     dot = Box(
@@ -106,44 +122,46 @@ class TemplateRow(EventBox):
         self._switch.set_active(self._enabled)
         notes_text = meta.get("notes", "")
 
-        header = Box(
-            orientation="h",
-            spacing=6,
-            h_align="fill",
+        title_box = Box(
+            orientation="v",
+            spacing=2,
+            h_align="start",
             h_expand=True,
-            v_expand=True,
             v_align="center",
             children=[
                 Label(
                     label=meta.get("name", self._template_id),
                     style_classes=["dim-label"],
+                    style="font-size: 12.5px; font-weight: 600;",
                     h_align="start",
-                    h_expand=True,
                 ),
-                Box(
-                    spacing=6,
-                    h_align="end",
-                    children=[
-                        Button(
-                            v_align="center",
-                            v_expand=True,
-                            style_classes=["template-info-button"],
-                            child=Icon(icon_name="info-duotone", icon_size=20),
-                            tooltip_markup=notes_text
-                        ) if notes_text else Box(),
-                        Box(children=self._switch),
-                    ]
-                )
             ],
         )
 
+        right_box = Box(
+            spacing=8,
+            h_align="end",
+            v_align="center",
+            children=[
+                Button(
+                    v_align="center",
+                    v_expand=True,
+                    style_classes=["template-info-button"],
+                    child=Icon(icon_name="info-duotone", icon_size=18),
+                    tooltip_markup=notes_text,
+                ) if notes_text else Box(),
+                Box(children=self._switch),
+            ],
+        )
 
         inner = Box(
-            orientation="v",
-            spacing=0,
+            orientation="h",
+            spacing=12,
+            h_align="fill",
             h_expand=True,
-            style_classes=["section-child", "template-row"],
-            children=header
+            v_align="center",
+            style_classes=["dash-settings-row", "template-row"],
+            children=[title_box, right_box],
         )
 
         super().__init__(
@@ -227,7 +245,7 @@ class ThemeThumb(Button):
         self._data    = data
         self._is_dark = is_dark
 
-        mode = "dark"
+        mode = "dark" if is_dark else "light"
 
         colors  = data.get("colors", {})
         accents = data.get("accents", {}).get("available", {})
@@ -238,10 +256,16 @@ class ThemeThumb(Button):
 
         self._label = Label(
             label=data.get("name", name),
-            style=f"color: {text_color}; font-size: 14px;",
+            style=f"color: {text_color}; font-size: 13px; font-weight: 600;",
         )
 
-        dot_box = Box(style_classes=["theme-preview-color-container"], style=f"background-color: {surface_color}", orientation="h", spacing=6, h_align="center")
+        dot_box = Box(
+            style_classes=["theme-preview-color-container"],
+            style=f"background-color: {surface_color}; padding: 4px 8px; border-radius: 12px;",
+            orientation="h",
+            spacing=6,
+            h_align="center",
+        )
         all_accents = list(accents.items())
         target_indices = [0, 1, 3, 7]
         accent_list = [all_accents[i] for i in target_indices if i < len(all_accents)]
@@ -251,7 +275,7 @@ class ThemeThumb(Button):
 
         inner = Box(
             orientation="v",
-            spacing=18,
+            spacing=10,
             v_align="center",
             h_align="center",
             h_expand=True,
@@ -261,7 +285,7 @@ class ThemeThumb(Button):
 
         self._clip = ClippingBox(
             style_classes=["dash-grid-selector-preview"],
-            style=f"background-color: {bg_color};",
+            style=f"background-color: {bg_color}; min-width: {THUMB_BG_W}px; min-height: {THUMB_BG_H}px;",
             children=inner,
         )
         self._clip.set_size_request(THUMB_BG_W, THUMB_BG_H)
@@ -286,7 +310,7 @@ class MatugenThumb(Button):
     """
     Thumbnail for the Matugen (wallpaper) theme slot.
     Shows a blurred version of the current wallpaper as the background,
-    with the icon and label overlaid on top via a GTK overlay.
+    with the icon and label overlaid on top.
     """
 
     def __init__(self, on_select):
@@ -294,25 +318,30 @@ class MatugenThumb(Button):
 
         foreground = Box(
             orientation="v",
-            spacing=18,
-            # v_align="center",
-            # h_align="center",
+            spacing=8,
+            v_align="center",
+            h_align="center",
             h_expand=True,
             v_expand=True,
-            style_classes=["matugen-thumb"],
+            style=f"background-color: var(--surface_container_high); min-width: {THUMB_BG_W}px; min-height: {THUMB_BG_H}px; border-radius: 12px;",
             children=[
-                Label(v_expand=True, v_align="end", label="Material Colors", style="font-size: 14px;"),
-                Icon(v_expand=True, v_align="start", icon_name="android-logo-duotone", icon_size=36),
+                Icon(icon_name="android-logo-duotone", icon_size=28),
+                Label(label="Material Colors", style="font-size: 12px; font-weight: 600;"),
             ],
         )
+
+        self._clip = ClippingBox(
+            style_classes=["dash-grid-selector-preview"],
+            style=f"min-width: {THUMB_BG_W}px; min-height: {THUMB_BG_H}px;",
+            children=foreground,
+        )
+        self._clip.set_size_request(THUMB_BG_W, THUMB_BG_H)
 
         super().__init__(
             style_classes=["wallpaper-thumb"],
             v_align="center",
             h_align="center",
-            h_expand=True,
-            v_expand=True,
-            child=foreground,
+            child=self._clip,
             on_clicked=lambda _: on_select(self),
         )
 
@@ -322,9 +351,9 @@ class MatugenThumb(Button):
 
     def set_active(self, active: bool) -> None:
         if active:
-            self.add_style_class("active")
+            self._clip.add_style_class("active")
         else:
-            self.remove_style_class("active")
+            self._clip.remove_style_class("active")
 
 class ThemePreview(Box):
     def __init__(self, bar_manager):
