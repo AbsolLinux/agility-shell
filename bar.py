@@ -5,15 +5,7 @@ from fabric.widgets.wayland import WaylandWindow as Window
 from fabric.widgets.box import Box
 from fabric.widgets.centerbox import CenterBox
 from fabric.widgets.eventbox import EventBox
-from snippets import (
-    HackedRevealer,
-    enable_blur,
-    disable_blur,
-    free_blur,
-    set_blur_regions,
-    compute_rounded_rect_regions,
-    AppletReveal,
-)
+from snippets import HackedRevealer, enable_blur, set_blur_regions_from_widget, disable_blur, free_blur, AppletReveal
 from gi.repository import Gdk, Gtk, GLib, GtkLayerShell
 from bar_widgets import (
     LauncherButton, BluetoothButton, BatteryButton, CalendarButton, ClockButton,
@@ -1569,8 +1561,6 @@ class Bar(Window):
     def __init__(self, monitor_id: int = 0, bar_index: int = 0, bar_cfg: dict = None, monitor: Gdk.Monitor = None, bar_manager=None, on_remove: callable = None):
         self._on_remove_cb = on_remove
         self._blur_ctx = None
-        self._last_blur_params = None
-        self._blur_update_source = None
         self.monitor_id = monitor_id
         self.bar_index = bar_index
         self.vertical = False
@@ -1642,9 +1632,6 @@ class Bar(Window):
         self.connect("leave-notify-event", self._on_bar_leave)
         self.connect("realize", self._on_realize)
         edit_mode.connect("notify::edit-mode", self._on_edit_mode_changed)
-        self._centerbox.connect("size-allocate", self._on_bar_size_allocate)
-        if hasattr(self._revealer, "animator") and self._revealer.animator:
-            self._revealer.animator.connect("finished", self._on_revealer_finished)
         self.gdk_monitor = monitor
         self.set_opacity(getattr(user_options.settings, "bar_opacity", 1.0))
         current_theme = getattr(user_options.settings, "bar_theme", "default")
@@ -1663,29 +1650,11 @@ class Bar(Window):
         else:
             GLib.idle_add(self._update_smart_autohide)
 
-    def _on_bar_size_allocate(self, widget, allocation):
-        if not self._blur_ctx or not self.get_realized():
-            return
-        if self._blur_update_source is None:
-            self._blur_update_source = GLib.idle_add(self._debounced_update_blur)
-
-    def _debounced_update_blur(self):
-        self._blur_update_source = None
-        self._update_blur_region()
-        return False
-
-    def _on_revealer_finished(self, *_):
-        if getattr(self._revealer, "_reveal_child", True):
-            self._update_blur_region()
-
     def _on_realize(self, *_):
         should_blur = getattr(user_options.settings, "bar_blur", True)
         if should_blur:
             self._blur_ctx = enable_blur(self)
-            if self._blur_ctx:
-                disable_blur(self._blur_ctx)
-                self._last_blur_params = None
-                GLib.timeout_add(150, self._update_blur_region)
+            GLib.timeout_add(1500, self._update_blur_region)
 
     def set_opacity(self, opacity: float):
         opacity = max(0.0, min(1.0, float(opacity)))
@@ -1733,65 +1702,14 @@ class Bar(Window):
         return section
 
     def _update_blur_region(self) -> bool:
-        if not self._blur_ctx or not self.get_realized():
-            return False
-
-        if self.auto_hide and not getattr(self._revealer, "_reveal_child", True):
-            if self._last_blur_params is not None:
-                disable_blur(self._blur_ctx)
-                self._last_blur_params = None
-            return False
-
-        coords = self._centerbox.translate_coordinates(self, 0, 0)
-        if coords is None:
-            GLib.idle_add(self._update_blur_region)
-            return False
-
-        bx, by = coords
-        bw = self._centerbox.get_allocated_width()
-        bh = self._centerbox.get_allocated_height()
-        if bw <= 0 or bh <= 0:
-            return False
-
-        ctx = self._centerbox.get_style_context()
-        try:
-            radius = ctx.get_property("border-radius", Gtk.StateFlags.NORMAL) or 16
-        except Exception:
-            radius = 16
-
-        floating = self.bar_config.get("floating_bar", False)
-        if floating:
-            tl = tr = bl = br = True
-        elif self.min_width:
-            if self.alignment == "top":
-                tl = tr = False
-                bl = br = True
-            else:
-                tl = tr = True
-                bl = br = False
-        else:
-            tl = tr = bl = br = False
-            radius = 0
-
-        params = (bx, by, bw, bh, radius, tl, tr, bl, br)
-        if params == self._last_blur_params:
-            return False
-        self._last_blur_params = params
-
-        rects = compute_rounded_rect_regions(
-            bx, by, bw, bh, radius,
-            top_left=tl, top_right=tr, bottom_left=bl, bottom_right=br
-        )
-        set_blur_regions(self._blur_ctx, rects)
+        if self._blur_ctx and self.get_realized():
+            set_blur_regions_from_widget(self._blur_ctx, self, accuracy=1, erode=0)
         return False
 
     def apply_blur(self, enabled: bool) -> None:
         if enabled:
             if self._blur_ctx is None and self.get_realized():
                 self._blur_ctx = enable_blur(self)
-                if self._blur_ctx:
-                    disable_blur(self._blur_ctx)
-                    self._last_blur_params = None
             if self._blur_ctx and self.get_realized():
                 self._update_blur_region()
         else:
@@ -1799,7 +1717,6 @@ class Bar(Window):
                 disable_blur(self._blur_ctx)
                 free_blur(self._blur_ctx)
                 self._blur_ctx = None
-                self._last_blur_params = None
 
     def _set_theme_classes(self, theme_name: str) -> None:
         ctx = self._centerbox.get_style_context()
@@ -1842,9 +1759,8 @@ class Bar(Window):
             self._centerbox.add_style_class("floating")
         else:
             self._centerbox.remove_style_class("floating")
-        self._last_blur_params = None
         if self._blur_ctx:
-            GLib.timeout_add(150, self._update_blur_region)
+            GLib.timeout_add(1000, self._update_blur_region)
         for i, cfg in enumerate(user_options.bars.configs):
             if cfg.get("monitor") == self.monitor_id:
                 user_options.bars.configs[i]["floating_bar"] = floating
@@ -1878,9 +1794,8 @@ class Bar(Window):
             self._centerbox.add_style_class("min-width")
         self._apply_anchors()
         user_options.save()
-        self._last_blur_params = None
         if self._blur_ctx:
-            GLib.timeout_add(150, self._update_blur_region)
+            GLib.timeout_add(320, self._update_blur_region)
         for i, cfg in enumerate(user_options.bars.configs):
             if cfg.get("monitor") == self.monitor_id:
                 bars_list = cfg.get("bars")
@@ -1959,9 +1874,7 @@ class Bar(Window):
         else:
             self._centerbox.remove_style_class("bottom")
             self._centerbox.add_style_class("top")
-        self._last_blur_params = None
-        if self._blur_ctx:
-            GLib.timeout_add(150, self._update_blur_region)
+        GLib.timeout_add(1000, self._update_blur_region)
         for section in self.sections.values():
             for child in section.get_children():
                 if isinstance(child, WidgetWrapper):
@@ -1986,9 +1899,7 @@ class Bar(Window):
             self._centerbox.add_style_class("min-width")
         else:
             self._centerbox.remove_style_class("min-width")
-        self._last_blur_params = None
-        if self._blur_ctx:
-            GLib.timeout_add(150, self._update_blur_region)
+        GLib.timeout_add(320, self._update_blur_region)
         user_options.save()
 
     def _toggle_auto_hide(self):
@@ -2097,9 +2008,6 @@ class Bar(Window):
 
     def _do_hide(self):
         self.exclusivity = "none"
-        if self._blur_ctx:
-            disable_blur(self._blur_ctx)
-            self._last_blur_params = None
         self._revealer.set_reveal_child(False)
         self._centerbox.remove_style_class("revealed")
 
