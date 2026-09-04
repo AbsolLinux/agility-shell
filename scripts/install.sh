@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Agility Shell -- Installer & Updater
+#  Agility Shell -- Installer
 #  Arch Linux only
 # =============================================================================
 
 set -euo pipefail
 
-REPO_URL="https://github.com/Naitik-Vadher-4661/agility-shell.git"
+REPO_URL="https://github.com/AbsolOrg/agility-shell.git"
 INSTALL_DIR="$HOME/.config/agility-shell"
 CONFIG_DIR="$INSTALL_DIR/config"
-SCRIPT_URL="https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/install.sh"
 
 SCRIPT_SRC="${BASH_SOURCE[0]:-}"
 if [[ -n "$SCRIPT_SRC" && "$SCRIPT_SRC" != "bash" && "$SCRIPT_SRC" != "sh" && "$SCRIPT_SRC" != "/dev/stdin" && -f "$SCRIPT_SRC" ]]; then
@@ -29,16 +28,6 @@ elif [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/bar.py" 
     IS_LOCAL_REPO=true
     LOCAL_SRC_DIR="$SCRIPT_DIR"
 fi
-
-# Directories to preserve during updates (relative to INSTALL_DIR)
-PRESERVE_DIRS=("wallpapers" "config")
-
-# Individual files to preserve during updates (relative to INSTALL_DIR)
-PRESERVE_FILES=(
-    "style/colors.css"
-    "style/borders.css"
-    "style/fonts.css"
-)
 
 # -- Colours -------------------------------------------------------------------
 RED='\033[0;31m'
@@ -92,48 +81,6 @@ prompt_user() {
     fi
 }
 
-self_update() {
-    if [[ "$IS_LOCAL_REPO" == "true" ]]; then
-        info "Running from local repository -- skipping remote self-update."
-        return
-    fi
-
-    # When piped through curl | bash or stdin, skip self-update
-    if [[ -z "$SCRIPT_DIR" || "$0" == "bash" || "$0" == "sh" || "$0" == *"stdin"* ]]; then
-        return
-    fi
-
-    local script_path
-    script_path="$(realpath "$0" 2>/dev/null || true)"
-    if [[ -z "$script_path" || ! -f "$script_path" || "$script_path" == "/usr/bin/"* || "$script_path" == "/bin/"* ]]; then
-        return
-    fi
-
-    info "Checking for installer updates..."
-
-    local tmp_script
-    tmp_script=$(mktemp)
-
-    if ! curl -fsSL "$SCRIPT_URL" -o "$tmp_script" 2>/dev/null; then
-        warn "Could not reach update URL -- skipping self-update."
-        rm -f "$tmp_script"
-        return
-    fi
-
-    if cmp -s "$script_path" "$tmp_script"; then
-        success "Installer is already up to date."
-        rm -f "$tmp_script"
-        return
-    fi
-
-    info "New version of install.sh found -- updating..."
-    chmod +x "$tmp_script"
-    cp "$tmp_script" "$script_path"
-    rm -f "$tmp_script"
-    success "Installer updated. Re-running..."
-    echo
-    exec "$script_path" "$@"
-}
 
 # -- Sanity checks -------------------------------------------------------------
 check_arch() {
@@ -442,101 +389,6 @@ MATUGEN_EOF
     success "Matugen configured."
 }
 
-# -- Backup / Preserve ---------------------------------------------------------
-backup_preserved_dirs() {
-    local tmp_backup="$1"
-    for dir in "${PRESERVE_DIRS[@]}"; do
-        local src="$INSTALL_DIR/$dir"
-        if [[ -d "$src" ]]; then
-            info "Preserving $dir/..."
-            mkdir -p "$tmp_backup"
-            cp -r "$src" "$tmp_backup/$dir"
-        fi
-    done
-}
-
-restore_preserved_dirs() {
-    local tmp_backup="$1"
-    for dir in "${PRESERVE_DIRS[@]}"; do
-        local backed_up="$tmp_backup/$dir"
-        if [[ -d "$backed_up" ]]; then
-            info "Restoring $dir/..."
-            rm -rf "$INSTALL_DIR/$dir"
-            cp -r "$backed_up" "$INSTALL_DIR/$dir"
-        fi
-    done
-}
-
-backup_preserved_files() {
-    local tmp_backup="$1"
-    for file in "${PRESERVE_FILES[@]}"; do
-        local src="$INSTALL_DIR/$file"
-        if [[ -f "$src" ]]; then
-            mkdir -p "$tmp_backup/$(dirname "$file")"
-            cp "$src" "$tmp_backup/$file"
-            info "Preserving $file..."
-        fi
-    done
-}
-
-restore_preserved_files() {
-    local tmp_backup="$1"
-    for file in "${PRESERVE_FILES[@]}"; do
-        local backed_up="$tmp_backup/$file"
-        if [[ -f "$backed_up" ]]; then
-            mkdir -p "$INSTALL_DIR/$(dirname "$file")"
-            cp "$backed_up" "$INSTALL_DIR/$file"
-            info "Restoring $file..."
-        fi
-    done
-}
-
-# -- Update --------------------------------------------------------------------
-do_update() {
-    info "Updating Agility Shell..."
-
-    check_and_install_deps
-
-    local tmp_backup
-    tmp_backup=$(mktemp -d)
-
-    backup_preserved_dirs "$tmp_backup"
-    backup_preserved_files "$tmp_backup"
-
-    if [[ "$IS_LOCAL_REPO" == "true" ]]; then
-        deploy_source
-    elif [[ -d "$INSTALL_DIR/.git" ]]; then
-        git -C "$INSTALL_DIR" fetch origin
-        git -C "$INSTALL_DIR" reset --hard origin/main
-    else
-        deploy_source
-    fi
-
-    restore_preserved_files "$tmp_backup"
-    restore_preserved_dirs "$tmp_backup"
-    rm -rf "$tmp_backup"
-
-    info "Refreshing Python dependencies..."
-    if [[ ! -d "$INSTALL_DIR/venv" ]]; then
-        setup_venv
-    else
-        "$INSTALL_DIR/venv/bin/pip" install --upgrade pip -q
-        "$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" -q
-        success "Python dependencies updated."
-    fi
-
-    compile_snippets
-    inject_niri_include
-    setup_matugen
-    install_cli
-
-    chmod +x "$INSTALL_DIR"/*.sh "$INSTALL_DIR/scripts"/*.sh "$INSTALL_DIR/bin/agl" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
-
-    success "Agility Shell updated successfully!"
-    echo
-    prompt_reboot
-}
-
 # -- Install CLI ---------------------------------------------------------------
 install_cli() {
     info "Setting up agl CLI tool..."
@@ -617,25 +469,21 @@ main() {
 
     check_arch
     check_not_root
-    self_update "$@"
 
     if [[ -d "$INSTALL_DIR" ]]; then
         warn "Existing installation found at $INSTALL_DIR"
         echo
-        echo -e "  ${BOLD}1)${RESET} Update (preserves wallpapers/ and configs)"
-        echo -e "  ${BOLD}2)${RESET} Reinstall from scratch (replaces installation)"
-        echo -e "  ${BOLD}q)${RESET} Quit"
-        echo
-        prompt_user "  Choice [1/2/q]: " choice "1"
+        prompt_user "  Agility Shell is already installed. Reinstall from scratch? [y/N]: " choice "n"
         case "$choice" in
-            1) do_update ;;
-            2)
-                warn "Removing existing installation..."
+            [yY]|[yY][eE][sS])
+                warn "Wiping existing installation..."
                 rm -rf "$INSTALL_DIR"
                 do_install
                 ;;
-            q|Q) info "Aborted."; exit 0 ;;
-            *) die "Invalid choice." ;;
+            *)
+                info "Installation aborted."
+                exit 0
+                ;;
         esac
     else
         do_install

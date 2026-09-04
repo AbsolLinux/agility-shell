@@ -75,7 +75,11 @@ cmd_install() {
     elif [[ -n "$REPO_DIR" && -f "$REPO_DIR/install.sh" ]]; then
         exec "$REPO_DIR/install.sh" "$@"
     else
-        curl -fsSL https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/install.sh | bash
+        TMP_DIR="$(mktemp -d)"
+        trap 'rm -rf "$TMP_DIR"' EXIT
+        curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/scripts/install.sh -o "$TMP_DIR/install.sh"
+        chmod +x "$TMP_DIR/install.sh"
+        exec "$TMP_DIR/install.sh" "$@"
     fi
 }
 
@@ -86,7 +90,11 @@ cmd_update() {
     elif [[ -n "$REPO_DIR" && -f "$REPO_DIR/update.sh" ]]; then
         exec "$REPO_DIR/update.sh" "$@"
     else
-        curl -fsSL https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/update.sh | bash
+        TMP_DIR="$(mktemp -d)"
+        trap 'rm -rf "$TMP_DIR"' EXIT
+        curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/scripts/update.sh -o "$TMP_DIR/update.sh"
+        chmod +x "$TMP_DIR/update.sh"
+        exec "$TMP_DIR/update.sh" "$@"
     fi
 }
 
@@ -98,7 +106,7 @@ cmd_uninstall() {
     else
         TMP_DIR="$(mktemp -d)"
         trap 'rm -rf "$TMP_DIR"' EXIT
-        curl -fsSL https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/scripts/uninstall.sh -o "$TMP_DIR/uninstall.sh"
+        curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/scripts/uninstall.sh -o "$TMP_DIR/uninstall.sh"
         chmod +x "$TMP_DIR/uninstall.sh"
         exec "$TMP_DIR/uninstall.sh" "$@"
     fi

@@ -21,6 +21,7 @@ error()   { echo -e "${RED}${BOLD}[ err  ]${RESET} $*" >&2; }
 
 # Determine script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd || echo "")"
 USER_CONFIG="$HOME/.config/agility-shell"
 LOG_DIR="$HOME/.cache/agility-shell"
 LOG_FILE="$LOG_DIR/shell.log"
@@ -29,14 +30,35 @@ mkdir -p "$LOG_DIR"
 
 info "Restarting Agility Shell..."
 
-# -- 1. Terminate existing shell processes ------------------------------------
+# -- 1. Terminate existing shell processes safely -----------------------------
 info "Stopping running Agility Shell & Quickshell instances..."
 
-# Find PIDs of running agility-shell / main.py
-PIDS=$(pgrep -f "agility-shell|caffyne-shell|python3.*main\.py" 2>/dev/null || true)
-QS_PIDS=$(pgrep -f "quickshell.*Awe|qs.*Awe" 2>/dev/null || true)
+find_shell_pids() {
+    local found_pids=()
+    local raw_pids
+    raw_pids=$(pgrep -x "agility-shell" 2>/dev/null || true)
+    raw_pids+=" $(pgrep -f "python.*agility-shell/main\.py" 2>/dev/null || true)"
+    raw_pids+=" $(pgrep -f "python.*[m]ain\.py" 2>/dev/null || true)"
+    raw_pids+=" $(pgrep -f "[q]uickshell.*(agility|Awe)|[q]s.*(agility|Awe)" 2>/dev/null || true)"
 
-ALL_PIDS="${PIDS} ${QS_PIDS}"
+    for pid in $raw_pids; do
+        [[ -z "$pid" ]] && continue
+        # Do not kill self or parent
+        if [[ "$pid" -eq "$$" || "$pid" -eq "$PPID" ]]; then
+            continue
+        fi
+        # Never match restart, update, install, or agl scripts
+        local cmdline
+        cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
+        if [[ "$cmdline" =~ restart\.sh|update\.sh|install\.sh|/bin/agl ]]; then
+            continue
+        fi
+        found_pids+=("$pid")
+    done
+    echo "${found_pids[@]:-}"
+}
+
+ALL_PIDS=$(find_shell_pids)
 
 if [[ -n "${ALL_PIDS// /}" ]]; then
     # Send SIGTERM first for clean shutdown
@@ -44,14 +66,15 @@ if [[ -n "${ALL_PIDS// /}" ]]; then
     
     # Wait up to 2 seconds for graceful exit
     for i in {1..20}; do
-        if ! pgrep -f "agility-shell|caffyne-shell|python3.*main\.py|quickshell.*Awe|qs.*Awe" >/dev/null 2>&1; then
+        REMAINING=$(find_shell_pids)
+        if [[ -z "${REMAINING// /}" ]]; then
             break
         fi
         sleep 0.1
     done
 
     # Force kill if still lingering
-    REMAINING=$(pgrep -f "agility-shell|caffyne-shell|python3.*main\.py|quickshell.*Awe|qs.*Awe" 2>/dev/null || true)
+    REMAINING=$(find_shell_pids)
     if [[ -n "${REMAINING// /}" ]]; then
         warn "Force terminating lingering processes..."
         kill -9 $REMAINING 2>/dev/null || true
@@ -61,36 +84,45 @@ fi
 
 success "All previous shell processes stopped."
 
-# -- 2. Determine launcher target ---------------------------------------------
+# -- 2. Determine launcher target (prefer updated ~/.config/agility-shell) -----
 TARGET_DIR=""
 PYTHON_BIN="python3"
 
-if [[ -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/bar.py" ]]; then
+if [[ -d "$USER_CONFIG" && -f "$USER_CONFIG/main.py" ]]; then
+    TARGET_DIR="$USER_CONFIG"
+    if [[ -x "$USER_CONFIG/venv/bin/python3" ]]; then
+        PYTHON_BIN="$USER_CONFIG/venv/bin/python3"
+    fi
+elif [[ -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/bar.py" ]]; then
     TARGET_DIR="$SCRIPT_DIR"
     if [[ -x "$SCRIPT_DIR/venv/bin/python3" ]]; then
         PYTHON_BIN="$SCRIPT_DIR/venv/bin/python3"
     elif [[ -x "$USER_CONFIG/venv/bin/python3" ]]; then
         PYTHON_BIN="$USER_CONFIG/venv/bin/python3"
     fi
-elif [[ -d "$USER_CONFIG" && -f "$USER_CONFIG/main.py" ]]; then
-    TARGET_DIR="$USER_CONFIG"
-    if [[ -x "$USER_CONFIG/venv/bin/python3" ]]; then
+elif [[ -n "$REPO_ROOT" && -f "$REPO_ROOT/main.py" && -f "$REPO_ROOT/bar.py" ]]; then
+    TARGET_DIR="$REPO_ROOT"
+    if [[ -x "$REPO_ROOT/venv/bin/python3" ]]; then
+        PYTHON_BIN="$REPO_ROOT/venv/bin/python3"
+    elif [[ -x "$USER_CONFIG/venv/bin/python3" ]]; then
         PYTHON_BIN="$USER_CONFIG/venv/bin/python3"
     fi
 else
-    error "Could not find Agility Shell main.py in $SCRIPT_DIR or $USER_CONFIG"
+    error "Could not find Agility Shell main.py in $USER_CONFIG or $SCRIPT_DIR"
     exit 1
 fi
 
-info "Launching from: $TARGET_DIR"
-info "Using Python:   $PYTHON_BIN"
+info "Launching updated shell from: $TARGET_DIR"
+info "Using Python:                 $PYTHON_BIN"
 
 # -- 3. Start Shell -----------------------------------------------------------
 FOREGROUND=false
+PASS_ARGS=()
 for arg in "$@"; do
     if [[ "$arg" == "--foreground" || "$arg" == "-f" ]]; then
         FOREGROUND=true
-        break
+    else
+        PASS_ARGS+=("$arg")
     fi
 done
 
@@ -98,10 +130,14 @@ cd "$TARGET_DIR"
 
 if [[ "$FOREGROUND" == true ]]; then
     info "Running in foreground mode..."
-    exec "$PYTHON_BIN" main.py "$@"
+    exec "$PYTHON_BIN" main.py ${PASS_ARGS[@]+"${PASS_ARGS[@]}"}
 else
-    # Disown and background safely
-    nohup "$PYTHON_BIN" main.py "$@" </dev/null > "$LOG_FILE" 2>&1 &
+    # Disown and background safely with a new session
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$PYTHON_BIN" main.py ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} </dev/null >> "$LOG_FILE" 2>&1 &
+    else
+        nohup "$PYTHON_BIN" main.py ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} </dev/null >> "$LOG_FILE" 2>&1 &
+    fi
     DISOWN_PID=$!
     disown "$DISOWN_PID" 2>/dev/null || true
     

@@ -16,6 +16,6 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-curl -fsSL https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/scripts/uninstall.sh -o "$TMP_DIR/uninstall.sh"
+curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/scripts/uninstall.sh -o "$TMP_DIR/uninstall.sh"
 chmod +x "$TMP_DIR/uninstall.sh"
 exec "$TMP_DIR/uninstall.sh" "$@"

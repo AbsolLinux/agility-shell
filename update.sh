@@ -15,6 +15,6 @@ fi
 # Fallback when running piped via curl/stdin without a git clone
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-curl -fsSL https://raw.githubusercontent.com/Naitik-Vadher-4661/agility-shell/main/scripts/update.sh -o "$TMP_DIR/update.sh"
+curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/scripts/update.sh -o "$TMP_DIR/update.sh"
 chmod +x "$TMP_DIR/update.sh"
 exec "$TMP_DIR/update.sh" "$@"
