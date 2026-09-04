@@ -11,7 +11,7 @@ ShellRoot {
             screen: modelData
 
             WlrLayershell.layer: WlrLayer.Bottom
-            WlrLayershell.namespace: "quickshell:desktop-widgets"
+            WlrLayershell.namespace: "quickshell:agility-desktop-widgets"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             anchors {
@@ -53,176 +53,170 @@ ShellRoot {
                 id: widgetsLayer
                 anchors.fill: parent
 
-                WidgetManager {
-                    id: widgetManager
-                    screenWidth: desktopWindow.width
-                    screenHeight: desktopWindow.height
-                }
-
                 Clock {
                     id: clockWidget
-                    visible: widgetManager.widgetVisibility["clock"] !== false
+                    visible: Theme.widgetVisibility["clock"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 SystemInfo {
                     id: sysinfoWidget
-                    visible: widgetManager.widgetVisibility["sysinfo"] !== false
+                    visible: Theme.widgetVisibility["sysinfo"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 CalendarWidget {
                     id: calendarWidget
-                    visible: widgetManager.widgetVisibility["calendar"] !== false
+                    visible: Theme.widgetVisibility["calendar"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 MediaWidget {
                     id: mediaWidget
-                    visible: widgetManager.widgetVisibility["media"] !== false
+                    visible: Theme.widgetVisibility["media"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 WeatherWidget {
                     id: weatherWidget
-                    visible: widgetManager.widgetVisibility["weather"] !== false
+                    visible: Theme.widgetVisibility["weather"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 PosterWidget {
                     id: posterWidget
-                    visible: widgetManager.widgetVisibility["poster"] !== false
+                    visible: Theme.widgetVisibility["poster"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 BatteryWidget {
                     id: batteryWidget
-                    visible: widgetManager.widgetVisibility["battery"] !== false
+                    visible: Theme.widgetVisibility["battery"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 VolumeBrightnessWidget {
                     id: volumeWidget
-                    visible: widgetManager.widgetVisibility["quickcontrols"] !== false
+                    visible: Theme.widgetVisibility["quickcontrols"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 NetworkWidget {
                     id: networkWidget
-                    visible: widgetManager.widgetVisibility["network"] !== false
+                    visible: Theme.widgetVisibility["network"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 NotesWidget {
                     id: notesWidget
-                    visible: widgetManager.widgetVisibility["notes"] !== false
+                    visible: Theme.widgetVisibility["notes"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 TodoWidget {
                     id: todoWidget
-                    visible: widgetManager.widgetVisibility["todo"] !== false
+                    visible: Theme.widgetVisibility["todo"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 TimerWidget {
                     id: timerWidget
-                    visible: widgetManager.widgetVisibility["timer"] !== false
+                    visible: Theme.widgetVisibility["timer"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 ThermalWidget {
                     id: thermalWidget
-                    visible: widgetManager.widgetVisibility["thermal"] !== false
+                    visible: Theme.widgetVisibility["thermal"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 QuoteWidget {
                     id: quoteWidget
-                    visible: widgetManager.widgetVisibility["quote"] !== false
+                    visible: Theme.widgetVisibility["quote"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 ClipboardWidget {
                     id: clipboardWidget
-                    visible: widgetManager.widgetVisibility["clipboard"] !== false
+                    visible: Theme.widgetVisibility["clipboard"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 CryptoWidget {
                     id: cryptoWidget
-                    visible: widgetManager.widgetVisibility["crypto"] !== false
+                    visible: Theme.widgetVisibility["crypto"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 WorldClockWidget {
                     id: worldclockWidget
-                    visible: widgetManager.widgetVisibility["worldclock"] !== false
+                    visible: Theme.widgetVisibility["worldclock"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 GitDashboardWidget {
                     id: gitWidget
-                    visible: widgetManager.widgetVisibility["git"] !== false
+                    visible: Theme.widgetVisibility["git"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 ResourceWheelWidget {
                     id: resourcewheelWidget
-                    visible: widgetManager.widgetVisibility["resourcewheel"] !== false
+                    visible: Theme.widgetVisibility["resourcewheel"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 VisualizerWidget {
                     id: visualizerWidget
-                    visible: widgetManager.widgetVisibility["visualizer"] !== false
+                    visible: Theme.widgetVisibility["visualizer"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 HabitsWidget {
                     id: habitsWidget
-                    visible: widgetManager.widgetVisibility["habits"] !== false
+                    visible: Theme.widgetVisibility["habits"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 PingWidget {
                     id: pingWidget
-                    visible: widgetManager.widgetVisibility["ping"] !== false
+                    visible: Theme.widgetVisibility["ping"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 StorageMapWidget {
                     id: storagemapWidget
-                    visible: widgetManager.widgetVisibility["storagemap"] !== false
+                    visible: Theme.widgetVisibility["storagemap"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }
 
                 CalcWidget {
                     id: calcWidget
-                    visible: widgetManager.widgetVisibility["calc"] !== false
+                    visible: Theme.widgetVisibility["calc"] !== false
                     screenWidth: desktopWindow.width
                     screenHeight: desktopWindow.height
                 }

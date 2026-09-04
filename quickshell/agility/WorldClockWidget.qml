@@ -171,24 +171,10 @@ Item {
         // ════════════════════════════════════════════════════════════════
         // VARIANT 0: Classic M3 Elevated Card (shapeStyleIndex === 0)
         // ════════════════════════════════════════════════════════════════
-        Rectangle {
+        LiquidCard {
             visible: root.shapeStyleIndex === 0
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            border.color: Theme.borderColor
-            border.width: Theme.borderWidth
-            clip: true
-            antialiasing: true
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1.5
-                color: Theme.glassGloss
-                visible: Theme.isGlass
-            }
 
             Column {
                 anchors.fill: parent

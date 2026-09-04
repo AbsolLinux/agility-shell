@@ -34,7 +34,7 @@ info "Stopping running Agility Shell & Quickshell instances..."
 
 # Find PIDs of running agility-shell / main.py
 PIDS=$(pgrep -f "agility-shell|caffyne-shell|python3.*main\.py" 2>/dev/null || true)
-QS_PIDS=$(pgrep -f "quickshell.*Awe|qs.*Awe" 2>/dev/null || true)
+QS_PIDS=$(pgrep -f "quickshell.*(agility|Awe)|qs.*(agility|Awe)" 2>/dev/null || true)
 
 ALL_PIDS="${PIDS} ${QS_PIDS}"
 
@@ -44,14 +44,14 @@ if [[ -n "${ALL_PIDS// /}" ]]; then
     
     # Wait up to 2 seconds for graceful exit
     for i in {1..20}; do
-        if ! pgrep -f "agility-shell|caffyne-shell|python3.*main\.py|quickshell.*Awe|qs.*Awe" >/dev/null 2>&1; then
+        if ! pgrep -f "agility-shell|caffyne-shell|python3.*main\.py|quickshell.*(agility|Awe)|qs.*(agility|Awe)" >/dev/null 2>&1; then
             break
         fi
         sleep 0.1
     done
 
     # Force kill if still lingering
-    REMAINING=$(pgrep -f "agility-shell|caffyne-shell|python3.*main\.py|quickshell.*Awe|qs.*Awe" 2>/dev/null || true)
+    REMAINING=$(pgrep -f "agility-shell|caffyne-shell|python3.*main\.py|quickshell.*(agility|Awe)|qs.*(agility|Awe)" 2>/dev/null || true)
     if [[ -n "${REMAINING// /}" ]]; then
         warn "Force terminating lingering processes..."
         kill -9 $REMAINING 2>/dev/null || true

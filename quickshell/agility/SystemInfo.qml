@@ -168,24 +168,11 @@ Item {
             spacing: 12
 
             // ─── Tile 1: CPU Widget ───
-            Rectangle {
+            LiquidCard {
                 width: 118
                 height: 120
                 radius: 32
-                color: root.colBgTile
-                border.color: Theme.borderColor
-                border.width: Theme.borderWidth
-                clip: true
-                antialiasing: true
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1.5
-                    color: Theme.glassGloss
-                    visible: Theme.isGlass
-                }
+                isTile: true
 
                 Item {
                     anchors.fill: parent
@@ -263,24 +250,11 @@ Item {
             }
 
             // ─── Tile 2: RAM Widget ───
-            Rectangle {
+            LiquidCard {
                 width: 118
                 height: 120
                 radius: 32
-                color: root.colBgTile
-                border.color: Theme.borderColor
-                border.width: Theme.borderWidth
-                clip: true
-                antialiasing: true
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1.5
-                    color: Theme.glassGloss
-                    visible: Theme.isGlass
-                }
+                isTile: true
 
                 Item {
                     anchors.fill: parent
@@ -357,24 +331,11 @@ Item {
             }
 
             // ─── Tile 3: Disk Widget ───
-            Rectangle {
+            LiquidCard {
                 width: 118
                 height: 120
                 radius: 32
-                color: root.colBgTile
-                border.color: Theme.borderColor
-                border.width: Theme.borderWidth
-                clip: true
-                antialiasing: true
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1.5
-                    color: Theme.glassGloss
-                    visible: Theme.isGlass
-                }
+                isTile: true
 
                 Item {
                     anchors.fill: parent

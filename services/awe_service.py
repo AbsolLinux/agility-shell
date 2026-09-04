@@ -6,18 +6,22 @@ from loguru import logger
 from fabric.core.service import Service, Signal
 from user_options import user_options
 
-AWE_DIR = os.path.expanduser("~/.config/quickshell/Awe")
-SETTINGS_FILE = os.path.expanduser("~/.config/quickshell/widget_settings.json")
-ALT_SETTINGS_FILE = os.path.expanduser("~/.config/quickshell/Awe/widget_settings.json")
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+AGILITY_QS_DIR = os.path.join(REPO_DIR, "quickshell", "agility")
+USER_QS_DIR = os.path.expanduser("~/.config/agility-shell/quickshell/agility")
+QS_DIR = AGILITY_QS_DIR if os.path.exists(AGILITY_QS_DIR) else USER_QS_DIR
+
+PRIMARY_SETTINGS_FILE = os.path.expanduser("~/.config/agility-shell/widget_settings.json")
+LEGACY_SETTINGS_FILE = os.path.expanduser("~/.config/quickshell/widget_settings.json")
 
 AWE_THEMES: list[dict] = [
     {
         "id": "liquid_glass",
         "name": "Liquid Glass",
         "icon": "drop-duotone",
-        "desc": "Translucent frosted glass with specular gloss",
+        "desc": "Water droplet translucent glass with curved meniscus sheen",
         "accent": "#7DD3FC",
-        "tile_bg": "#80141B24",
+        "tile_bg": "#38141F2E",
     },
     {
         "id": "transparent",
@@ -96,7 +100,7 @@ AWE_THEMES: list[dict] = [
 
 class AweService(Service):
     """
-    Service to manage Quickshell Awe desktop widgets process and configuration.
+    Service to manage native Quickshell desktop widgets process and configuration directly within Agility Shell.
     """
 
     @Signal
@@ -130,10 +134,10 @@ class AweService(Service):
                 return True
             self._proc = None
 
-        # Check via pgrep if already running outside this process
+        # Check via pgrep if running
         try:
             res = subprocess.run(
-                ["pgrep", "-f", "quickshell.*Awe|qs.*Awe"],
+                ["pgrep", "-f", "quickshell.*(agility|Awe)|qs.*(agility|Awe)"],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -149,10 +153,10 @@ class AweService(Service):
         """Start on shell startup only if user explicitly enabled it."""
         try:
             if self.is_enabled():
-                logger.info("[awe] Auto-starting Quickshell Awe widgets on startup...")
+                logger.info("[desktop-widgets] Auto-starting desktop widgets on startup...")
                 self.start()
         except Exception as e:
-            logger.warning(f"[awe] Failed to start on startup (safely ignored): {e}")
+            logger.warning(f"[desktop-widgets] Failed to start on startup (safely ignored): {e}")
 
     def start(self) -> bool:
         if self.is_running():
@@ -166,17 +170,17 @@ class AweService(Service):
 
         qs_bin = shutil.which("qs") or shutil.which("quickshell")
         if not qs_bin:
-            logger.warning("[awe] quickshell executable ('qs' or 'quickshell') not found in PATH.")
+            logger.warning("[desktop-widgets] quickshell executable ('qs' or 'quickshell') not found in PATH.")
             self.status_changed(False)
             return False
 
-        if not os.path.exists(AWE_DIR):
-            logger.warning(f"[awe] Awe directory not found at {AWE_DIR}")
+        if not os.path.exists(QS_DIR):
+            logger.warning(f"[desktop-widgets] Quickshell directory not found at {QS_DIR}")
             self.status_changed(False)
             return False
 
         try:
-            cmd = [qs_bin, "-p", AWE_DIR]
+            cmd = [qs_bin, "-p", QS_DIR]
             self._proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
@@ -188,11 +192,11 @@ class AweService(Service):
                 user_options.save()
             except Exception:
                 pass
-            logger.info(f"[awe] Quickshell Awe launched with PID {self._proc.pid}")
+            logger.info(f"[desktop-widgets] Quickshell desktop widgets launched with PID {self._proc.pid} from {QS_DIR}")
             self.status_changed(True)
             return True
         except Exception as e:
-            logger.error(f"[awe] Failed to spawn quickshell process: {e}")
+            logger.error(f"[desktop-widgets] Failed to spawn quickshell process: {e}")
             self._proc = None
             self.status_changed(False)
             return False
@@ -216,11 +220,11 @@ class AweService(Service):
             self._proc = None
 
         try:
-            subprocess.run(["pkill", "-f", "quickshell.*Awe|qs.*Awe"], check=False)
+            subprocess.run(["pkill", "-f", "quickshell.*(agility|Awe)|qs.*(agility|Awe)"], check=False)
         except Exception:
             pass
 
-        logger.info("[awe] Quickshell Awe stopped.")
+        logger.info("[desktop-widgets] Quickshell desktop widgets stopped.")
         self.status_changed(False)
 
     def toggle(self) -> bool:
@@ -232,9 +236,15 @@ class AweService(Service):
 
     # ── Visibility Settings Management ──────────────────────────────────────
 
+    def _get_read_settings_file(self) -> str | None:
+        for p in [PRIMARY_SETTINGS_FILE, LEGACY_SETTINGS_FILE]:
+            if os.path.exists(p):
+                return p
+        return None
+
     def _load_visibility(self) -> None:
-        target_file = SETTINGS_FILE if os.path.exists(SETTINGS_FILE) else ALT_SETTINGS_FILE
-        if os.path.exists(target_file):
+        target_file = self._get_read_settings_file()
+        if target_file and os.path.exists(target_file):
             try:
                 with open(target_file, "r") as f:
                     data = json.load(f)
@@ -242,7 +252,7 @@ class AweService(Service):
                 if isinstance(vis, dict):
                     self._widgets_visibility = {str(k).lower(): bool(v) for k, v in vis.items()}
             except Exception as e:
-                logger.warning(f"[awe] Error reading widget settings: {e}")
+                logger.warning(f"[desktop-widgets] Error reading widget settings: {e}")
 
     def get_visibility(self, widget_id: str) -> bool:
         w_id = widget_id.lower()
@@ -254,12 +264,15 @@ class AweService(Service):
         w_id = widget_id.lower()
         self._widgets_visibility[w_id] = bool(visible)
 
-        # Persist to JSON files
-        for target_path in [SETTINGS_FILE, ALT_SETTINGS_FILE]:
+        # Persist to both primary and legacy settings files
+        for target_path in [PRIMARY_SETTINGS_FILE, LEGACY_SETTINGS_FILE]:
             try:
                 data = {}
                 if os.path.exists(target_path):
                     with open(target_path, "r") as f:
+                        data = json.load(f)
+                elif os.path.exists(LEGACY_SETTINGS_FILE):
+                    with open(LEGACY_SETTINGS_FILE, "r") as f:
                         data = json.load(f)
 
                 if "manager" not in data:
@@ -273,7 +286,7 @@ class AweService(Service):
                 with open(target_path, "w") as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                logger.warning(f"[awe] Failed to write settings to {target_path}: {e}")
+                logger.warning(f"[desktop-widgets] Failed to write settings to {target_path}: {e}")
 
         self.visibility_changed(w_id, visible)
 
@@ -285,8 +298,8 @@ class AweService(Service):
     # ── Theme Settings Management ───────────────────────────────────────────
 
     def _load_theme(self) -> None:
-        target_file = SETTINGS_FILE if os.path.exists(SETTINGS_FILE) else ALT_SETTINGS_FILE
-        if os.path.exists(target_file):
+        target_file = self._get_read_settings_file()
+        if target_file and os.path.exists(target_file):
             try:
                 with open(target_file, "r") as f:
                     data = json.load(f)
@@ -294,7 +307,7 @@ class AweService(Service):
                 if theme:
                     self._current_theme = str(theme)
             except Exception as e:
-                logger.warning(f"[awe] Error reading widget theme: {e}")
+                logger.warning(f"[desktop-widgets] Error reading widget theme: {e}")
 
     def get_theme(self) -> str:
         return self._current_theme
@@ -302,12 +315,15 @@ class AweService(Service):
     def set_theme(self, theme_id: str) -> None:
         self._current_theme = str(theme_id)
 
-        # Persist to JSON files
-        for target_path in [SETTINGS_FILE, ALT_SETTINGS_FILE]:
+        # Persist to both primary and legacy JSON files
+        for target_path in [PRIMARY_SETTINGS_FILE, LEGACY_SETTINGS_FILE]:
             try:
                 data = {}
                 if os.path.exists(target_path):
                     with open(target_path, "r") as f:
+                        data = json.load(f)
+                elif os.path.exists(LEGACY_SETTINGS_FILE):
+                    with open(LEGACY_SETTINGS_FILE, "r") as f:
                         data = json.load(f)
 
                 if "manager" not in data:
@@ -319,7 +335,10 @@ class AweService(Service):
                 with open(target_path, "w") as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                logger.warning(f"[awe] Failed to write theme to {target_path}: {e}")
+                logger.warning(f"[desktop-widgets] Failed to write theme to {target_path}: {e}")
 
         self.theme_changed(self._current_theme)
 
+
+# Alias for clean naming
+DesktopWidgetsService = AweService

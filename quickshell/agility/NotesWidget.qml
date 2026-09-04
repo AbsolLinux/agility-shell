@@ -157,23 +157,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.currentCardBg
             radius: 28
-            border.color: Theme.borderColor
-            border.width: Theme.borderWidth
-            clip: true
-            antialiasing: true
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1.5
-                color: Theme.glassGloss
-                visible: Theme.isGlass
-            }
 
             Column {
                 anchors.fill: parent

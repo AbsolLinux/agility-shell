@@ -30,36 +30,17 @@ def seed_user_environment():
                         except Exception:
                             pass
 
-    # Seed quickshell Awe directory
-    qs_src = os.path.join(repo_dir, "quickshell", "Awe")
-    qs_dst = os.path.expanduser("~/.config/quickshell/Awe")
-    if os.path.exists(qs_src):
-        os.makedirs(os.path.dirname(qs_dst), exist_ok=True)
-        if not os.path.exists(qs_dst):
+    # Migrate existing widget settings if needed
+    user_settings = os.path.join(user_dir, "widget_settings.json")
+    if not os.path.exists(user_settings):
+        legacy_qs = os.path.expanduser("~/.config/quickshell/widget_settings.json")
+        default_qs = os.path.join(repo_dir, "quickshell", "agility", "widget_settings.json")
+        src_settings = legacy_qs if os.path.exists(legacy_qs) else default_qs
+        if os.path.exists(src_settings):
             try:
-                shutil.copytree(qs_src, qs_dst)
+                shutil.copy2(src_settings, user_settings)
             except Exception:
                 pass
-        else:
-            for root, _, files in os.walk(qs_src):
-                rel = os.path.relpath(root, qs_src)
-                target_subdir = os.path.join(qs_dst, rel) if rel != "." else qs_dst
-                os.makedirs(target_subdir, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dst_file = os.path.join(target_subdir, f)
-                    if f == "widget_settings.json":
-                        if not os.path.exists(dst_file):
-                            try:
-                                shutil.copy2(src_file, dst_file)
-                            except Exception:
-                                pass
-                    else:
-                        try:
-                            if not os.path.exists(dst_file) or os.path.getmtime(src_file) > os.path.getmtime(dst_file):
-                                shutil.copy2(src_file, dst_file)
-                        except Exception:
-                            pass
 
 seed_user_environment()
 

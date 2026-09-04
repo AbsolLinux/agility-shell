@@ -481,9 +481,9 @@ tooltip label {
 }
 
 .bar-theme-preview-box.liquid-glass {
-    background-color: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    background-color: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: inset 0 1.5px 0.5px rgba(255, 255, 255, 0.40), 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .bar-theme-preview-box.blurred {
