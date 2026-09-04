@@ -569,23 +569,9 @@ Item {
             anchors.fill: parent
             visible: root.clockStyle === "androidStacked"
 
-            Rectangle {
+            LiquidCard {
                 anchors.fill: parent
-                color: root.colGlassBg
                 radius: 40
-                border.color: Theme.borderColor
-                border.width: Theme.borderWidth
-                clip: true
-                antialiasing: true
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1.5
-                    color: Theme.glassGloss
-                    visible: Theme.isGlass
-                }
             }
 
             Column {
@@ -617,24 +603,10 @@ Item {
         // ════════════════════════════════════════════════════
         // STYLE 4: Soft Pill Horizontal Digital Clock
         // ════════════════════════════════════════════════════
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
             visible: root.clockStyle === "digital"
-            color: root.colGlassBg
             radius: 36
-            border.color: Theme.borderColor
-            border.width: Theme.borderWidth
-            clip: true
-            antialiasing: true
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1.5
-                color: Theme.glassGloss
-                visible: Theme.isGlass
-            }
 
             Text {
                 anchors.centerIn: parent

@@ -60,7 +60,7 @@ Item {
     // Process to query Git status
     Process {
         id: gitProc
-        command: ["sh", "-c", "cd /home/cachy/.config/quickshell/Awe && b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); m=$(git status --porcelain 2>/dev/null | wc -l); l=$(git log -1 --format='%h;;%an;;%s' 2>/dev/null); echo \"${b:-main};;${m:-0};;${l:-none;;Dev;;No commits}\""]
+        command: ["sh", "-c", "(cd /home/cachy/github-p/github-based/agility-shell 2>/dev/null || cd ~/.config/agility-shell 2>/dev/null) && b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); m=$(git status --porcelain 2>/dev/null | wc -l); l=$(git log -1 --format='%h;;%an;;%s' 2>/dev/null); echo \"${b:-main};;${m:-0};;${l:-none;;Dev;;No commits}\""]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -136,23 +136,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            border.color: Theme.borderColor
-            border.width: Theme.borderWidth
-            clip: true
-            antialiasing: true
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1.5
-                color: Theme.glassGloss
-                visible: Theme.isGlass
-            }
 
             Column {
                 anchors.fill: parent

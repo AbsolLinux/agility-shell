@@ -340,7 +340,7 @@ class DashWidgetsPage(Box):
             v_align="center",
             children=[
                 Label(
-                    label="Desktop Widgets (Quickshell Awe)",
+                    label="Desktop Widgets",
                     style="font-size: 16px; font-weight: 700;",
                     h_align="start",
                 ),

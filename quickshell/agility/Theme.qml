@@ -10,9 +10,37 @@ Item {
     // Active theme key
     property string currentTheme: "liquid_glass"
 
-    // Theme metadata list for the UI picker
+    // Widget visibility states (managed directly by Agility Shell)
+    property var widgetVisibility: ({
+        clock: true,
+        poster: true,
+        calendar: true,
+        media: true,
+        sysinfo: true,
+        battery: true,
+        weather: true,
+        quickcontrols: true,
+        network: true,
+        notes: true,
+        todo: true,
+        timer: true,
+        thermal: true,
+        quote: true,
+        clipboard: true,
+        crypto: true,
+        worldclock: true,
+        git: true,
+        resourcewheel: true,
+        visualizer: true,
+        habits: true,
+        ping: true,
+        storagemap: true,
+        calc: true
+    })
+
+    // Theme metadata list for UI pickers
     readonly property var themes: [
-        { id: "liquid_glass",    name: "Liquid Glass", icon: "🫧", desc: "Translucent frosted glass with specular gloss" },
+        { id: "liquid_glass",    name: "Liquid Glass", icon: "🫧", desc: "Translucent water droplet glass with curved meniscus sheen" },
         { id: "transparent",     name: "Transparent",  icon: "🪟", desc: "Minimal see-through floating aesthetic" },
         { id: "material",        name: "Material 3",   icon: "🎨", desc: "Original dark slate with Pixel cyan" },
         { id: "cyberpunk",       name: "Cyberpunk",    icon: "⚡", desc: "High-contrast neon glow on obsidian" },
@@ -40,7 +68,7 @@ Item {
     // Primary Panel Background
     readonly property color colBg: {
         switch (currentTheme) {
-            case "liquid_glass":   return "#80141B24"
+            case "liquid_glass":   return "#550A1118"
             case "transparent":    return "#260B0E14"
             case "cyberpunk":      return "#0A0B10"
             case "nordic":         return "#2E3440"
@@ -57,7 +85,7 @@ Item {
     // Inner Sub-Card / Tile Background
     readonly property color colBgTile: {
         switch (currentTheme) {
-            case "liquid_glass":   return "#8C1B2430"
+            case "liquid_glass":   return "#38141F2E"
             case "transparent":    return "#33141C26"
             case "cyberpunk":      return "#121420"
             case "nordic":         return "#3B4252"
@@ -74,7 +102,7 @@ Item {
     // Pill / Button / Badge Background
     readonly property color colPillBg: {
         switch (currentTheme) {
-            case "liquid_glass":   return "#99263445"
+            case "liquid_glass":   return "#2D203045"
             case "transparent":    return "#4D212C3B"
             case "cyberpunk":      return "#1D2032"
             case "nordic":         return "#434C5E"
@@ -185,10 +213,10 @@ Item {
         }
     }
 
-    // Border Color
+    // Border Color (Ultra-subtle, non-harsh)
     readonly property color borderColor: {
         switch (currentTheme) {
-            case "liquid_glass":   return "#40FFFFFF"
+            case "liquid_glass":   return "#28FFFFFF"
             case "transparent":    return "#1AFFFFFF"
             case "cyberpunk":      return "#6600FFE0"
             case "nordic":         return "#26D8DEE9"
@@ -205,9 +233,9 @@ Item {
     // Border Width
     readonly property real borderWidth: {
         switch (currentTheme) {
-            case "liquid_glass":   return 1.5
+            case "liquid_glass":   return 1.0
             case "cyberpunk":      return 1.5
-            case "aurora_prism":   return 1.5
+            case "aurora_prism":   return 1.2
             case "evergreen_moss": return 1.2
             case "tokyo_night":    return 1.2
             case "transparent":    return 1.0
@@ -215,30 +243,25 @@ Item {
         }
     }
 
-    // Specular Glass Top Highlight Gradient
-    readonly property color glassGloss: {
-        switch (currentTheme) {
-            case "liquid_glass":   return "#2EFFFFFF"
-            case "aurora_prism":   return "#3DF472B6"
-            case "evergreen_moss": return "#2622C55E"
-            case "tokyo_night":    return "#20BB9AF7"
-            case "warm_latte":     return "#12F59E0B"
-            case "transparent":    return "#12FFFFFF"
-            default:               return "transparent"
-        }
-    }
+    // Legacy glassGloss kept for compatibility (transparent to prevent straight-line cuts)
+    readonly property color glassGloss: "transparent"
 
     // ─── Settings Persistence ───
     Process {
         id: loadSettingsProc
-        command: ["sh", "-c", "cat ~/.config/quickshell/widget_settings.json 2>/dev/null || echo '{}'"]
+        command: ["sh", "-c", "cat ~/.config/agility-shell/widget_settings.json 2>/dev/null || cat ~/.config/quickshell/widget_settings.json 2>/dev/null || echo '{}'"]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     var data = JSON.parse(text)
-                    if (data.manager && data.manager.theme) {
-                        root.currentTheme = data.manager.theme
+                    if (data.manager) {
+                        if (data.manager.theme) {
+                            root.currentTheme = data.manager.theme
+                        }
+                        if (data.manager.visibility !== undefined) {
+                            root.widgetVisibility = Object.assign({}, root.widgetVisibility, data.manager.visibility)
+                        }
                     }
                 } catch (e) {}
             }
@@ -252,12 +275,43 @@ Item {
 
     function setTheme(newTheme) {
         root.currentTheme = newTheme
-        var script = "python3 -c 'import json, os; p=os.path.expanduser(\"~/.config/quickshell/widget_settings.json\"); d=json.load(open(p)) if os.path.exists(p) else {}; d.setdefault(\"manager\", {})[\"theme\"]=\"" + newTheme + "\"; open(p,\"w\").write(json.dumps(d,indent=2))'"
+        var script = "python3 -c '\n" +
+            "import json, os\n" +
+            "for p in [os.path.expanduser(\"~/.config/agility-shell/widget_settings.json\"), os.path.expanduser(\"~/.config/quickshell/widget_settings.json\")]:\n" +
+            "    try:\n" +
+            "        os.makedirs(os.path.dirname(p), exist_ok=True)\n" +
+            "        d = json.load(open(p)) if os.path.exists(p) else {}\n" +
+            "        d.setdefault(\"manager\", {})[\"theme\"] = \"" + newTheme + "\"\n" +
+            "        open(p, \"w\").write(json.dumps(d, indent=2))\n" +
+            "    except Exception:\n" +
+            "        pass\n" +
+            "'"
         saveSettingsProc.command = ["sh", "-c", script]
         saveSettingsProc.running = true
     }
 
-    // Watcher to keep theme in sync across multiple monitors or processes
+    function setWidgetVisibility(widgetName, isVisible) {
+        var vis = Object.assign({}, root.widgetVisibility)
+        vis[widgetName] = isVisible
+        root.widgetVisibility = vis
+
+        var jsonStr = JSON.stringify({ visibility: vis }).replace(/'/g, "'\\''")
+        var script = "python3 -c '\n" +
+            "import json, os\n" +
+            "for p in [os.path.expanduser(\"~/.config/agility-shell/widget_settings.json\"), os.path.expanduser(\"~/.config/quickshell/widget_settings.json\")]:\n" +
+            "    try:\n" +
+            "        os.makedirs(os.path.dirname(p), exist_ok=True)\n" +
+            "        d = json.load(open(p)) if os.path.exists(p) else {}\n" +
+            "        d.setdefault(\"manager\", {})[\"visibility\"] = json.loads(\"\"\"" + JSON.stringify(vis) + "\"\"\")\n" +
+            "        open(p, \"w\").write(json.dumps(d, indent=2))\n" +
+            "    except Exception:\n" +
+            "        pass\n" +
+            "'"
+        saveSettingsProc.command = ["sh", "-c", script]
+        saveSettingsProc.running = true
+    }
+
+    // Watcher to keep theme & visibility in sync with Agility Shell Dash
     Timer {
         interval: 1000
         running: true

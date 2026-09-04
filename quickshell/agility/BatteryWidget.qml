@@ -104,23 +104,9 @@ Item {
         scale: root.scaleFactor
         transformOrigin: Item.TopLeft
 
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
             radius: 32
-            color: root.colBgTile
-            border.color: Theme.borderColor
-            border.width: Theme.borderWidth
-            clip: true
-            antialiasing: true
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1.5
-                color: Theme.glassGloss
-                visible: Theme.isGlass
-            }
 
             Item {
                 anchors.fill: parent

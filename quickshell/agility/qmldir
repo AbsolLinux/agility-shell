@@ -1,4 +1,5 @@
 singleton Theme 1.0 Theme.qml
+LiquidCard 1.0 LiquidCard.qml
 BatteryWidget 1.0 BatteryWidget.qml
 CalcWidget 1.0 CalcWidget.qml
 CalendarWidget 1.0 CalendarWidget.qml
@@ -22,5 +23,4 @@ TodoWidget 1.0 TodoWidget.qml
 VisualizerWidget 1.0 VisualizerWidget.qml
 VolumeBrightnessWidget 1.0 VolumeBrightnessWidget.qml
 WeatherWidget 1.0 WeatherWidget.qml
-WidgetManager 1.0 WidgetManager.qml
 WorldClockWidget 1.0 WorldClockWidget.qml
