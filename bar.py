@@ -223,22 +223,54 @@ class DropPlaceholder(Box):
         )
 
 class DismissLayer(Window):
-    def __init__(self, on_dismiss, **kwargs):
+    def __init__(self, on_dismiss, parent_bar=None, **kwargs):
         self.event_box = EventBox()
+        self._parent_bar = parent_bar
+        self._bar_sig = None
+        monitor = parent_bar.monitor_id if parent_bar and hasattr(parent_bar, "monitor_id") else None
+
         super().__init__(
             anchor="left right top bottom",
             layer="top",
             keyboard_mode="none",
+            monitor=monitor,
             child=self.event_box,
             **kwargs,
         )
 
         self.event_box.connect("button-release-event", lambda *_: on_dismiss())
+        self.update_margin()
+        if parent_bar:
+            self._bar_sig = parent_bar.connect("size-allocate", lambda *_: self.update_margin())
+
+    def update_margin(self):
+        if not self._parent_bar:
+            return
+        offset = self._parent_bar.get_allocated_height()
+        if offset <= 1:
+            offset = self._parent_bar.get_preferred_size()[1].height
+        if offset <= 1:
+            offset = 48
+        alignment = getattr(self._parent_bar, "alignment", "top")
+        if alignment == "bottom":
+            self.margin = (0, 0, offset, 0)
+        else:
+            self.margin = (offset, 0, 0, 0)
+
+    def destroy(self):
+        if self._parent_bar and self._bar_sig:
+            try:
+                self._parent_bar.disconnect(self._bar_sig)
+            except Exception:
+                pass
+            self._bar_sig = None
+        super().destroy()
 
 class AppletWindow(PopupWindow):
     def __init__(self, applet, alignment: str = "top", standalone = False, **kwargs):
         self._keys = None
         self._alignment = alignment
+        self.on_interaction = None
         applets = applet if isinstance(applet, list) else [applet]
 
         def build_content(window, alignment):
@@ -261,12 +293,23 @@ class AppletWindow(PopupWindow):
         )
 
         self.main = Box(style="min-height: 1px;", children=[self.revealer])
-        self.dismiss_layer = DismissLayer(on_dismiss=self.toggle)
+        parent_bar = kwargs.get("parent")
+        self.dismiss_layer = DismissLayer(on_dismiss=self.toggle, parent_bar=parent_bar)
 
         super().__init__(title="agility-shell-applet", child=self.main, **kwargs)
         self.add_keybinding("escape", lambda: self.toggle())
+        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.connect("button-press-event", self._on_window_button_press)
         if not standalone:
             GtkLayerShell.set_exclusive_zone(self, -1)
+
+    def _on_window_button_press(self, widget, event):
+        if self.on_interaction:
+            try:
+                self.on_interaction()
+            except Exception:
+                pass
+        return False
 
     def toggle(self):
         if self.is_visible():
@@ -279,6 +322,7 @@ class AppletWindow(PopupWindow):
 
         else:
             set_open_applet(self)
+            self.dismiss_layer.update_margin()
             self.dismiss_layer.set_visible(True)
             self.show()
             self.revealer.open()
@@ -390,9 +434,40 @@ class WidgetWrapper(Box):
         self._hover_timer = GLib.timeout_add(delay, self._trigger_hover_open)
         return False
 
+    def _is_pointer_actually_inside(self) -> bool:
+        if self._pointer_in_widget or self._pointer_in_popup:
+            return True
+        try:
+            if self.event_box and self.event_box.get_realized():
+                x, y = self.event_box.get_pointer()
+                alloc = self.event_box.get_allocation()
+                if 0 <= x < alloc.width and 0 <= y < alloc.height:
+                    self._pointer_in_widget = True
+                    return True
+        except Exception:
+            pass
+        try:
+            if self._popup and self._popup.get_realized() and self._popup.is_visible():
+                x, y = self._popup.get_pointer()
+                alloc = self._popup.get_allocation()
+                if 0 <= x < alloc.width and 0 <= y < alloc.height:
+                    self._pointer_in_popup = True
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _on_popup_interaction(self):
+        self._opened_by_hover = False
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+
     def _trigger_hover_open(self):
         self._hover_timer = None
         if not _is_hover_enabled_for_key(self.widget_key):
+            return False
+        if not self._pointer_in_widget and not self._is_pointer_actually_inside():
             return False
         if self.widget_key == "Dash":
             import services.singletons as singletons
@@ -435,13 +510,13 @@ class WidgetWrapper(Box):
         if self._leave_timer is not None:
             GLib.source_remove(self._leave_timer)
             self._leave_timer = None
-        self._leave_timer = GLib.timeout_add(220, self._check_and_close_hover)
+        self._leave_timer = GLib.timeout_add(300, self._check_and_close_hover)
 
     def _check_and_close_hover(self):
         self._leave_timer = None
         if not self._opened_by_hover:
             return False
-        if self._pointer_in_widget or self._pointer_in_popup:
+        if self._is_pointer_actually_inside():
             return False
 
         if self.widget_key == "Dash":
@@ -488,6 +563,7 @@ class WidgetWrapper(Box):
         self._popup.connect("notify::visible", self._on_popup_visibility_changed)
         self._popup.connect("enter-notify-event", lambda *_: self._on_popup_enter())
         self._popup.connect("leave-notify-event", lambda _w, e: self._on_popup_leave(e))
+        self._popup.on_interaction = self._on_popup_interaction
         return self._popup
 
     def _on_popup_visibility_changed(self, popup, _):
@@ -880,9 +956,40 @@ class GroupWrapper(Box):
         self._hover_timer = GLib.timeout_add(delay, self._trigger_hover_open)
         return False
 
+    def _is_pointer_actually_inside(self) -> bool:
+        if self._pointer_in_widget or self._pointer_in_popup:
+            return True
+        try:
+            if self._outer_eb and self._outer_eb.get_realized():
+                x, y = self._outer_eb.get_pointer()
+                alloc = self._outer_eb.get_allocation()
+                if 0 <= x < alloc.width and 0 <= y < alloc.height:
+                    self._pointer_in_widget = True
+                    return True
+        except Exception:
+            pass
+        try:
+            if self._popup and self._popup.get_realized() and self._popup.is_visible():
+                x, y = self._popup.get_pointer()
+                alloc = self._popup.get_allocation()
+                if 0 <= x < alloc.width and 0 <= y < alloc.height:
+                    self._pointer_in_popup = True
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _on_popup_interaction(self):
+        self._opened_by_hover = False
+        if self._leave_timer is not None:
+            GLib.source_remove(self._leave_timer)
+            self._leave_timer = None
+
     def _trigger_hover_open(self):
         self._hover_timer = None
         if not _is_hover_enabled_for_key(self.widget_keys):
+            return False
+        if not self._pointer_in_widget and not self._is_pointer_actually_inside():
             return False
         popup = self._ensure_popup()
         if popup and not popup.is_visible():
@@ -906,13 +1013,13 @@ class GroupWrapper(Box):
         if self._leave_timer is not None:
             GLib.source_remove(self._leave_timer)
             self._leave_timer = None
-        self._leave_timer = GLib.timeout_add(220, self._check_and_close_hover)
+        self._leave_timer = GLib.timeout_add(300, self._check_and_close_hover)
 
     def _check_and_close_hover(self):
         self._leave_timer = None
         if not self._opened_by_hover:
             return False
-        if self._pointer_in_widget or self._pointer_in_popup:
+        if self._is_pointer_actually_inside():
             return False
 
         if self._popup and self._popup.is_visible():
@@ -942,6 +1049,7 @@ class GroupWrapper(Box):
         self._popup.connect("notify::visible", self._on_popup_visibility_changed)
         self._popup.connect("enter-notify-event", lambda *_: self._on_popup_enter())
         self._popup.connect("leave-notify-event", lambda _w, e: self._on_popup_leave(e))
+        self._popup.on_interaction = self._on_popup_interaction
         return self._popup
 
     def _on_popup_visibility_changed(self, popup, _):
@@ -1636,6 +1744,10 @@ class Bar(Window):
         if event.button == 3:
             self._show_context_menu(event)
             return True
+        if event.button == 1:
+            if open_applet and open_applet.is_visible():
+                open_applet.toggle()
+                return True
         return False
 
     def _toggle_floating(self):
