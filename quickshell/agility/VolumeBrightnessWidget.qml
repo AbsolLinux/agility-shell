@@ -119,14 +119,14 @@ Item {
         queryProc.running = true
     }
 
-    // Material 3 Palette
-    readonly property color colBg: "#3A454B"
-    readonly property color colBadgeBg: "#4D585F"
-    readonly property color colPillTrack: "#253035"
-    readonly property color colAccentVol: "#C2E7FF"
-    readonly property color colAccentBri: "#A2C9C2"
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#B0BEC5"
+    // Theme Palette
+    readonly property color colBg: Theme.colBgTile
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colPillTrack: Theme.isGlass ? "#55101620" : "#253035"
+    readonly property color colAccentVol: Theme.colAccent
+    readonly property color colAccentBri: Theme.colAccentGreen
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -163,11 +163,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            antialiasing: true
 
             Column {
                 anchors.fill: parent

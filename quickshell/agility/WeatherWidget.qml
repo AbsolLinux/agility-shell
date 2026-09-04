@@ -88,11 +88,11 @@ Item {
         weatherProc.running = true
     }
 
-    // ─── Material Dark Slate Theme Palette ───
-    readonly property color colBg: "#3A454B"              // Dark Slate Main Card
-    readonly property color colBadgeBg: "#4D585F"         // Slate Pill Badge
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#B0BEC5"
+    // ─── Theme Palette ───
+    readonly property color colBg: Theme.colBgTile
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -102,11 +102,9 @@ Item {
         scale: root.scaleFactor
         transformOrigin: Item.TopLeft
 
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            antialiasing: true
 
             Column {
                 anchors.fill: parent
@@ -134,7 +132,7 @@ Item {
                                 width: 7
                                 height: 7
                                 radius: 3.5
-                                color: "#D1E8DA"
+                                color: Theme.colAccentGreen
                                 antialiasing: true
                             }
 

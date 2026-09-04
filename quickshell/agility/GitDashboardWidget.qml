@@ -60,7 +60,7 @@ Item {
     // Process to query Git status
     Process {
         id: gitProc
-        command: ["sh", "-c", "cd /home/cachy/.config/quickshell/Awe && b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); m=$(git status --porcelain 2>/dev/null | wc -l); l=$(git log -1 --format='%h;;%an;;%s' 2>/dev/null); echo \"${b:-main};;${m:-0};;${l:-none;;Dev;;No commits}\""]
+        command: ["sh", "-c", "(cd /home/cachy/github-p/github-based/agility-shell 2>/dev/null || cd ~/.config/agility-shell 2>/dev/null) && b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); m=$(git status --porcelain 2>/dev/null | wc -l); l=$(git log -1 --format='%h;;%an;;%s' 2>/dev/null); echo \"${b:-main};;${m:-0};;${l:-none;;Dev;;No commits}\""]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -92,14 +92,14 @@ Item {
         gitProc.running = true
     }
 
-    // Material 3 Palette
-    readonly property color colBg: "#232D33"
-    readonly property color colBadgeBg: "#303B42"
-    readonly property color colAccent: "#C2E7FF"
-    readonly property color colCleanGreen: "#A2C9C2"
-    readonly property color colDirtyAmber: "#FFE082"
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#9CA8AC"
+    // Theme Palette
+    readonly property color colBg: Theme.colBg
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colAccent: Theme.colAccent
+    readonly property color colCleanGreen: Theme.colAccentGreen
+    readonly property color colDirtyAmber: Theme.colAccentWarning
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -136,13 +136,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            border.color: "#1FFFFFFF"
-            border.width: 1.5
-            antialiasing: true
 
             Column {
                 anchors.fill: parent

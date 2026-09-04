@@ -19,9 +19,9 @@ Item {
 
     // Clipboard History List
     property var historyList: [
-        "git push -u origin added",
-        "https://github.com/AbsolOrg/Awe",
-        "quickshell -p ~/.config/quickshell/Awe"
+        "echo 'Hello Agility Shell'",
+        "git status",
+        "https://github.com/AbsolOrg/agility-shell"
     ]
     property string lastCopied: ""
     property string copyToast: ""
@@ -113,13 +113,13 @@ Item {
         loadSettingsProc.running = true
     }
 
-    // Material 3 Palette
-    readonly property color colBg: "#232D33"
-    readonly property color colBadgeBg: "#303B42"
-    readonly property color colAccent: "#C2E7FF"
-    readonly property color colAccentGreen: "#A2C9C2"
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#9CA8AC"
+    // Theme Palette
+    readonly property color colBg: Theme.colBg
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colAccent: Theme.colAccent
+    readonly property color colAccentGreen: Theme.colAccentGreen
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -156,13 +156,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            border.color: "#1FFFFFFF"
-            border.width: 1.5
-            antialiasing: true
 
             Column {
                 anchors.fill: parent

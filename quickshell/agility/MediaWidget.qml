@@ -169,13 +169,13 @@ Item {
         mediaProc.running = true
     }
 
-    // ─── Material 3 Dark Slate Palette ───
-    readonly property color colBg: "#232D33"              // Material 3 Dark Slate Surface
-    readonly property color colPillBg: "#303B42"          // Control Pill / Inactive Track
-    readonly property color colAccent: "#C2E7FF"          // M3 Cyan Accent
-    readonly property color colAccentDark: "#003549"      // Dark Fill for Scalloped Button Icon
-    readonly property color colTextPrimary: "#E1E2E5"
-    readonly property color colTextSecondary: "#9CA8AC"
+    // ─── Theme Palette ───
+    readonly property color colBg: Theme.colBg
+    readonly property color colPillBg: Theme.colPillBg
+    readonly property color colAccent: Theme.colAccent
+    readonly property color colAccentDark: Theme.isCyberpunk ? "#003028" : "#003549"
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -211,14 +211,10 @@ Item {
             }
         }
 
-        // Main Material 3 Card
-        Rectangle {
+        // Main Card
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            border.color: "#37434A"
-            border.width: 1.5
-            antialiasing: true
 
             Column {
                 anchors.fill: parent

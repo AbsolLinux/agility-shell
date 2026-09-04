@@ -89,12 +89,12 @@ Item {
         batProc.running = true
     }
 
-    // ─── Material Theme Palette ───
-    readonly property color colBgTile: "#3A454B"           // Dark Slate Card
-    readonly property color colBadgeBg: "#4D585F"          // Slate Pill/Badge Fill
-    readonly property color colAccent: "#C2E7FF"           // Google Pixel Cyan Accent
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#B0BEC5"
+    // ─── Theme Palette ───
+    readonly property color colBgTile: Theme.colBgTile
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colAccent: Theme.colAccent
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -104,11 +104,9 @@ Item {
         scale: root.scaleFactor
         transformOrigin: Item.TopLeft
 
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
             radius: 32
-            color: root.colBgTile
-            antialiasing: true
 
             Item {
                 anchors.fill: parent

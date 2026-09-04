@@ -6,7 +6,7 @@ from fabric.widgets.grid import Grid
 from gi.repository import Gtk, Gdk, GLib
 from .components import DashPage, DashGrid
 from snippets import Icon, ClippingScrolledWindow, SmoothSwitch
-from services.awe_service import AweService
+from services.awe_service import AweService, AWE_THEMES
 from utils.sounds import play_sound
 
 AWE_WIDGETS_DATA: list[dict] = [
@@ -249,6 +249,67 @@ class DashWidgetItem(Button):
             self._status_label.set_opacity(0.4)
 
 
+class DashWidgetThemeChip(Button):
+    def __init__(self, data: dict, on_select: callable):
+        self.data = data
+        self.theme_id = data["id"]
+        self._on_select = on_select
+
+        # Phosphor SVG Icon - no emojis
+        self._icon = Icon(
+            icon_name=data.get("icon", "palette-duotone"),
+            icon_size=13,
+            v_align="center",
+        )
+
+        accent_color = data.get("accent", "#C2E7FF")
+        self._accent_dot = Box(
+            v_align="center",
+            v_expand=False,
+            style=f"background-color: {accent_color}; border-radius: 99px; min-width: 6px; min-height: 6px;",
+        )
+
+        self._name_lbl = Label(
+            label=data["name"],
+            v_align="center",
+            style="font-size: 11px; font-weight: 500;",
+        )
+
+        content = Box(
+            orientation="h",
+            spacing=5,
+            v_align="center",
+            h_align="center",
+            children=[
+                self._icon,
+                self._accent_dot,
+                self._name_lbl,
+            ],
+        )
+
+        super().__init__(
+            style_classes=["widget-theme-chip"],
+            child=content,
+            h_expand=False,
+            v_expand=False,
+            v_align="center",
+            tooltip_text=f"{data['name']} — {data.get('desc', '')}",
+            on_clicked=self._on_clicked,
+        )
+
+    def _on_clicked(self, *_):
+        if self._on_select:
+            self._on_select(self.theme_id)
+
+    def set_active(self, is_active: bool) -> None:
+        if is_active:
+            self.add_style_class("active")
+            self._name_lbl.set_style("font-size: 11px; font-weight: 700; color: var(--primary);")
+        else:
+            self.remove_style_class("active")
+            self._name_lbl.set_style("font-size: 11px; font-weight: 500; opacity: 0.85;")
+
+
 class DashWidgetsPage(Box):
     def __init__(self, window=None, bar_manager=None):
         self.window = window
@@ -279,7 +340,7 @@ class DashWidgetsPage(Box):
             v_align="center",
             children=[
                 Label(
-                    label="Desktop Widgets (Quickshell Awe)",
+                    label="Desktop Widgets",
                     style="font-size: 16px; font-weight: 700;",
                     h_align="start",
                 ),
@@ -307,11 +368,45 @@ class DashWidgetsPage(Box):
             h_align="fill",
             v_align="center",
             h_expand=True,
-            style="padding: 0px 8px 12px 8px;",
+            style="padding: 0px 8px 8px 8px;",
             children=[
                 top_left_box,
                 Box(h_expand=True),
                 top_right_box,
+            ],
+        )
+
+        # ── Theme Selector Bar ───────────────────────────────────────────────
+        theme_title = Label(
+            label="Theme",
+            style="font-size: 11px; font-weight: 700; letter-spacing: 0.5px; opacity: 0.6; margin-right: 4px;",
+            v_align="center",
+        )
+
+        self._theme_chips: dict[str, DashWidgetThemeChip] = {}
+        chips_box = Box(
+            orientation="h",
+            spacing=6,
+            v_align="center",
+            h_align="start",
+            h_expand=True,
+            style="padding: 2px 0px;",
+        )
+        for t_data in AWE_THEMES:
+            chip = DashWidgetThemeChip(t_data, on_select=self._handle_theme_select)
+            self._theme_chips[t_data["id"]] = chip
+            chips_box.add(chip)
+
+        theme_bar = Box(
+            orientation="h",
+            spacing=8,
+            h_align="fill",
+            v_align="center",
+            h_expand=True,
+            style="padding: 0px 8px 6px 8px;",
+            children=[
+                theme_title,
+                chips_box,
             ],
         )
 
@@ -330,7 +425,7 @@ class DashWidgetsPage(Box):
             h_align="center",
             style_classes=["dash-grid"],
             child=self.grid,
-            max_content_size=(1104, 530),
+            max_content_size=(1104, 480),
             fade_distance=56,
             overlay_scroll=True,
             kinetic_scroll=True,
@@ -338,15 +433,16 @@ class DashWidgetsPage(Box):
             v_scrollbar_policy="automatic",
         )
         self.scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.scroll.set_size_request(1104, 530)
+        self.scroll.set_size_request(1104, 480)
 
         main_container = Box(
             orientation="v",
-            spacing=10,
+            spacing=8,
             h_align="center",
             v_align="center",
             children=[
                 top_bar,
+                theme_bar,
                 self.scroll,
             ],
         )
@@ -361,7 +457,23 @@ class DashWidgetsPage(Box):
 
         self._service.connect("status-changed", lambda _, running: self._sync_service_state())
         self._service.connect("visibility-changed", lambda _, w_id, __: self._sync_item_state(w_id))
+        self._service.connect("theme-changed", lambda _, t_id: self._sync_theme_state(t_id))
         self._sync_service_state()
+        self._sync_theme_state()
+
+    def _handle_theme_select(self, theme_id: str):
+        try:
+            self._service.set_theme(theme_id)
+            play_sound("widget-placed")
+        except Exception:
+            pass
+        self._sync_theme_state(theme_id)
+
+    def _sync_theme_state(self, active_id: str | None = None):
+        if active_id is None:
+            active_id = self._service.get_theme()
+        for t_id, chip in self._theme_chips.items():
+            chip.set_active(t_id == active_id)
 
     def _on_master_toggled(self, is_active: bool):
         try:

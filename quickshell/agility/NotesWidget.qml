@@ -109,16 +109,17 @@ Item {
 
     readonly property color currentCardBg: {
         if (root.notesList && root.notesList[root.currentNoteIndex]) {
-            return root.notesList[root.currentNoteIndex].color || "#232D33"
+            var c = root.notesList[root.currentNoteIndex].color
+            if (c && c !== "#232D33") return c
         }
-        return "#232D33"
+        return Theme.colBg
     }
 
     readonly property color currentBadgeColor: {
         for (var i = 0; i < themeColors.length; i++) {
             if (themeColors[i].bg === root.currentCardBg) return themeColors[i].badge
         }
-        return "#C2E7FF"
+        return Theme.colAccent
     }
 
     // ─── Scaled Visual Content ───
@@ -155,14 +156,10 @@ Item {
             }
         }
 
-        // Main Google Keep Styled Material 3 Card
-        Rectangle {
+        // Main Card
+        LiquidCard {
             anchors.fill: parent
-            color: root.currentCardBg
             radius: 28
-            border.color: "#1FFFFFFF"
-            border.width: 1.5
-            antialiasing: true
 
             Column {
                 anchors.fill: parent

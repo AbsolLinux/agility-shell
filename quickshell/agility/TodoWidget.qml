@@ -93,13 +93,13 @@ Item {
         loadSettingsProc.running = true
     }
 
-    // Material 3 Palette
-    readonly property color colBg: "#3A454B"
-    readonly property color colBadgeBg: "#4D585F"
-    readonly property color colAccent: "#C2E7FF"
-    readonly property color colAccentGreen: "#D1E8DA"
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#B0BEC5"
+    // Theme Palette
+    readonly property color colBg: Theme.colBgTile
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colAccent: Theme.colAccent
+    readonly property color colAccentGreen: Theme.colAccentGreen
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     // ─── Scaled Visual Content ───
     Item {
@@ -136,11 +136,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            antialiasing: true
 
             Column {
                 anchors.fill: parent

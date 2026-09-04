@@ -70,12 +70,12 @@ Item {
         loadSettingsProc.running = true
     }
 
-    // Material 3 Palette
-    readonly property color colBg: "#232D33"
-    readonly property color colBadgeBg: "#303B42"
-    readonly property color colAccent: "#D7AEFB"
-    readonly property color colTextPrimary: "#FFFFFF"
-    readonly property color colTextSecondary: "#9CA8AC"
+    // Theme Palette
+    readonly property color colBg: Theme.colBg
+    readonly property color colBadgeBg: Theme.colPillBg
+    readonly property color colAccent: Theme.colAccent
+    readonly property color colTextPrimary: Theme.colTextPrimary
+    readonly property color colTextSecondary: Theme.colTextSecondary
 
     property var activeQuote: root.quotesList[root.currentQuoteIndex] || root.quotesList[0]
 
@@ -114,13 +114,9 @@ Item {
         }
 
         // Main Card
-        Rectangle {
+        LiquidCard {
             anchors.fill: parent
-            color: root.colBg
             radius: 32
-            border.color: "#1FFFFFFF"
-            border.width: 1.5
-            antialiasing: true
 
             Column {
                 anchors.fill: parent
