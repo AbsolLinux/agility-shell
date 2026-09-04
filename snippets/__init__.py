@@ -11,7 +11,16 @@ from .calendar import GtkCalendar
 from .animated_circular_scale import AnimatedCircularScale
 from .animated_scroll import AnimatedScroll
 from .hacktk.hacktk import HackedRevealer, HackedStack
-from .blur.blur import enable_blur, disable_blur, free_blur, set_blur_regions_from_widget, is_blur_supported
+from .blur.blur import (
+    enable_blur,
+    disable_blur,
+    free_blur,
+    set_blur_region,
+    set_blur_regions,
+    set_blur_regions_from_widget,
+    is_blur_supported,
+    compute_rounded_rect_regions,
+)
 from .blur.region_trace import trace_widget_regions
 from .animator import Animator
 from .rotating_icon import RotatingIcon
@@ -40,7 +49,10 @@ __all__ = [
     "enable_blur",
     "disable_blur",
     "free_blur",
+    "set_blur_region",
+    "set_blur_regions",
     "set_blur_regions_from_widget",
+    "compute_rounded_rect_regions",
     "trace_widget_regions",
     "is_blur_supported",
     "Animator",

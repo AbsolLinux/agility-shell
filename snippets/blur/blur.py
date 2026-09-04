@@ -1,3 +1,4 @@
+import math
 from cffi import FFI
 from .region_trace import trace_widget_regions
 from fabric.utils import get_relative_path
@@ -112,3 +113,66 @@ def disable_blur(ctx):
 
 def free_blur(ctx):
     libblur.blur_free(ctx)
+
+def compute_rounded_rect_regions(
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    r: int,
+    top_left: bool = True,
+    top_right: bool = True,
+    bottom_left: bool = True,
+    bottom_right: bool = True,
+) -> list[tuple[int, int, int, int]]:
+    """Compute non-overlapping horizontal rectangle slices defining a rounded rectangle
+
+    for Wayland wl_region background blur.
+    """
+    if r <= 0 or not (top_left or top_right or bottom_left or bottom_right):
+        return [(int(x), int(y), int(w), int(h))]
+
+    r = min(int(r), int(w) // 2, int(h) // 2)
+    if r <= 0:
+        return [(int(x), int(y), int(w), int(h))]
+
+    rows = []
+    # Top corner scanlines
+    for dy in range(r):
+        v = r - dy - 0.5
+        h_dist = math.sqrt(max(0.0, r * r - v * v))
+        dx = int(round(r - h_dist))
+        left_dx = dx if top_left else 0
+        right_dx = dx if top_right else 0
+        row_x = x + left_dx
+        row_w = w - left_dx - right_dx
+        if row_w > 0:
+            rows.append((row_x, y + dy, row_w, 1))
+
+    # Middle section
+    mid_y = y + r
+    mid_h = h - 2 * r
+    if mid_h > 0:
+        rows.append((x, mid_y, w, mid_h))
+
+    # Bottom corner scanlines
+    for dy in range(r):
+        v = dy + 0.5
+        h_dist = math.sqrt(max(0.0, r * r - v * v))
+        dx = int(round(r - h_dist))
+        left_dx = dx if bottom_left else 0
+        right_dx = dx if bottom_right else 0
+        row_x = x + left_dx
+        row_w = w - left_dx - right_dx
+        if row_w > 0:
+            rows.append((row_x, y + h - r + dy, row_w, 1))
+
+    # Merge contiguous rows with identical x and w
+    merged: list[tuple[int, int, int, int]] = []
+    for rx, ry, rw, rh in rows:
+        if merged and merged[-1][0] == rx and merged[-1][2] == rw and (merged[-1][1] + merged[-1][3] == ry):
+            prev_x, prev_y, prev_w, prev_h = merged[-1]
+            merged[-1] = (prev_x, prev_y, prev_w, prev_h + rh)
+        else:
+            merged.append((rx, ry, rw, rh))
+    return merged
