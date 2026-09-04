@@ -23,7 +23,7 @@ While agility shell does not manage window configurations itself, it connects na
 
 ---
 
-## Installation & Updates
+## Installation & Quick Start
 
 ### Quick Install (Arch Linux)
 For a rapid deployment on Arch Linux, stream the setup script:
@@ -34,16 +34,39 @@ curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/install
 >[!NOTE]
 >A system `reboot` is recommended after installation to ensure all background services, environment variables, and compositor configs load cleanly.
 
-### Updating
-To update an existing installation to the latest version while preserving your wallpapers and customizations:
+---
+
+## CLI Management (`agl`)
+
+Agility Shell includes a dedicated command-line interface `agl` installed to `~/.local/bin/agl` for easy lifecycle and maintenance management:
 
 ```bash
-~/.config/agility-shell/update.sh
+agl <command> [options]
 ```
-Or stream the updater directly:
-```bash
-curl -fsSL https://raw.githubusercontent.com/AbsolOrg/agility-shell/main/update.sh | bash
-```
+
+| Command | Description | Example |
+| :--- | :--- | :--- |
+| `agl start` | Launch Agility Shell | `agl start` |
+| `agl restart` | Restart running shell gracefully | `agl restart` (or `agl restart -f` for live logs) |
+| `agl update` | Update shell in-place while preserving wallpapers & configs | `agl update` |
+| `agl uninstall` | Cleanly uninstall Agility Shell | `agl uninstall` (or `agl uninstall --purge`) |
+| `agl install` | Run or rerun system dependency setup & installer | `agl install` |
+
+---
+
+## Maintenance Scripts (`scripts/`)
+
+All lifecycle scripts are organized inside the `scripts/` directory, with root wrappers maintained as backup forwarders for 100% backward compatibility:
+
+| Script | Location | Purpose |
+| :--- | :--- | :--- |
+| `install.sh` | `scripts/install.sh` | Full system dependency check, venv setup, snippet compilation, and `agl` CLI linking |
+| `update.sh` | `scripts/update.sh` | In-place updater preserving user configs and wallpapers |
+| `uninstall.sh` | `scripts/uninstall.sh` | Process termination, CLI cleanup, and configurable config removal |
+| `start.sh` | `scripts/start.sh` | Activates virtualenv and executes `main.py` |
+| `restart.sh` | `scripts/restart.sh` | Cleanly kills existing instances and relaunches in background or foreground |
+
+Root backup scripts (`install.sh`, `update.sh`, `uninstall.sh`, `start.sh`, `restart.sh`) act as transparent forwarders to `scripts/*.sh` so automated curl commands and custom scripts continue working seamlessly.
 
 ---
 
