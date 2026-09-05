@@ -57,10 +57,19 @@ def _awww_set(
     If pos is None we default to center.
     """
     x, y = pos if pos is not None else (0.5, 0.5)
+    SPEED_DURATIONS = {
+        "quick": 0.7,
+        "medium": 1.5,
+        "slow": 2.8,
+    }
+
     t_type = transition_type or getattr(user_options.wallpaper, "transition_type", "random") or "random"
     enabled_transitions = getattr(user_options.wallpaper, "enabled_transitions", None)
     if enabled_transitions is None or not isinstance(enabled_transitions, list) or len(enabled_transitions) == 0:
-        enabled_transitions = ["grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer"]
+        enabled_transitions = [
+            "grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer",
+            "corner_burst", "diag_down", "diag_up", "center_ripple", "corner_collapse"
+        ]
 
     custom_trans_map = {
         c["name"]: c for c in getattr(user_options.wallpaper, "custom_transitions", [])
@@ -68,8 +77,12 @@ def _awww_set(
     }
 
     angle = "45"
+    wave = None
+    custom_pos = None
+
     if duration is None:
-        duration = getattr(user_options.wallpaper, "transition_duration", AWWW_TRANSITION_DURATION)
+        speed = getattr(user_options.wallpaper, "transition_speed", "medium")
+        duration = SPEED_DURATIONS.get(speed, getattr(user_options.wallpaper, "transition_duration", AWWW_TRANSITION_DURATION))
     fps = getattr(user_options.wallpaper, "transition_fps", AWWW_TRANSITION_FPS)
     bezier = AWWW_TRANSITION_BEZIER
 
@@ -84,6 +97,22 @@ def _awww_set(
         duration = float(cust.get("duration", duration))
         bezier = str(cust.get("bezier", bezier))
         t_type = base_type
+    elif t_type == "corner_burst":
+        t_type = "grow"
+        custom_pos = "top-left"
+    elif t_type == "diag_down":
+        t_type = "wipe"
+        angle = "135"
+    elif t_type == "diag_up":
+        t_type = "wipe"
+        angle = "315"
+    elif t_type == "center_ripple":
+        t_type = "wave"
+        angle = "45"
+        wave = "30,30"
+    elif t_type == "corner_collapse":
+        t_type = "outer"
+        custom_pos = "bottom-right"
 
     cmd = [
         "awww", "img", path,
@@ -92,10 +121,15 @@ def _awww_set(
         "--transition-duration", str(duration),
         "--transition-bezier",   bezier,
     ]
-    if t_type in ("grow", "outer", "center", "any"):
+    if custom_pos:
+        cmd.extend(["--transition-pos", custom_pos])
+    elif t_type in ("grow", "outer", "center", "any"):
         cmd.extend(["--transition-pos", f"{x:.4f},{y:.4f}"])
-    elif t_type in ("wipe", "wave"):
+
+    if t_type in ("wipe", "wave"):
         cmd.extend(["--transition-angle", angle])
+    if wave and t_type == "wave":
+        cmd.extend(["--transition-wave", wave])
 
     try:
         subprocess.Popen(cmd)
@@ -372,10 +406,13 @@ class WallpaperService(Service):
 
             return GLib.SOURCE_REMOVE
         def cleanup_mem():
-                gc.collect()
-                return False
+            gc.collect()
+            return False
+
+        curr_speed = getattr(user_options.wallpaper, "transition_speed", "medium")
+        speed_duration = {"quick": 0.7, "medium": 1.5, "slow": 2.8}.get(curr_speed, getattr(user_options.wallpaper, "transition_duration", AWWW_TRANSITION_DURATION))
         GLib.timeout_add(4000, cleanup_mem)
-        GLib.timeout_add(int(AWWW_TRANSITION_DURATION * 1000) + 100, copy_to_cache)
+        GLib.timeout_add(int(speed_duration * 1000) + 100, copy_to_cache)
 
     def _sync_monitors(self) -> None:
         display  = Gdk.Display.get_default()
