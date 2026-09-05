@@ -83,6 +83,7 @@ if [[ -n "${ALL_PIDS// /}" ]]; then
 fi
 
 success "All previous shell processes stopped."
+sleep 0.3
 
 # -- 2. Determine launcher target (prefer updated ~/.config/agility-shell) -----
 TARGET_DIR=""

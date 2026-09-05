@@ -21,12 +21,12 @@
 
 .wallpaper-drawer-carousel {
     background-color: transparent;
-    padding: 0;
+    padding: 0px;
 }
 
 .wallpaper-card-eventbox {
     background-color: transparent;
-    padding: 0;
+    padding: 0px;
 }
 
 .wallpaper-card {
@@ -90,7 +90,7 @@
 }
 
 /* =============================================================================
-   Wallpaper Stairs Style (Diagonal Stepped Switcher)
+   Wallpaper Stairs Style (Diagonal Stepped Switcher - "Lite Big")
    ============================================================================= */
 
 .wallpaper-stairs-window {
@@ -111,121 +111,118 @@
 }
 
 .wallpaper-stairs-card .wallpaper-card-clip {
-    border-radius: 14px;
+    border-radius: 16px;
     background-color: alpha(var(--surface_container), 0.85);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
     transition: all 0.2s cubic-bezier(0.16, 1.0, 0.3, 1.0);
 }
 
 .wallpaper-stairs-card.inactive {
-    opacity: 0.65;
+    opacity: 0.7;
 }
 
 .wallpaper-stairs-card.inactive:hover {
-    opacity: 0.95;
-    margin-top: -4px;
+    opacity: 0.98;
+    margin-top: -6px;
 }
 
 .wallpaper-stairs-card.inactive:hover .wallpaper-card-clip {
-    box-shadow: 0 0 0 1.5px alpha(var(--primary), 0.6), 0 14px 30px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 0 2px alpha(var(--primary), 0.7), 0 16px 36px rgba(0, 0, 0, 0.55);
 }
 
 .wallpaper-stairs-card.active {
     opacity: 1.0;
-    margin-top: -8px;
+    margin-top: -10px;
 }
 
 .wallpaper-stairs-card.active .wallpaper-card-clip {
-    border-radius: 16px;
-    box-shadow: 0 0 0 3px var(--primary), 0 16px 40px alpha(var(--primary), 0.5);
+    border-radius: 18px;
+    box-shadow: 0 0 0 3.5px var(--primary), 0 20px 48px alpha(var(--primary), 0.55);
 }
 
 .wallpaper-stairs-card.active .wallpaper-card-label {
     font-weight: 700;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--primary);
 }
 
 /* =============================================================================
-   Wallpaper Mesh Style (Fullscreen Overview Grid)
+   Wallpaper Mesh Style (Pure Floating Organic Cluster Canvas)
    ============================================================================= */
 
 .wallpaper-mesh-window {
     background-color: transparent;
 }
 
-.wallpaper-mesh-backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
-}
+/* =============================================================================
+   Wallpaper Wheel Style (Radial Orbit Switcher)
+   ============================================================================= */
 
-.wallpaper-mesh-modal {
-    background-color: alpha(var(--surface_container_lowest), 0.94);
-    border-radius: 28px;
-    padding: 24px 28px;
-    border: 1px solid alpha(var(--outline_variant), 0.3);
-    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
-}
-
-.wallpaper-mesh-header {
-    padding-bottom: 12px;
-    border-bottom: 1px solid alpha(var(--outline_variant), 0.2);
-}
-
-.wallpaper-mesh-btn {
-    background-color: alpha(var(--surface_container), 0.8);
-    border-radius: 12px;
-    padding: 6px 14px;
-    border: 1px solid alpha(var(--outline_variant), 0.25);
-    transition: all 0.2s ease;
-}
-
-.wallpaper-mesh-btn:hover {
-    background-color: var(--surface_container_high);
-    border-color: var(--primary);
-}
-
-.wallpaper-mesh-scroller {
+.wallpaper-wheel-window {
     background-color: transparent;
-    padding: 10px 4px;
 }
 
-.wallpaper-mesh-card {
+.wallpaper-wheel-backdrop {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+.wallpaper-wheel-center {
+    background-color: alpha(var(--surface_container_lowest), 0.92);
+    border-radius: 24px;
+    padding: 16px 16px 12px 16px;
+    border: 1px solid alpha(var(--outline_variant), 0.35);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 0 2.5px var(--primary);
+}
+
+.wallpaper-wheel-satellite {
+    background-color: alpha(var(--surface_container), 0.8);
     border-radius: 14px;
-    background-color: alpha(var(--surface_container), 0.6);
-    border: 1.5px solid alpha(var(--outline_variant), 0.2);
+    border: 1.5px solid alpha(var(--outline_variant), 0.25);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+    opacity: 0.75;
+    transition: all 0.16s cubic-bezier(0.16, 1.0, 0.3, 1.0);
+}
+
+.wallpaper-wheel-satellite:hover {
+    opacity: 1.0;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary), 0 12px 28px rgba(0, 0, 0, 0.6);
+}
+
+/* =============================================================================
+   Wallpaper Coverflow Style (3D Horizontal Deck Switcher)
+   ============================================================================= */
+
+.wallpaper-coverflow-window {
+    background-color: transparent;
+}
+
+.wallpaper-coverflow-backdrop {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+.wallpaper-coverflow-center-card {
+    border-radius: 20px;
+    box-shadow: 0 0 0 3.5px var(--primary), 0 25px 60px alpha(var(--primary), 0.5);
+    background-color: alpha(var(--surface_container_lowest), 0.9);
+}
+
+.wallpaper-coverflow-side-card {
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    background-color: alpha(var(--surface_container), 0.85);
     transition: all 0.18s cubic-bezier(0.16, 1.0, 0.3, 1.0);
-    padding: 0;
 }
 
-.wallpaper-mesh-card:hover {
-    background-color: alpha(var(--surface_container_high), 0.9);
-    border-color: alpha(var(--primary), 0.6);
+.wallpaper-coverflow-side-card:hover {
+    opacity: 0.95;
+    box-shadow: 0 0 0 2px alpha(var(--primary), 0.7), 0 16px 36px rgba(0, 0, 0, 0.6);
+}
+
+.wallpaper-coverflow-info-pill {
+    background-color: alpha(var(--surface_container_lowest), 0.88);
+    border-radius: 16px;
+    padding: 8px 24px;
+    border: 1px solid alpha(var(--outline_variant), 0.25);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    margin-top: -3px;
-}
-
-.wallpaper-mesh-card.active {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px var(--primary), 0 10px 30px alpha(var(--primary), 0.4);
-}
-
-.wallpaper-mesh-card.selecting {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px var(--primary), 0 0 45px alpha(var(--primary), 0.9);
-    margin-top: -6px;
-    transition: all 0.12s ease-out;
-}
-
-.wallpaper-mesh-thumb-img {
-    border-radius: 12px;
-}
-
-.wallpaper-mesh-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--on_surface);
-    padding: 4px 8px;
-    background-color: alpha(var(--surface_container_lowest), 0.85);
-    border-bottom-left-radius: 12px;
-    border-bottom-right-radius: 12px;
 }
