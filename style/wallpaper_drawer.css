@@ -1,0 +1,90 @@
+/* =============================================================================
+   Wallpaper Drawer (Caelestia 1:1 Floating Dock Switcher)
+   Dynamic Theme Integration with Shell Tokens
+   ============================================================================= */
+
+.wallpaper-drawer-window {
+    background-color: transparent;
+}
+
+.wallpaper-drawer-dock {
+    background-color: alpha(var(--surface_container_lowest), 0.88);
+    border-radius: 24px;
+    padding: 12px 16px 8px 16px;
+    border: 1px solid alpha(var(--outline_variant), 0.3);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 1px alpha(var(--outline), 0.2);
+}
+
+.wallpaper-drawer-scroller {
+    background-color: transparent;
+}
+
+.wallpaper-drawer-carousel {
+    background-color: transparent;
+    padding: 0;
+}
+
+.wallpaper-card-eventbox {
+    background-color: transparent;
+    padding: 0;
+}
+
+.wallpaper-card {
+    background-color: transparent;
+    transition: all 0.16s cubic-bezier(0.16, 1.0, 0.3, 1.0);
+}
+
+.wallpaper-card-clip {
+    border-radius: 12px;
+    background-color: alpha(var(--surface_container), 0.7);
+    transition: all 0.16s cubic-bezier(0.16, 1.0, 0.3, 1.0);
+}
+
+.wallpaper-card-img {
+    border-radius: 12px;
+}
+
+.wallpaper-card-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: alpha(var(--on_surface), 0.55);
+    margin-top: 4px;
+    margin-bottom: 2px;
+    transition: all 0.16s ease;
+}
+
+/* Inactive Card */
+.wallpaper-card.inactive {
+    opacity: 0.6;
+}
+
+.wallpaper-card.inactive:hover {
+    opacity: 0.9;
+}
+
+.wallpaper-card.inactive:hover .wallpaper-card-clip {
+    box-shadow: 0 0 0 1.5px alpha(var(--primary), 0.5), 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.wallpaper-card.inactive:hover .wallpaper-card-label {
+    color: var(--on_surface);
+}
+
+/* Active / Center Card (Caelestia Focus - Uses Shell Primary Color) */
+.wallpaper-card.active {
+    opacity: 1.0;
+    margin-top: -6px;
+    margin-bottom: 6px;
+}
+
+.wallpaper-card.active .wallpaper-card-clip {
+    border-radius: 14px;
+    box-shadow: 0 0 0 2.5px var(--primary), 0 10px 30px alpha(var(--primary), 0.45);
+}
+
+.wallpaper-card.active .wallpaper-card-label,
+.wallpaper-card-label.active {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--primary);
+}

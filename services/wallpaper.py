@@ -46,6 +46,7 @@ def _awww_set(
     path: str,
     pos: tuple[float, float] | None = None,
     transition_type: str | None = None,
+    duration: float | None = None,
 ) -> None:
     """
     Shell out to awww to set the wallpaper with the configured transition.
@@ -67,7 +68,8 @@ def _awww_set(
     }
 
     angle = "45"
-    duration = getattr(user_options.wallpaper, "transition_duration", AWWW_TRANSITION_DURATION)
+    if duration is None:
+        duration = getattr(user_options.wallpaper, "transition_duration", AWWW_TRANSITION_DURATION)
     fps = getattr(user_options.wallpaper, "transition_fps", AWWW_TRANSITION_FPS)
     bezier = AWWW_TRANSITION_BEZIER
 
@@ -317,6 +319,17 @@ class WallpaperService(Service):
         """Explicitly unref and clear the cached pixbuf to free memory."""
         if self._blurred_pixbuf is not None:
             self._blurred_pixbuf = None
+
+    def preview_wallpaper(
+        self,
+        path: str,
+        pos: tuple[float, float] | None = None,
+        transition_type: str | None = None,
+        duration: float | None = 0.5,
+    ) -> None:
+        if not os.path.isfile(path):
+            return
+        _awww_set(path, pos, transition_type, duration)
 
     def set_wallpaper(self, path: str, pos: tuple[float, float] | None = None, transition_type: str | None = None) -> None:
         if not os.path.isfile(path):
