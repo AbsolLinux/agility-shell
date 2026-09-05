@@ -11,9 +11,11 @@ from .media import MediaApplet
 from .quick_settings import QuickSettings
 from .clipboard import ClipboardApplet
 from .wallpaper_picker import WallpaperPicker
+from .wallpaper_drawer import WallpaperDrawer
 from .dash.dash import Dash
 from .osd import OSD
 __all__ = [
+    "WallpaperDrawer",
     "CalculatorApplet",
     "CalendarApplet",
     "LauncherApplet",

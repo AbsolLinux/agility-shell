@@ -318,6 +318,11 @@ class WallpaperService(Service):
         if self._blurred_pixbuf is not None:
             self._blurred_pixbuf = None
 
+    def preview_wallpaper(self, path: str, pos: tuple[float, float] | None = None, transition_type: str | None = "fade") -> None:
+        if not os.path.isfile(path):
+            return
+        _awww_set(path, pos, transition_type)
+
     def set_wallpaper(self, path: str, pos: tuple[float, float] | None = None, transition_type: str | None = None) -> None:
         if not os.path.isfile(path):
             logger.warning(f"WallpaperService: path does not exist: {path}")

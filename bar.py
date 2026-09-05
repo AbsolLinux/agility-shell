@@ -32,6 +32,7 @@ from windows.notifications import NotificationWindow
 from windows.osd import OSD
 from windows.clipboard import ClipboardApplet
 from windows.wallpaper_picker import WallpaperPicker
+from windows.wallpaper_drawer import WallpaperDrawer
 from snippets.popupwindow import PopupWindow
 from utils.monitors import get_connector_from_monitor_id
 from utils.sounds import play_sound
@@ -2131,6 +2132,7 @@ class BarManager:
         self._notifications: dict[Gdk.Monitor, NotificationWindow] = {}
         self._dash: Dash | None = None
         self._wallpaper_picker: WallpaperPicker | None = None
+        self._wallpaper_drawer: WallpaperDrawer | None = None
         self._osds: dict[Gdk.Monitor, OSD] = {}
         self._fallback_popups: dict[str, AppletWindow] = {}
         self._display = Gdk.Display.get_default()
@@ -2155,6 +2157,9 @@ class BarManager:
 
         if self._wallpaper_picker is None:
             self._wallpaper_picker = WallpaperPicker()
+
+        if self._wallpaper_drawer is None:
+            self._wallpaper_drawer = WallpaperDrawer()
 
         if monitor not in self._osds:
             self._osds[monitor] = OSD(monitor_id)
@@ -2232,6 +2237,12 @@ class BarManager:
             if self._wallpaper_picker is None:
                 self._wallpaper_picker = WallpaperPicker()
             self._wallpaper_picker.toggle(active_monitor)
+            return
+
+        if key in ("WallpaperDrawer", "WallpaperSwitcher"):
+            if self._wallpaper_drawer is None:
+                self._wallpaper_drawer = WallpaperDrawer()
+            self._wallpaper_drawer.toggle(active_monitor)
             return
 
         if key == "Wallpapers":
