@@ -16,7 +16,7 @@ layer-rule {
 }
 
 binds {
-    Mod+Space   hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
+    Mod+Space   hotkey-overlay-title="Open Launcher" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Launcher')"; }
     Mod+D       hotkey-overlay-title="Open Dash" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('Dash')"; }
     Mod+Shift+W hotkey-overlay-title="Wallpaper Gallery" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperPicker')"; }
     Alt+C       hotkey-overlay-title="Wallpaper Switcher" { spawn "fabric-cli" "exec" "agility-shell" "bar_manager.toggle('WallpaperDrawer')"; }
