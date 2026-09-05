@@ -459,6 +459,170 @@ do_install() {
     prompt_reboot
 }
 
+# Directories and files to preserve during updates (relative to INSTALL_DIR)
+PRESERVE_DIRS=("wallpapers" "config")
+PRESERVE_FILES=(
+    "style/colors.css"
+    "style/borders.css"
+    "style/fonts.css"
+)
+
+backup_preserved_dirs() {
+    local tmp_backup="$1"
+    for dir in "${PRESERVE_DIRS[@]}"; do
+        local src="$INSTALL_DIR/$dir"
+        if [[ -d "$src" ]]; then
+            info "Preserving $dir/..."
+            cp -r "$src" "$tmp_backup/$dir"
+        fi
+    done
+}
+
+restore_preserved_dirs() {
+    local tmp_backup="$1"
+    for dir in "${PRESERVE_DIRS[@]}"; do
+        local backed_up="$tmp_backup/$dir"
+        if [[ -d "$backed_up" ]]; then
+            info "Restoring $dir/..."
+            rm -rf "$INSTALL_DIR/$dir"
+            cp -r "$backed_up" "$INSTALL_DIR/$dir"
+        fi
+    done
+}
+
+backup_preserved_files() {
+    local tmp_backup="$1"
+    for file in "${PRESERVE_FILES[@]}"; do
+        local src="$INSTALL_DIR/$file"
+        if [[ -f "$src" ]]; then
+            mkdir -p "$tmp_backup/$(dirname "$file")"
+            cp "$src" "$tmp_backup/$file"
+            info "Preserving $file..."
+        fi
+    done
+}
+
+restore_preserved_files() {
+    local tmp_backup="$1"
+    for file in "${PRESERVE_FILES[@]}"; do
+        local backed_up="$tmp_backup/$file"
+        if [[ -f "$backed_up" ]]; then
+            mkdir -p "$INSTALL_DIR/$(dirname "$file")"
+            cp "$backed_up" "$INSTALL_DIR/$file"
+            info "Restoring $file..."
+        fi
+    done
+}
+
+update_from_github_release() {
+    info "Updating Agility Shell to latest release tag from GitHub ($REPO_URL)..."
+    if [[ -d "$INSTALL_DIR/.git" ]]; then
+        git -C "$INSTALL_DIR" fetch --tags origin
+        local latest_tag
+        latest_tag=$(git -C "$INSTALL_DIR" describe --tags "$(git -C "$INSTALL_DIR" rev-list --tags --max-count=1 2>/dev/null)" 2>/dev/null || echo "")
+        if [[ -n "$latest_tag" ]]; then
+            info "Checking out latest release tag: $latest_tag"
+            git -C "$INSTALL_DIR" checkout "$latest_tag"
+        else
+            warn "No release tags found -- falling back to main branch."
+            git -C "$INSTALL_DIR" fetch origin
+            git -C "$INSTALL_DIR" reset --hard origin/main
+        fi
+    else
+        info "Cloning latest release from GitHub..."
+        local tmp_clone
+        tmp_clone=$(mktemp -d)
+        git clone "$REPO_URL" "$tmp_clone/repo"
+        local latest_tag
+        latest_tag=$(git -C "$tmp_clone/repo" describe --tags "$(git -C "$tmp_clone/repo" rev-list --tags --max-count=1 2>/dev/null)" 2>/dev/null || echo "")
+        if [[ -n "$latest_tag" ]]; then
+            info "Checking out latest release tag: $latest_tag"
+            git -C "$tmp_clone/repo" checkout "$latest_tag"
+        fi
+        if command -v rsync &>/dev/null; then
+            rsync -a --delete --exclude='venv' --exclude='__pycache__' "$tmp_clone/repo/" "$INSTALL_DIR/"
+        else
+            cp -r "$tmp_clone/repo"/.git "$INSTALL_DIR/"
+            cp -r "$tmp_clone/repo"/* "$INSTALL_DIR/"
+        fi
+        rm -rf "$tmp_clone"
+    fi
+    success "Release files synchronized."
+}
+
+update_from_github_main() {
+    info "Updating Agility Shell to latest main branch ($REPO_URL)..."
+    if [[ -d "$INSTALL_DIR/.git" ]]; then
+        git -C "$INSTALL_DIR" fetch origin
+        git -C "$INSTALL_DIR" checkout -B main origin/main 2>/dev/null || git -C "$INSTALL_DIR" reset --hard origin/main
+    else
+        info "Cloning latest main branch from GitHub..."
+        local tmp_clone
+        tmp_clone=$(mktemp -d)
+        git clone --branch main "$REPO_URL" "$tmp_clone/repo"
+        if command -v rsync &>/dev/null; then
+            rsync -a --delete --exclude='venv' --exclude='__pycache__' "$tmp_clone/repo/" "$INSTALL_DIR/"
+        else
+            cp -r "$tmp_clone/repo"/.git "$INSTALL_DIR/"
+            cp -r "$tmp_clone/repo"/* "$INSTALL_DIR/"
+        fi
+        rm -rf "$tmp_clone"
+    fi
+    success "Main branch synchronized with latest commits."
+}
+
+do_update() {
+    local target_mode="$1"
+    info "Updating existing Agility Shell installation..."
+
+    check_and_install_deps
+
+    local tmp_backup
+    tmp_backup=$(mktemp -d)
+
+    backup_preserved_dirs "$tmp_backup"
+    backup_preserved_files "$tmp_backup"
+
+    if [[ "$target_mode" == "release" ]]; then
+        update_from_github_release
+    else
+        update_from_github_main
+    fi
+
+    restore_preserved_files "$tmp_backup"
+    restore_preserved_dirs "$tmp_backup"
+    rm -rf "$tmp_backup"
+
+    setup_venv
+    compile_snippets
+    inject_niri_include
+    setup_matugen
+    install_cli
+
+    chmod +x "$INSTALL_DIR"/*.sh "$INSTALL_DIR/scripts"/*.sh "$INSTALL_DIR/bin/agl" "$INSTALL_DIR/agility-shell" 2>/dev/null || true
+
+    echo
+    success "Agility Shell updated successfully!"
+    echo
+    prompt_user "  Would you like to restart Agility Shell now? [Y/n]: " restart_choice "y"
+    case "$restart_choice" in
+        [nN]|[nN][oO])
+            info "Restart skipped. You can manually restart using: agl restart"
+            prompt_reboot
+            ;;
+        *)
+            info "Restarting Agility Shell..."
+            if [[ -f "$INSTALL_DIR/scripts/restart.sh" ]]; then
+                exec "$INSTALL_DIR/scripts/restart.sh"
+            elif command -v agl &>/dev/null; then
+                exec agl restart
+            else
+                prompt_reboot
+            fi
+            ;;
+    esac
+}
+
 # -- Entry point ---------------------------------------------------------------
 main() {
     echo
@@ -473,16 +637,31 @@ main() {
     if [[ -d "$INSTALL_DIR" ]]; then
         warn "Existing installation found at $INSTALL_DIR"
         echo
-        prompt_user "  Agility Shell is already installed. Reinstall from scratch? [y/N]: " choice "n"
+        echo -e "  Please choose an option:"
+        echo -e "  ${BOLD}1)${RESET} ${RED}Reinstall from scratch${RESET} (Clean wipe & fresh install)"
+        echo -e "  ${BOLD}2)${RESET} ${CYAN}Update with latest release tag${RESET} (Preserves configs & wallpapers)"
+        echo -e "  ${BOLD}3)${RESET} ${GREEN}Update with main branch${RESET} (Latest commits, preserves configs & wallpapers)"
+        echo -e "  ${BOLD}4)${RESET} Cancel"
+        echo
+        prompt_user "  Choice [1/2/3/4]: " choice "2"
         case "$choice" in
-            [yY]|[yY][eE][sS])
+            1)
                 warn "Wiping existing installation..."
                 rm -rf "$INSTALL_DIR"
                 do_install
                 ;;
-            *)
-                info "Installation aborted."
+            2)
+                do_update "release"
+                ;;
+            3)
+                do_update "main"
+                ;;
+            4|[qQ]|[eE][xX][iI][tT])
+                info "Installation cancelled."
                 exit 0
+                ;;
+            *)
+                die "Invalid choice: '$choice'"
                 ;;
         esac
     else

@@ -144,11 +144,14 @@ class UserOptions:
             self.path = f"{get_relative_path('wallpapers/wall14.jpg')}"
             self.transition_type = "random"
             self.enabled_transitions = [
-                "grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer"
+                "grow", "fade", "wipe", "wave", "left", "right", "top", "bottom", "outer",
+                "corner_burst", "diag_down", "diag_up", "center_ripple", "corner_collapse"
             ]
             self.custom_transitions: list[dict] = []
             self.transition_duration = 1.5
+            self.transition_speed = "medium"
             self.transition_fps = 60
+            self.switcher_style = "dock"
 
     class DesktopApplets:
         def __init__(self):

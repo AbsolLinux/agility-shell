@@ -245,16 +245,31 @@ MATUGEN_EOF
 }
 
 # -- Remote & Local update routines -------------------------------------------
-update_from_github() {
-    info "Updating Agility Shell from GitHub ($REPO_URL)..."
+update_from_github_release() {
+    info "Updating Agility Shell to latest release tag from GitHub ($REPO_URL)..."
     if [[ -d "$INSTALL_DIR/.git" ]]; then
-        git -C "$INSTALL_DIR" fetch origin
-        git -C "$INSTALL_DIR" reset --hard origin/main
+        git -C "$INSTALL_DIR" fetch --tags origin
+        local latest_tag
+        latest_tag=$(git -C "$INSTALL_DIR" describe --tags "$(git -C "$INSTALL_DIR" rev-list --tags --max-count=1 2>/dev/null)" 2>/dev/null || echo "")
+        if [[ -n "$latest_tag" ]]; then
+            info "Checking out latest release tag: $latest_tag"
+            git -C "$INSTALL_DIR" checkout "$latest_tag"
+        else
+            warn "No release tags found -- falling back to main branch."
+            git -C "$INSTALL_DIR" fetch origin
+            git -C "$INSTALL_DIR" reset --hard origin/main
+        fi
     else
-        info "Installation directory is not a git repository -- cloning latest from GitHub..."
+        info "Installation directory is not a git repository -- cloning latest release..."
         local tmp_clone
         tmp_clone=$(mktemp -d)
         git clone "$REPO_URL" "$tmp_clone/repo"
+        local latest_tag
+        latest_tag=$(git -C "$tmp_clone/repo" describe --tags "$(git -C "$tmp_clone/repo" rev-list --tags --max-count=1 2>/dev/null)" 2>/dev/null || echo "")
+        if [[ -n "$latest_tag" ]]; then
+            info "Checking out latest release tag: $latest_tag"
+            git -C "$tmp_clone/repo" checkout "$latest_tag"
+        fi
         if command -v rsync &>/dev/null; then
             rsync -a --delete --exclude='venv' --exclude='__pycache__' "$tmp_clone/repo/" "$INSTALL_DIR/"
         else
@@ -263,7 +278,32 @@ update_from_github() {
         fi
         rm -rf "$tmp_clone"
     fi
-    success "Remote files synchronized."
+    success "Release files synchronized."
+}
+
+update_from_github_main() {
+    info "Updating Agility Shell to latest main branch ($REPO_URL)..."
+    if [[ -d "$INSTALL_DIR/.git" ]]; then
+        git -C "$INSTALL_DIR" fetch origin
+        git -C "$INSTALL_DIR" checkout -B main origin/main 2>/dev/null || git -C "$INSTALL_DIR" reset --hard origin/main
+    else
+        info "Installation directory is not a git repository -- cloning latest main branch..."
+        local tmp_clone
+        tmp_clone=$(mktemp -d)
+        git clone --branch main "$REPO_URL" "$tmp_clone/repo"
+        if command -v rsync &>/dev/null; then
+            rsync -a --delete --exclude='venv' --exclude='__pycache__' "$tmp_clone/repo/" "$INSTALL_DIR/"
+        else
+            cp -r "$tmp_clone/repo"/.git "$INSTALL_DIR/"
+            cp -r "$tmp_clone/repo"/* "$INSTALL_DIR/"
+        fi
+        rm -rf "$tmp_clone"
+    fi
+    success "Main branch synchronized with latest commits."
+}
+
+update_from_github() {
+    update_from_github_main
 }
 
 update_from_local() {
@@ -347,8 +387,10 @@ do_update() {
     backup_preserved_dirs "$tmp_backup"
     backup_preserved_files "$tmp_backup"
 
-    if [[ "$source_mode" == "github" ]]; then
-        update_from_github
+    if [[ "$source_mode" == "release" || "$source_mode" == "github_release" ]]; then
+        update_from_github_release
+    elif [[ "$source_mode" == "main" || "$source_mode" == "github_main" || "$source_mode" == "github" ]]; then
+        update_from_github_main
     elif [[ "$source_mode" == "local" ]]; then
         update_from_local "$local_path"
     else
@@ -428,8 +470,16 @@ main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --release|-r)
+                mode="release"
+                shift
+                ;;
+            --main|-m)
+                mode="main"
+                shift
+                ;;
             --github|--remote|-g)
-                mode="github"
+                mode="main"
                 shift
                 ;;
             --local|-l)
@@ -445,7 +495,8 @@ main() {
                 echo "Usage: agl update [OPTIONS] or ./update.sh [OPTIONS]"
                 echo ""
                 echo "Options:"
-                echo "  --github, -g       Update from GitHub repository"
+                echo "  --release, -r      Update to latest release tag"
+                echo "  --main, -m         Update to latest main branch"
                 echo "  --local, -l [PATH] Update from local directory"
                 echo "  -h, --help         Show this help message"
                 exit 0
@@ -458,14 +509,16 @@ main() {
 
     if [[ -z "$mode" ]]; then
         echo -e "  Select update source:"
-        echo -e "  ${BOLD}1)${RESET} GitHub (latest remote repository)"
-        echo -e "  ${BOLD}2)${RESET} Local directory (local files / repository)"
+        echo -e "  ${BOLD}1)${RESET} Latest release tag (stable release)"
+        echo -e "  ${BOLD}2)${RESET} Main branch (latest GitHub commits)"
+        echo -e "  ${BOLD}3)${RESET} Local directory (local files / repository)"
         echo -e "  ${BOLD}q)${RESET} Quit"
         echo
-        prompt_user "  Choice [1/2/q]: " choice "1"
+        prompt_user "  Choice [1/2/3/q]: " choice "1"
         case "$choice" in
-            1) mode="github" ;;
-            2) mode="local" ;;
+            1) mode="release" ;;
+            2) mode="main" ;;
+            3) mode="local" ;;
             q|Q) info "Update aborted."; exit 0 ;;
             *) die "Invalid choice." ;;
         esac

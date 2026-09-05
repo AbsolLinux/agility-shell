@@ -9,15 +9,17 @@ from fabric.widgets.wayland import WaylandWindow as Window
 from fabric.widgets.box import Box
 from fabric.widgets.label import Label
 from fabric.widgets.image import Image
+from fabric.widgets.button import Button
 from fabric.widgets.eventbox import EventBox
 from fabric.widgets.scrolledwindow import ScrolledWindow
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, GtkLayerShell
 from PIL import Image as PilImage
 from loguru import logger
 
-from snippets import ClippingBox, AppletReveal, Animator
+from snippets import ClippingBox, AppletReveal, Animator, Icon, enable_blur, disable_blur
 from services.wallpaper import WallpaperService
 from utils.sounds import play_sound
+from user_options import user_options
 
 THUMB_CACHE_DIR = Path.home() / ".cache" / "agility-shell" / "thumbnails"
 CARD_WIDTH = 168
@@ -184,7 +186,7 @@ class WallpaperSlotCard(EventBox):
         return False
 
 
-class WallpaperDrawer(Window):
+class WallpaperDockWindow(Window):
     def __init__(self, **kwargs):
         self._service = WallpaperService.get_instance()
         self._wallpapers: list[str] = []
@@ -483,3 +485,546 @@ class WallpaperDrawer(Window):
             self._revealer.close(on_done=on_done)
         else:
             on_done()
+
+
+class WallpaperStairsWindow(Window):
+    def __init__(self, **kwargs):
+        self._service = WallpaperService.get_instance()
+        self._wallpapers: list[str] = []
+        self._current_index: int = 0
+        self._original_wallpaper: str = ""
+        self._previewed_wallpaper: str = ""
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="StairsPool")
+        self._preview_timer_id: int | None = None
+        self._active_monitor = None
+
+        # Fixed coordinates for top-left to bottom-right diagonal steps
+        self._step_coords = [
+            (30, 20),
+            (120, 85),
+            (210, 150),
+            (300, 215),  # Slot 3: Center active card
+            (420, 300),
+            (510, 365),
+            (600, 430),
+        ]
+
+        self._fixed = Gtk.Fixed()
+        self._fixed.set_size_request(840, 580)
+        self._slot_cards: list[WallpaperSlotCard] = []
+
+        for i in range(NUM_SLOTS):
+            card = WallpaperSlotCard(
+                slot_index=i,
+                on_slot_clicked=self._on_slot_clicked,
+            )
+            card.box.add_style_class("wallpaper-stairs-card")
+            self._slot_cards.append(card)
+            x, y = self._step_coords[i]
+            self._fixed.put(card, x, y)
+
+        stairs_wrapper = Box(
+            orientation="v",
+            h_align="center",
+            v_align="center",
+            style_classes=["wallpaper-stairs-container"],
+            children=[self._fixed],
+        )
+
+        self._backdrop = EventBox(
+            style_classes=["wallpaper-stairs-backdrop"],
+            h_expand=True,
+            v_expand=True,
+            child=stairs_wrapper,
+        )
+        self._backdrop.connect("button-press-event", self._on_backdrop_clicked)
+        self._backdrop.connect("scroll-event", self._on_mouse_scroll)
+
+        super().__init__(
+            layer="top",
+            anchor="top bottom left right",
+            keyboard_mode="exclusive",
+            title="agility-shell-wallpaper-stairs",
+            style_classes=["wallpaper-stairs-window"],
+            visible=False,
+            child=self._backdrop,
+            **kwargs,
+        )
+        GtkLayerShell.set_exclusive_zone(self, -1)
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("focus-out-event", self._on_focus_out)
+
+    def _on_focus_out(self, widget, event):
+        if self.is_visible():
+            self._cancel_and_close()
+        return False
+
+    def _on_backdrop_clicked(self, widget, event: Gdk.EventButton):
+        if event.button == 1:
+            alloc = self._fixed.get_allocation()
+            coords = self._fixed.translate_coordinates(self, 0, 0)
+            if coords:
+                wx, wy = coords
+                if not (wx <= event.x <= wx + alloc.width and wy <= event.y <= wy + alloc.height):
+                    self._cancel_and_close()
+                    return True
+            else:
+                self._cancel_and_close()
+                return True
+        return False
+
+    def _on_key_press(self, widget, event: Gdk.EventKey):
+        keyval = event.keyval
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_Up, Gdk.KEY_h, Gdk.KEY_H, Gdk.KEY_k, Gdk.KEY_K):
+            self._navigate_step(-1)
+            return True
+        elif keyval in (Gdk.KEY_Right, Gdk.KEY_Down, Gdk.KEY_l, Gdk.KEY_L, Gdk.KEY_j, Gdk.KEY_J):
+            self._navigate_step(+1)
+            return True
+        elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
+            self._commit_and_close()
+            return True
+        elif keyval in (Gdk.KEY_r, Gdk.KEY_R):
+            self._shuffle_random()
+            return True
+        elif keyval == Gdk.KEY_Escape:
+            self._cancel_and_close()
+            return True
+        return False
+
+    def _on_mouse_scroll(self, widget, event: Gdk.EventScroll):
+        if event.direction == Gdk.ScrollDirection.UP or event.delta_y < 0:
+            self._navigate_step(-1)
+            return True
+        elif event.direction == Gdk.ScrollDirection.DOWN or event.delta_y > 0:
+            self._navigate_step(+1)
+            return True
+        elif event.direction == Gdk.ScrollDirection.SMOOTH:
+            if event.delta_y < 0 or event.delta_x < 0:
+                self._navigate_step(-1)
+                return True
+            elif event.delta_y > 0 or event.delta_x > 0:
+                self._navigate_step(+1)
+                return True
+        return False
+
+    def _on_slot_clicked(self, slot_idx: int, path: str):
+        delta = slot_idx - CENTER_SLOT
+        if delta == 0:
+            self._commit_and_close()
+        else:
+            self._navigate_step(delta)
+
+    def _reload_wallpapers(self):
+        self._wallpapers = self._service.get_all_wallpapers()
+        current_path = self._service.wallpaper_path
+        self._original_wallpaper = current_path
+        self._previewed_wallpaper = current_path
+
+        if current_path in self._wallpapers:
+            self._current_index = self._wallpapers.index(current_path)
+        elif self._wallpapers:
+            self._current_index = 0
+
+        self._render_slots(trigger_preview=False)
+
+    def _render_slots(self, trigger_preview: bool = True):
+        if not self._wallpapers:
+            return
+
+        N = len(self._wallpapers)
+        for i in range(NUM_SLOTS):
+            rel = i - CENTER_SLOT
+            idx = (self._current_index + rel) % N
+            path = self._wallpapers[idx]
+            is_active = (i == CENTER_SLOT)
+            self._slot_cards[i].bind_wallpaper(path, is_active, self._executor)
+
+        if trigger_preview:
+            self._schedule_live_preview()
+
+    def _navigate_step(self, delta: int):
+        if not self._wallpapers:
+            return
+        N = len(self._wallpapers)
+        self._current_index = (self._current_index + delta) % N
+        self._render_slots(trigger_preview=True)
+
+    def _shuffle_random(self):
+        if not self._wallpapers:
+            return
+        import random
+        candidates = [i for i in range(len(self._wallpapers)) if i != self._current_index]
+        self._current_index = random.choice(candidates) if candidates else 0
+        self._render_slots(trigger_preview=True)
+
+    def _schedule_live_preview(self):
+        if self._preview_timer_id is not None:
+            GLib.source_remove(self._preview_timer_id)
+            self._preview_timer_id = None
+
+        def _do_preview():
+            self._preview_timer_id = None
+            if 0 <= self._current_index < len(self._wallpapers):
+                active_path = self._wallpapers[self._current_index]
+                self._previewed_wallpaper = active_path
+                self._service.preview_wallpaper(active_path, pos=(0.5, 0.5), duration=0.4)
+            return GLib.SOURCE_REMOVE
+
+        self._preview_timer_id = GLib.timeout_add(60, _do_preview)
+
+    def _commit_and_close(self):
+        if self._preview_timer_id is not None:
+            GLib.source_remove(self._preview_timer_id)
+            self._preview_timer_id = None
+
+        if self._wallpapers and 0 <= self._current_index < len(self._wallpapers):
+            active_path = self._wallpapers[self._current_index]
+            self._service.set_wallpaper(active_path, pos=(0.5, 0.5))
+            play_sound("confirm")
+
+        self.close()
+
+    def _cancel_and_close(self):
+        if self._preview_timer_id is not None:
+            GLib.source_remove(self._preview_timer_id)
+            self._preview_timer_id = None
+
+        if self._original_wallpaper and self._previewed_wallpaper != self._original_wallpaper:
+            self._service.preview_wallpaper(self._original_wallpaper, pos=(0.5, 0.5), duration=0.3)
+
+        self.close()
+
+    def toggle(self, active_monitor=None):
+        if self.is_visible():
+            self._cancel_and_close()
+        else:
+            self.open(active_monitor)
+
+    def open(self, active_monitor=None):
+        self._active_monitor = active_monitor
+        if active_monitor is not None:
+            try:
+                display = Gdk.Display.get_default()
+                for i in range(display.get_n_monitors()):
+                    if display.get_monitor(i) == active_monitor:
+                        self.set_monitor(i)
+                        break
+            except Exception as e:
+                logger.debug(f"[WallpaperStairs] Failed to set monitor: {e}")
+
+        self._reload_wallpapers()
+        self.show_all()
+        GtkLayerShell.set_keyboard_interactivity(self, True)
+
+    def close(self):
+        self.hide()
+        GtkLayerShell.set_keyboard_interactivity(self, False)
+
+
+class WallpaperMeshCard(EventBox):
+    def __init__(self, path: str, is_active: bool, on_select, executor: ThreadPoolExecutor):
+        self.path = path
+        self.on_select = on_select
+        self._is_active = is_active
+        self._executor = executor
+
+        self._image = Image(style_classes=["wallpaper-mesh-thumb-img"])
+        self._clip = ClippingBox(
+            style_classes=["wallpaper-card-clip"],
+            children=[self._image],
+        )
+        self._clip.set_size_request(210, 118)
+
+        raw_name = os.path.splitext(os.path.basename(path))[0]
+        clean_name = raw_name.replace("-", " ").replace("_", " ").lower()
+        self._label = Label(
+            label=clean_name,
+            style_classes=["wallpaper-mesh-label"],
+            ellipsize="end",
+            max_chars_width=22,
+            h_align="center",
+        )
+
+        self.box = Box(
+            orientation="v",
+            spacing=3,
+            h_align="center",
+            v_align="center",
+            style_classes=["wallpaper-mesh-card"] + (["active"] if is_active else []),
+            children=[self._clip, self._label],
+        )
+
+        super().__init__(
+            child=self.box,
+            style_classes=["wallpaper-card-eventbox"],
+        )
+        self.set_size_request(220, 150)
+        self.connect("button-press-event", self._on_button_press)
+
+        self._load_async(path)
+
+    def _load_async(self, path: str):
+        ref = weakref.ref(self)
+        def work():
+            cache_path = _generate_thumb_to_cache(path)
+            if cache_path is None:
+                return
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(cache_path), 210, 118, False)
+            except Exception:
+                return
+
+            def apply():
+                card = ref()
+                if card is not None:
+                    card._image.set_from_pixbuf(pixbuf)
+                return GLib.SOURCE_REMOVE
+
+            GLib.idle_add(apply)
+
+        self._executor.submit(work)
+
+    def _on_button_press(self, widget, event: Gdk.EventButton):
+        if event.button == 1:
+            self.on_select(self.path, self)
+            return True
+        return False
+
+
+class WallpaperMeshWindow(Window):
+    def __init__(self, **kwargs):
+        self._service = WallpaperService.get_instance()
+        self._wallpapers: list[str] = []
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="MeshPool")
+        self._blur_ctx = None
+        self._active_monitor = None
+        self._cards: dict[str, WallpaperMeshCard] = {}
+
+        # Header
+        icon_box = Icon(icon_name="grid-nine-duotone", icon_size=24)
+        title_lbl = Label(label="Wallpaper Gallery", style="font-size: 18px; font-weight: 700;", h_align="start")
+        self._count_label = Label(label="0 Wallpapers", style="font-size: 12px; opacity: 0.6;", h_align="start")
+        title_box = Box(orientation="v", spacing=2, children=[title_lbl, self._count_label])
+        left_header = Box(orientation="h", spacing=12, v_align="center", children=[icon_box, title_box])
+
+        rand_btn = Button(
+            child=Box(
+                orientation="h",
+                spacing=6,
+                children=[
+                    Icon(icon_name="shuffle-duotone", icon_size=15),
+                    Label(label="Random (R)", style="font-size: 11px; font-weight: 600;"),
+                ],
+            ),
+            style_classes=["wallpaper-mesh-btn"],
+            on_clicked=lambda *_: self._shuffle_random(),
+        )
+
+        close_btn = Button(
+            child=Icon(icon_name="x", icon_size=16),
+            style_classes=["wallpaper-mesh-btn"],
+            on_clicked=lambda *_: self.close(),
+        )
+
+        header_bar = Box(
+            orientation="h",
+            spacing=12,
+            v_align="center",
+            style_classes=["wallpaper-mesh-header"],
+            children=[left_header, Box(h_expand=True), rand_btn, close_btn],
+        )
+
+        # FlowBox grid
+        self._grid_flow = Gtk.FlowBox()
+        self._grid_flow.set_valign(Gtk.Align.START)
+        self._grid_flow.set_max_children_per_line(4)
+        self._grid_flow.set_min_children_per_line(3)
+        self._grid_flow.set_homogeneous(True)
+        self._grid_flow.set_column_spacing(16)
+        self._grid_flow.set_row_spacing(16)
+        self._grid_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+
+        self._scroller = ScrolledWindow(
+            h_expand=True,
+            v_expand=True,
+            min_content_width=940,
+            max_content_width=980,
+            min_content_height=420,
+            max_content_height=520,
+            h_scrollbar_policy=Gtk.PolicyType.NEVER,
+            v_scrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            child=self._grid_flow,
+            style_classes=["wallpaper-mesh-scroller"],
+        )
+
+        self._modal_box = Box(
+            orientation="v",
+            spacing=16,
+            style_classes=["wallpaper-mesh-modal"],
+            h_align="center",
+            v_align="center",
+            children=[header_bar, self._scroller],
+        )
+
+        self._backdrop = EventBox(
+            style_classes=["wallpaper-mesh-backdrop"],
+            h_expand=True,
+            v_expand=True,
+            child=self._modal_box,
+        )
+        self._backdrop.connect("button-press-event", self._on_backdrop_clicked)
+
+        super().__init__(
+            layer="top",
+            anchor="top bottom left right",
+            keyboard_mode="exclusive",
+            title="agility-shell-wallpaper-mesh",
+            style_classes=["wallpaper-mesh-window"],
+            visible=False,
+            child=self._backdrop,
+            **kwargs,
+        )
+        GtkLayerShell.set_exclusive_zone(self, -1)
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("focus-out-event", self._on_focus_out)
+
+    def _on_focus_out(self, widget, event):
+        if self.is_visible():
+            self.close()
+        return False
+
+    def _on_backdrop_clicked(self, widget, event: Gdk.EventButton):
+        if event.button == 1:
+            alloc = self._modal_box.get_allocation()
+            coords = self._modal_box.translate_coordinates(self, 0, 0)
+            if coords:
+                wx, wy = coords
+                if not (wx <= event.x <= wx + alloc.width and wy <= event.y <= wy + alloc.height):
+                    self.close()
+                    return True
+            else:
+                self.close()
+                return True
+        return False
+
+    def _on_key_press(self, widget, event: Gdk.EventKey):
+        keyval = event.keyval
+        if keyval in (Gdk.KEY_r, Gdk.KEY_R):
+            self._shuffle_random()
+            return True
+        elif keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def _shuffle_random(self):
+        self.close()
+        self._service.random_wallpaper()
+
+    def _reload_wallpapers(self):
+        self._wallpapers = self._service.get_all_wallpapers()
+        current_path = self._service.wallpaper_path
+        self._count_label.set_label(f"{len(self._wallpapers)} Wallpapers")
+
+        for child in self._grid_flow.get_children():
+            self._grid_flow.remove(child)
+        self._cards.clear()
+
+        for path in self._wallpapers:
+            is_active = (path == current_path)
+            card = WallpaperMeshCard(
+                path=path,
+                is_active=is_active,
+                on_select=self._on_card_selected,
+                executor=self._executor,
+            )
+            self._cards[path] = card
+            self._grid_flow.add(card)
+
+        self._grid_flow.show_all()
+
+    def _on_card_selected(self, path: str, card: WallpaperMeshCard):
+        card.box.add_style_class("selecting")
+        play_sound("confirm")
+        self._service.set_wallpaper(path)
+        GLib.timeout_add(220, self._finish_select)
+
+    def _finish_select(self):
+        self.close()
+        return GLib.SOURCE_REMOVE
+
+    def toggle(self, active_monitor=None):
+        if self.is_visible():
+            self.close()
+        else:
+            self.open(active_monitor)
+
+    def open(self, active_monitor=None):
+        self._active_monitor = active_monitor
+        if active_monitor is not None:
+            try:
+                display = Gdk.Display.get_default()
+                for i in range(display.get_n_monitors()):
+                    if display.get_monitor(i) == active_monitor:
+                        self.set_monitor(i)
+                        break
+            except Exception as e:
+                logger.debug(f"[WallpaperMesh] Failed to set monitor: {e}")
+
+        self._reload_wallpapers()
+        self.show_all()
+        GtkLayerShell.set_keyboard_interactivity(self, True)
+        if self._blur_ctx is None:
+            self._blur_ctx = enable_blur(self)
+
+    def close(self):
+        if self._blur_ctx is not None:
+            try:
+                disable_blur(self)
+            except Exception:
+                pass
+            self._blur_ctx = None
+        self.hide()
+        GtkLayerShell.set_keyboard_interactivity(self, False)
+
+
+class WallpaperDrawer:
+    def __init__(self, **kwargs):
+        self._dock = WallpaperDockWindow(**kwargs)
+        self._stairs = WallpaperStairsWindow(**kwargs)
+        self._mesh = WallpaperMeshWindow(**kwargs)
+
+    def _get_active_subwindow(self):
+        style = getattr(user_options.wallpaper, "switcher_style", "dock")
+        if style == "stairs":
+            return self._stairs
+        elif style == "mesh":
+            return self._mesh
+        return self._dock
+
+    def is_visible(self) -> bool:
+        return self._dock.is_visible() or self._stairs.is_visible() or self._mesh.is_visible()
+
+    def toggle(self, active_monitor=None):
+        if self.is_visible():
+            self.close()
+        else:
+            self.open(active_monitor)
+
+    def open(self, active_monitor=None):
+        self.close()
+        win = self._get_active_subwindow()
+        win.open(active_monitor)
+
+    def close(self):
+        if self._dock.is_visible():
+            self._dock.close()
+        if self._stairs.is_visible():
+            self._stairs.close()
+        if self._mesh.is_visible():
+            self._mesh.close()
+
+    def __getattr__(self, name):
+        return getattr(self._get_active_subwindow(), name)
+

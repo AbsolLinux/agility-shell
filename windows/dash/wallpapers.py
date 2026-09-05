@@ -19,13 +19,13 @@ from services.themes import wallpaper
 from user_options import user_options
 from PIL import Image as PilImage
 
-THUMBNAIL_SIZE = 174
+THUMBNAIL_SIZE = 140
 SUPPORTED_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 
-PREVIEW_WIDTH  = 918
-PREVIEW_HEIGHT = 546
+PREVIEW_WIDTH  = 540
+PREVIEW_HEIGHT = 304
 
-WALLPAPER_TRANSITIONS: list[tuple[str, str, str]] = [
+WALLPAPER_TRANSITIONS_ROW1: list[tuple[str, str, str]] = [
     ("grow",   "Grow",   "corners-out-duotone"),
     ("fade",   "Fade",   "sparkle-duotone"),
     ("wipe",   "Wipe",   "line-segment-duotone"),
@@ -35,15 +35,25 @@ WALLPAPER_TRANSITIONS: list[tuple[str, str, str]] = [
     ("top",    "Up",     "arrow-up-duotone"),
     ("bottom", "Down",   "arrow-down-duotone"),
     ("outer",  "Shrink", "corners-in-duotone"),
-    ("random", "Random", "shuffle-duotone"),
 ]
+
+WALLPAPER_TRANSITIONS_ROW2: list[tuple[str, str, str]] = [
+    ("corner_burst",    "Corner Burst",   "shooting-star-duotone"),
+    ("diag_down",       "Diag Down",      "arrow-down-right-duotone"),
+    ("diag_up",         "Diag Up",        "arrow-up-right-duotone"),
+    ("center_ripple",   "Center Ripple",  "waves-duotone"),
+    ("corner_collapse", "Corner Shrink",  "arrows-in-cardinal-duotone"),
+    ("random",          "Random",         "shuffle-duotone"),
+]
+
+WALLPAPER_TRANSITIONS: list[tuple[str, str, str]] = WALLPAPER_TRANSITIONS_ROW1 + WALLPAPER_TRANSITIONS_ROW2
 
 THUMB_CACHE_DIR   = Path.home() / ".cache" / "agility-shell" / "thumbnails"
 PREVIEW_CACHE_DIR = Path.home() / ".cache" / "agility-shell" / "previews"
 
 def _fast_cache_key(path: str) -> str:
     stat = os.stat(path)
-    raw  = f"{path}:{stat.st_mtime}:{stat.st_size}"
+    raw  = f"{path}:{stat.st_mtime}:{stat.st_size}:v3_compact"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 def _get_thumb_cache_path(file_path: str) -> Path:
@@ -205,23 +215,24 @@ class DashSelectorPage(Box):
             v_align="start",
             h_expand=False,
         )
+        self._preview_box.set_size_request(PREVIEW_WIDTH, PREVIEW_HEIGHT)
         self._thumb_strip = Box(
             orientation="v",
-            spacing=12,
+            spacing=10,
             style_classes=["wallpaper-thumb-strip"],
         )
         self._scroll = ClippingScrolledWindow(
             v_expand=True,
             style_classes=["grid-selector-thumb-scroll"],
-            max_content_size=(174, 630),
-            fade_distance=60,
+            max_content_size=(THUMBNAIL_SIZE, 490),
+            fade_distance=40,
             child=self._thumb_strip,
             overlay_scroll=True,
             kinetic_scroll=True,
         )
         self._preview_column = Box(
             orientation="v",
-            spacing=10,
+            spacing=8,
             h_align="center",
             v_align="start",
             children=[self._preview_box],
@@ -232,11 +243,13 @@ class DashSelectorPage(Box):
             h_align="center",
             h_expand=True,
             v_expand=True,
-            spacing=12,
+            spacing=8,
             children=[
                 Box(
                     orientation="h",
-                    spacing=12,
+                    spacing=16,
+                    h_align="center",
+                    v_align="start",
                     h_expand=True,
                     v_expand=True,
                     children=[self._preview_column, self._scroll],
@@ -264,11 +277,17 @@ class DashWallpaperPage(DashSelectorPage):
         self._preview_image = Image()
         self._preview_box.add(self._preview_image)
 
-        # Transition Selector Bar
+        # Transition Selector Rows (2 compact rows)
         self._transition_buttons: dict[str, Button] = {}
-        self._trans_row = Box(
+        self._trans_row_1 = Box(
             orientation="h",
-            spacing=4,
+            spacing=3,
+            style_classes=["option-selection-container"],
+            h_align="center",
+        )
+        self._trans_row_2 = Box(
+            orientation="h",
+            spacing=3,
             style_classes=["option-selection-container"],
             h_align="center",
         )
@@ -278,8 +297,8 @@ class DashWallpaperPage(DashSelectorPage):
                 orientation="h",
                 spacing=2,
                 children=[
-                    Icon(icon_name="plus-duotone", icon_size=13),
-                    Label(label="Add", style="font-size: 11px; font-weight: 500;"),
+                    Icon(icon_name="plus-duotone", icon_size=12),
+                    Label(label="Add", style="font-size: 10px; font-weight: 500;"),
                 ],
             ),
             style_classes=["option-selection-button"],
@@ -287,14 +306,96 @@ class DashWallpaperPage(DashSelectorPage):
         )
 
         self._controls_box = Box(
-            orientation="h",
-            spacing=10,
+            orientation="v",
+            spacing=4,
             h_align="center",
             v_align="center",
             children=[
-                Label(label="Transition:", style="font-size: 12px; opacity: 0.7; font-weight: 600;"),
-                self._trans_row,
-                self._add_trans_btn,
+                self._trans_row_1,
+                self._trans_row_2,
+            ],
+        )
+
+        # Switching Speed Selector Pills
+        self._speed_buttons: dict[str, Button] = {}
+        self._speed_row = Box(
+            orientation="h",
+            spacing=3,
+            style_classes=["option-selection-container"],
+        )
+        current_speed = getattr(user_options.wallpaper, "transition_speed", "medium")
+        for s_key, s_label, s_icon in [
+            ("quick", "Quick (0.7s)", "lightning-duotone"),
+            ("medium", "Medium (1.5s)", "clock-duotone"),
+            ("slow", "Slow (2.8s)", "hourglass-duotone"),
+        ]:
+            btn = Button(
+                style_classes=["option-selection-button"] + (["active"] if s_key == current_speed else []),
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[
+                        Icon(icon_name=s_icon, icon_size=12),
+                        Label(label=s_label, style="font-size: 10px; font-weight: 500;"),
+                    ],
+                ),
+                on_clicked=lambda _, k=s_key: self._on_speed_selected(k),
+            )
+            self._speed_buttons[s_key] = btn
+            self._speed_row.add(btn)
+
+        # Alt+C Switcher Style Selector Pills
+        self._style_buttons: dict[str, Button] = {}
+        self._style_row = Box(
+            orientation="h",
+            spacing=3,
+            style_classes=["option-selection-container"],
+        )
+        current_style = getattr(user_options.wallpaper, "switcher_style", "dock")
+        for st_key, st_label, st_icon in [
+            ("dock", "Dock", "rows-duotone"),
+            ("stairs", "Stairs", "arrow-down-right-duotone"),
+            ("mesh", "Mesh", "grid-nine-duotone"),
+        ]:
+            btn = Button(
+                style_classes=["option-selection-button"] + (["active"] if st_key == current_style else []),
+                child=Box(
+                    orientation="h",
+                    spacing=4,
+                    children=[
+                        Icon(icon_name=st_icon, icon_size=12),
+                        Label(label=st_label, style="font-size: 10px; font-weight: 500;"),
+                    ],
+                ),
+                on_clicked=lambda _, k=st_key: self._on_style_selected(k),
+            )
+            self._style_buttons[st_key] = btn
+            self._style_row.add(btn)
+
+        self._settings_row = Box(
+            orientation="h",
+            spacing=16,
+            h_align="center",
+            v_align="center",
+            children=[
+                Box(
+                    orientation="h",
+                    spacing=6,
+                    v_align="center",
+                    children=[
+                        Label(label="Speed:", style="font-size: 11px; opacity: 0.7; font-weight: 600;"),
+                        self._speed_row,
+                    ],
+                ),
+                Box(
+                    orientation="h",
+                    spacing=6,
+                    v_align="center",
+                    children=[
+                        Label(label="Alt+C Style:", style="font-size: 11px; opacity: 0.7; font-weight: 600;"),
+                        self._style_row,
+                    ],
+                ),
             ],
         )
 
@@ -304,6 +405,7 @@ class DashWallpaperPage(DashSelectorPage):
         self._creator_card.hide()
 
         self._preview_column.add(self._controls_box)
+        self._preview_column.add(self._settings_row)
         self._preview_column.add(self._creator_card)
 
         self._rebuild_transition_buttons()
@@ -450,40 +552,78 @@ class DashWallpaperPage(DashSelectorPage):
         self._rebuild_transition_buttons()
         self._on_transition_selected(name)
 
+    def _create_trans_btn(self, t_key: str, t_label: str, t_icon: str, current_trans: str, in_pool: bool) -> Button:
+        btn = Button(
+            style_classes=["option-selection-button"]
+            + (["active"] if t_key == current_trans else [])
+            + ([] if in_pool else ["dimmed"]),
+            child=Box(
+                orientation="h",
+                spacing=3,
+                children=[
+                    Icon(icon_name=t_icon, icon_size=12),
+                    Label(label=t_label, style="font-size: 10px; font-weight: 500;"),
+                ],
+            ),
+        )
+        btn.connect("clicked", lambda _, k=t_key: self._on_transition_selected(k))
+        btn.connect("button-press-event", lambda _, ev, k=t_key, l=t_label: self._on_trans_btn_press(ev, k, l))
+        return btn
+
     def _rebuild_transition_buttons(self):
-        for child in self._trans_row.get_children():
-            self._trans_row.remove(child)
+        for child in self._trans_row_1.get_children():
+            self._trans_row_1.remove(child)
+        for child in self._trans_row_2.get_children():
+            self._trans_row_2.remove(child)
         self._transition_buttons.clear()
 
         current_trans = getattr(user_options.wallpaper, "transition_type", "grow")
         enabled_pool = set(getattr(user_options.wallpaper, "enabled_transitions", []))
         customs = getattr(user_options.wallpaper, "custom_transitions", [])
 
-        all_items = list(WALLPAPER_TRANSITIONS)
+        # Row 1: Core transitions
+        for t_key, t_label, t_icon in WALLPAPER_TRANSITIONS_ROW1:
+            in_pool = t_key in enabled_pool or t_key == "random"
+            btn = self._create_trans_btn(t_key, t_label, t_icon, current_trans, in_pool)
+            self._transition_buttons[t_key] = btn
+            self._trans_row_1.add(btn)
+
+        # Row 2: Extra transitions + customs + Add button
+        row2_items = list(WALLPAPER_TRANSITIONS_ROW2)
         for c in customs:
             cname = c.get("name", "Custom")
-            all_items.append((cname, cname, "magic-wand-duotone"))
+            row2_items.append((cname, cname, "magic-wand-duotone"))
 
-        for t_key, t_label, t_icon in all_items:
+        for t_key, t_label, t_icon in row2_items:
             in_pool = t_key in enabled_pool or t_key == "random"
-            btn = Button(
-                style_classes=["option-selection-button"]
-                + (["active"] if t_key == current_trans else [])
-                + ([] if in_pool else ["dimmed"]),
-                child=Box(
-                    orientation="h",
-                    spacing=4,
-                    children=[
-                        Icon(icon_name=t_icon, icon_size=13),
-                        Label(label=t_label, style="font-size: 11px; font-weight: 500;"),
-                    ],
-                ),
-            )
-            btn.connect("clicked", lambda _, k=t_key: self._on_transition_selected(k))
-            btn.connect("button-press-event", lambda _, ev, k=t_key, l=t_label: self._on_trans_btn_press(ev, k, l))
+            btn = self._create_trans_btn(t_key, t_label, t_icon, current_trans, in_pool)
             self._transition_buttons[t_key] = btn
-            self._trans_row.add(btn)
-        self._trans_row.show_all()
+            self._trans_row_2.add(btn)
+
+        self._trans_row_2.add(self._add_trans_btn)
+
+        self._trans_row_1.show_all()
+        self._trans_row_2.show_all()
+
+    def _on_speed_selected(self, speed: str) -> None:
+        speed_durations = {"quick": 0.7, "medium": 1.5, "slow": 2.8}
+        user_options.wallpaper.transition_speed = speed
+        user_options.wallpaper.transition_duration = speed_durations.get(speed, 1.5)
+        user_options.save()
+        for k, btn in self._speed_buttons.items():
+            if k == speed:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
+
+    def _on_style_selected(self, style: str) -> None:
+        user_options.wallpaper.switcher_style = style
+        user_options.save()
+        for k, btn in self._style_buttons.items():
+            if k == style:
+                btn.add_style_class("active")
+            else:
+                btn.remove_style_class("active")
 
     def _on_trans_btn_press(self, event, t_key: str, t_label: str):
         if event.button == 3:  # Right Click -> Context Menu for inclusion/exclusion
