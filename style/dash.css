@@ -103,6 +103,13 @@
     border-radius: apply(radius-l);
 }
 
+.wallpaper-settings-card {
+    background-color: alpha(var(--surface_container), 0.55);
+    border-radius: apply(radius-l);
+    border: 1px solid alpha(var(--outline_variant), 0.25);
+    padding: 10px 14px;
+}
+
 .theme-preview-box {
     min-width: 918px;
     min-height: 545px;
