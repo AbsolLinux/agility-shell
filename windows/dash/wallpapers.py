@@ -14,7 +14,7 @@ from fabric.widgets.image import Image
 from fabric.widgets.label import Label
 from fabric.widgets.centerbox import CenterBox
 from gi.repository import GdkPixbuf, GLib, Gio
-from snippets import Icon, ClippingScrolledWindow, ClippingBox, SmoothSwitch
+from snippets import Icon, ClippingScrolledWindow, ClippingBox
 from services.themes import wallpaper
 from user_options import user_options
 from PIL import Image as PilImage
@@ -305,20 +305,11 @@ class DashWallpaperPage(DashSelectorPage):
             on_clicked=lambda *_: self._toggle_custom_creator(),
         )
 
-        trans_header = Box(
-            orientation="h",
-            spacing=6,
-            v_align="center",
-            children=[
-                Icon(icon_name="sparkle-duotone", icon_size=13),
-                Label(label="Transitions:", style="font-size: 11px; font-weight: 700; opacity: 0.9;"),
-            ],
-        )
-
-        trans_box = Box(
+        self._controls_box = Box(
             orientation="v",
             spacing=4,
             h_align="center",
+            v_align="center",
             children=[
                 self._trans_row_1,
                 self._trans_row_2,
@@ -353,18 +344,7 @@ class DashWallpaperPage(DashSelectorPage):
             self._speed_buttons[s_key] = btn
             self._speed_row.add(btn)
 
-        speed_row_box = Box(
-            orientation="h",
-            spacing=8,
-            v_align="center",
-            children=[
-                Icon(icon_name="gauge-duotone", icon_size=13),
-                Label(label="Speed:", style="font-size: 11px; font-weight: 600; opacity: 0.8;"),
-                self._speed_row,
-            ],
-        )
-
-        # Alt+C Switcher Style Selector Pills (5 styles)
+        # Alt+C Switcher Style Selector Pills
         self._style_buttons: dict[str, Button] = {}
         self._style_row = Box(
             orientation="h",
@@ -376,8 +356,6 @@ class DashWallpaperPage(DashSelectorPage):
             ("dock", "Dock", "rows-duotone"),
             ("stairs", "Stairs", "arrow-down-right-duotone"),
             ("mesh", "Mesh", "grid-nine-duotone"),
-            ("wheel", "Wheel", "circle-notch-duotone"),
-            ("coverflow", "Coverflow", "browsers-duotone"),
         ]:
             btn = Button(
                 style_classes=["option-selection-button"] + (["active"] if st_key == current_style else []),
@@ -394,45 +372,30 @@ class DashWallpaperPage(DashSelectorPage):
             self._style_buttons[st_key] = btn
             self._style_row.add(btn)
 
-        style_row_box = Box(
+        self._settings_row = Box(
             orientation="h",
-            spacing=8,
+            spacing=16,
+            h_align="center",
             v_align="center",
             children=[
-                Icon(icon_name="layout-duotone", icon_size=13),
-                Label(label="Alt+C Style:", style="font-size: 11px; font-weight: 600; opacity: 0.8;"),
-                self._style_row,
-            ],
-        )
-
-        # Hotkey Animations Switch
-        self._anim_switch = SmoothSwitch()
-        self._anim_switch.set_active(getattr(user_options.wallpaper, "hotkey_animations", True))
-        self._anim_switch.connect("notify::active", lambda s, _: self._on_hotkey_anim_toggled(s.get_active()))
-
-        hotkey_anim_row = Box(
-            orientation="h",
-            spacing=8,
-            v_align="center",
-            children=[
-                Icon(icon_name="film-strip-duotone", icon_size=13),
-                Label(label="Hotkey Animations (Alt+C / Alt+X):", style="font-size: 11px; font-weight: 600; opacity: 0.8;"),
-                Box(h_expand=True),
-                self._anim_switch,
-            ],
-        )
-
-        # Grouped Settings Card
-        self._settings_card = Box(
-            orientation="v",
-            spacing=7,
-            style_classes=["wallpaper-settings-card"],
-            children=[
-                trans_header,
-                trans_box,
-                speed_row_box,
-                style_row_box,
-                hotkey_anim_row,
+                Box(
+                    orientation="h",
+                    spacing=6,
+                    v_align="center",
+                    children=[
+                        Label(label="Speed:", style="font-size: 11px; opacity: 0.7; font-weight: 600;"),
+                        self._speed_row,
+                    ],
+                ),
+                Box(
+                    orientation="h",
+                    spacing=6,
+                    v_align="center",
+                    children=[
+                        Label(label="Alt+C Style:", style="font-size: 11px; opacity: 0.7; font-weight: 600;"),
+                        self._style_row,
+                    ],
+                ),
             ],
         )
 
@@ -441,7 +404,8 @@ class DashWallpaperPage(DashSelectorPage):
         self._creator_card.set_no_show_all(True)
         self._creator_card.hide()
 
-        self._preview_column.add(self._settings_card)
+        self._preview_column.add(self._controls_box)
+        self._preview_column.add(self._settings_row)
         self._preview_column.add(self._creator_card)
 
         self._rebuild_transition_buttons()
@@ -660,10 +624,6 @@ class DashWallpaperPage(DashSelectorPage):
                 btn.add_style_class("active")
             else:
                 btn.remove_style_class("active")
-
-    def _on_hotkey_anim_toggled(self, state: bool) -> None:
-        user_options.wallpaper.hotkey_animations = bool(state)
-        user_options.save()
 
     def _on_trans_btn_press(self, event, t_key: str, t_label: str):
         if event.button == 3:  # Right Click -> Context Menu for inclusion/exclusion

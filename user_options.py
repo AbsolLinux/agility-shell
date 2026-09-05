@@ -152,7 +152,6 @@ class UserOptions:
             self.transition_speed = "medium"
             self.transition_fps = 60
             self.switcher_style = "dock"
-            self.hotkey_animations = True
 
     class DesktopApplets:
         def __init__(self):
