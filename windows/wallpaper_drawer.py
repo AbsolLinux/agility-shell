@@ -423,7 +423,7 @@ class WallpaperDrawer(Window):
             if 0 <= self._current_index < len(self._wallpapers):
                 active_path = self._wallpapers[self._current_index]
                 self._previewed_wallpaper = active_path
-                self._service.preview_wallpaper(active_path, transition_type="fade")
+                self._service.preview_wallpaper(active_path, pos=(0.5, 0.92), duration=0.5)
             return GLib.SOURCE_REMOVE
 
         self._preview_timer_id = GLib.timeout_add(60, _do_preview)
@@ -435,7 +435,7 @@ class WallpaperDrawer(Window):
 
         if self._wallpapers and 0 <= self._current_index < len(self._wallpapers):
             active_path = self._wallpapers[self._current_index]
-            self._service.set_wallpaper(active_path)
+            self._service.set_wallpaper(active_path, pos=(0.5, 0.92))
             play_sound("confirm")
 
         self.close()
@@ -446,7 +446,7 @@ class WallpaperDrawer(Window):
             self._preview_timer_id = None
 
         if self._original_wallpaper and self._previewed_wallpaper != self._original_wallpaper:
-            self._service.preview_wallpaper(self._original_wallpaper, transition_type="fade")
+            self._service.preview_wallpaper(self._original_wallpaper, pos=(0.5, 0.92), duration=0.4)
 
         self.close()
 
