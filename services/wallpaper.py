@@ -114,25 +114,22 @@ def _awww_set(
         t_type = "outer"
         custom_pos = "bottom-right"
 
-    if t_type == "none":
-        cmd = ["awww", "img", path, "--transition-type", "none", "--transition-step", "255"]
-    else:
-        cmd = [
-            "awww", "img", path,
-            "--transition-type",     t_type,
-            "--transition-fps",      str(fps),
-            "--transition-duration", str(duration),
-            "--transition-bezier",   bezier,
-        ]
-        if custom_pos:
-            cmd.extend(["--transition-pos", custom_pos])
-        elif t_type in ("grow", "outer", "center", "any"):
-            cmd.extend(["--transition-pos", f"{x:.4f},{y:.4f}"])
+    cmd = [
+        "awww", "img", path,
+        "--transition-type",     t_type,
+        "--transition-fps",      str(fps),
+        "--transition-duration", str(duration),
+        "--transition-bezier",   bezier,
+    ]
+    if custom_pos:
+        cmd.extend(["--transition-pos", custom_pos])
+    elif t_type in ("grow", "outer", "center", "any"):
+        cmd.extend(["--transition-pos", f"{x:.4f},{y:.4f}"])
 
-        if t_type in ("wipe", "wave"):
-            cmd.extend(["--transition-angle", angle])
-        if wave and t_type == "wave":
-            cmd.extend(["--transition-wave", wave])
+    if t_type in ("wipe", "wave"):
+        cmd.extend(["--transition-angle", angle])
+    if wave and t_type == "wave":
+        cmd.extend(["--transition-wave", wave])
 
     try:
         subprocess.Popen(cmd)
@@ -368,19 +365,10 @@ class WallpaperService(Service):
             return
         _awww_set(path, pos, transition_type, duration)
 
-    def set_wallpaper(
-        self,
-        path: str,
-        pos: tuple[float, float] | None = None,
-        transition_type: str | None = None,
-        is_hotkey: bool = False,
-    ) -> None:
+    def set_wallpaper(self, path: str, pos: tuple[float, float] | None = None, transition_type: str | None = None) -> None:
         if not os.path.isfile(path):
             logger.warning(f"WallpaperService: path does not exist: {path}")
             return
-
-        if is_hotkey and not getattr(user_options.wallpaper, "hotkey_animations", True):
-            transition_type = "none"
 
         _awww_set(path, pos, transition_type)
         self._clear_blurred_pixbuf()
@@ -470,14 +458,14 @@ class WallpaperService(Service):
                     files.append(os.path.join(wallpapers_dir, f))
         return files
 
-    def random_wallpaper(self, is_hotkey: bool = True) -> str | None:
+    def random_wallpaper(self) -> str | None:
         import random
         all_walls = self.get_all_wallpapers()
         if not all_walls:
             return None
         choices = [w for w in all_walls if w != self._wallpaper_path] or all_walls
         chosen = random.choice(choices)
-        self.set_wallpaper(chosen, is_hotkey=is_hotkey)
+        self.set_wallpaper(chosen)
         return chosen
 
     def _on_monitor_removed(self, _display, _monitor) -> None:
