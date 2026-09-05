@@ -1,5 +1,13 @@
 import os
+import sys
 import shutil
+import signal
+
+def _on_signal(*_):
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, _on_signal)
+signal.signal(signal.SIGINT, _on_signal)
 
 def seed_user_environment():
     user_dir = os.path.expanduser("~/.config/agility-shell")
